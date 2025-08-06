@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/screens/login.dart';
-import 'package:after30/screens/home.dart';
+import 'package:after30/screens/login/login.dart';
+import 'package:after30/screens/main/home.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
