@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/screens/alarm_list.dart';
+import 'package:after30/screens/alarm/alarm_list.dart';
 import 'package:after30/widgets/login/login_header.dart';
 import 'package:after30/widgets/login/kakao_login_button.dart';
 import 'package:after30/widgets/login/login_footer.dart';
