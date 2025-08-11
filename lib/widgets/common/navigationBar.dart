@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/screens/main/home.dart';
 import 'package:after30/screens/alarm/alarm_list.dart';
 import 'package:after30/screens/calendar/calendar_page.dart';
+import 'package:after30/screens/family/family_page.dart';
 
 class AlarmBottomNavigation extends StatelessWidget {
   const AlarmBottomNavigation({super.key});
@@ -27,6 +28,10 @@ class AlarmBottomNavigation extends StatelessWidget {
         } else if (index == 3) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const CalendarPage()),
+          );
+        } else if (index == 1) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const FamilyPage()),
           );
         }
       },

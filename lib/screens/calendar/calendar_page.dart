@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:after30/models/medication.dart';
 import 'package:after30/services/medication_service.dart';
-import 'package:after30/widgets/alarm_list/alarm_bottom_navigation.dart';
+import 'package:after30/widgets/common/navigationBar.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
