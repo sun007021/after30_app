@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/widgets/alarm_list/top_curve_clipper.dart';
 import 'package:after30/widgets/alarm_list/alarm_header.dart';
 import 'package:after30/widgets/alarm_list/alarm_content.dart';
-import 'package:after30/widgets/alarm_list/alarm_bottom_navigation.dart';
+import 'package:after30/widgets/common/navigationBar.dart';
 
 class AlarmPage extends StatelessWidget {
   const AlarmPage({super.key});

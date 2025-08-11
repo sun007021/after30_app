@@ -3,7 +3,9 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:provider/provider.dart';
 import 'package:after30/screens/login/login.dart';
 import 'package:after30/screens/main/home.dart';
+import 'package:after30/screens/family/family_page.dart';
 import 'package:after30/services/medication_service.dart';
+import 'package:after30/viewmodels/invite_view_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +40,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => MedicationProvider())],
+      providers: [
+        ChangeNotifierProvider(create: (_) => MedicationProvider()),
+        ChangeNotifierProvider(create: (_) => InviteViewModel()),
+      ],
       child: MaterialApp(
         title: '식후 30분',
         theme: ThemeData(
@@ -49,6 +54,7 @@ class MyApp extends StatelessWidget {
         routes: {
           '/login': (context) => const LoginPage(),
           '/home': (context) => const HomePage(),
+          '/family': (context) => const FamilyPage(),
         },
       ),
     );
