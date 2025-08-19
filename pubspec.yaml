@@ -33,6 +33,10 @@ dependencies:
   kakao_flutter_sdk_user: ^1.9.5 # 카카오 로그인 API 패키지
   table_calendar: ^3.0.9 # 달력 위젯 패키지
   provider: ^6.1.5 # 상태 관리 패키지
+  awesome_notifications: ^0.10.1 # 알림 패키지
+  timezone: ^0.9.2 # 시간대 관리 패키지
+  shared_preferences: ^2.2.2 # 로컬 저장소 패키지
+  android_intent_plus: ^5.1.0 # 안드로이드 설정 화면 이동
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

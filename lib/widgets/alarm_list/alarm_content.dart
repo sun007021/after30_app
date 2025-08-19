@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:after30/screens/alarm/add_alarm.dart';
 import 'package:after30/models/medicine_alarm.dart';
+import 'package:after30/services/alarm_service.dart';
 
 class AlarmContent extends StatefulWidget {
   const AlarmContent({super.key});
@@ -12,6 +13,34 @@ class AlarmContent extends StatefulWidget {
 
 class _AlarmContentState extends State<AlarmContent> {
   final List<MedicineAlarm> _alarms = [];
+  final AlarmService _alarmService = AlarmService();
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAlarms();
+  }
+
+  Future<void> _loadAlarms() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final alarms = await _alarmService.getAlarms();
+      setState(() {
+        _alarms.clear();
+        _alarms.addAll(alarms);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      print('알람 불러오기 실패: $e');
+    }
+  }
 
   Future<void> _goToRegister() async {
     final result = await Navigator.push(
@@ -19,14 +48,67 @@ class _AlarmContentState extends State<AlarmContent> {
       MaterialPageRoute(builder: (context) => const MedicineRegisterPage()),
     );
     if (result is MedicineAlarm) {
-      setState(() {
-        _alarms.add(result);
-      });
+      await _loadAlarms(); // 알람 목록 새로고침
     }
+  }
+
+  Future<void> _deleteAlarm(int index) async {
+    final alarm = _alarms[index];
+
+    // 확인 다이얼로그 표시
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('알람 삭제'),
+        content: Text('${alarm.name} 알람을 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('삭제'),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _alarmService.deleteAlarm(alarm.id);
+        await _loadAlarms(); // 알람 목록 새로고침
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('알람 삭제에 실패했습니다: $e')));
+        }
+      }
+    }
+  }
+
+  Future<void> _toggleAlarm(int index) async {
+    final alarm = _alarms[index];
+    try {
+      await _alarmService.toggleAlarm(alarm.id, !alarm.isActive);
+              await _loadAlarms(); // 알람 목록 새로고침
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('알람 상태 변경에 실패했습니다: $e')));
+        }
+      }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Expanded(child: Center(child: CircularProgressIndicator()));
+    }
+
     if (_alarms.isEmpty) {
       return Expanded(
         child: Column(
@@ -46,8 +128,6 @@ class _AlarmContentState extends State<AlarmContent> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _goToRegister,
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('약 등록하기'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFA7B0),
                 foregroundColor: Colors.white,
@@ -56,6 +136,8 @@ class _AlarmContentState extends State<AlarmContent> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('약 등록하기'),
             ),
           ],
         ),
@@ -109,12 +191,18 @@ class _AlarmContentState extends State<AlarmContent> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Icon(
+                          Icon(
                             Icons.circle,
-                            color: Colors.green,
+                            color: alarm.isActive ? Colors.green : Colors.grey,
                             size: 10,
                           ),
                           const Spacer(),
+                          // 알람 활성화/비활성화 토글
+                          Switch(
+                            value: alarm.isActive,
+                            onChanged: (value) => _toggleAlarm(idx),
+                            activeColor: Colors.pink,
+                          ),
                           PopupMenuButton<String>(
                             color: Colors.white,
                             icon: Icon(
@@ -133,15 +221,11 @@ class _AlarmContentState extends State<AlarmContent> {
                                   ),
                                 );
                                 if (result is MedicineAlarm) {
-                                  setState(() {
-                                    _alarms[idx] = result;
-                                  });
+                                  await _loadAlarms(); // 알람 목록 새로고침
                                 }
                               } else if (value == 'delete') {
                                 // 알람 삭제
-                                setState(() {
-                                  _alarms.removeAt(idx);
-                                });
+                                await _deleteAlarm(idx);
                               }
                             },
                             itemBuilder: (context) => [
@@ -178,6 +262,42 @@ class _AlarmContentState extends State<AlarmContent> {
                           color: Colors.black54,
                         ),
                       ),
+                      if (alarm.nfcEnabled) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.nfc, size: 16, color: Colors.blue),
+                            const SizedBox(width: 4),
+                            Text(
+                              'NFC 연동됨',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (alarm.familyNotify) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.family_restroom,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '가족 알림 활성화',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
