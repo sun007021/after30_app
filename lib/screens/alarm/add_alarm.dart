@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:after30/widgets/alarm_list/top_curve_clipper.dart';
 import 'package:after30/widgets/alarm_list/alarm_header.dart';
 import 'package:after30/models/medicine_alarm.dart';
+import 'package:after30/services/alarm_service.dart';
 
 class MedicineRegisterPage extends StatefulWidget {
   final MedicineAlarm? initialAlarm;
-  const MedicineRegisterPage({Key? key, this.initialAlarm}) : super(key: key);
+  const MedicineRegisterPage({super.key, this.initialAlarm});
 
   @override
   State<MedicineRegisterPage> createState() => _MedicineRegisterPageState();
@@ -15,10 +16,11 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   late final TextEditingController _medicineController;
   late List<String> _selectedDays;
   final List<String> _allDays = ['월', '화', '수', '목', '금', '토', '일'];
-  late List<TimeOfDay?> _times;
+  late List<TimeOfDay> _times;
   late bool _allDaysSelected;
   bool _nfcEnabled = false;
   bool _familyNotify = true;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -26,8 +28,22 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     final alarm = widget.initialAlarm;
     _medicineController = TextEditingController(text: alarm?.name ?? '');
     _selectedDays = alarm?.days ?? ['월', '화', '수', '목', '금', '토', '일'];
-    _times = alarm != null ? List<TimeOfDay?>.from(alarm.times) : [null];
+    _times = alarm != null
+        ? List<TimeOfDay>.from(alarm.times)
+        : [TimeOfDay(hour: 8, minute: 0)];
     _allDaysSelected = _selectedDays.length == 7;
+
+    // 기존 알람이 있으면 설정값 복원
+    if (alarm != null) {
+      _nfcEnabled = alarm.nfcEnabled;
+      _familyNotify = alarm.familyNotify;
+    }
+  }
+
+  @override
+  void dispose() {
+    _medicineController.dispose();
+    super.dispose();
   }
 
   bool get _isMedicineEmpty => _medicineController.text.trim().isEmpty;
@@ -58,7 +74,7 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
 
   void _addTime() {
     setState(() {
-      _times.add(null);
+      _times.add(TimeOfDay(hour: 8, minute: 0)); // 기본값으로 오전 8시 설정
     });
   }
 
@@ -95,17 +111,15 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   Future<void> _pickTime(int idx) async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: _times[idx] ?? TimeOfDay(hour: 8, minute: 0),
+      initialTime: _times[idx],
     );
     if (picked != null) {
       setState(() {
         _times[idx] = picked;
         // 시간 순서대로 정렬
-        _times.sort((a, b) {
-          if (a == null) return 1;
-          if (b == null) return -1;
-          return a.hour * 60 + a.minute - (b.hour * 60 + b.minute);
-        });
+        _times.sort(
+          (a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute),
+        );
       });
     }
   }
@@ -258,7 +272,7 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                           child: TextField(
                             readOnly: true,
                             controller: TextEditingController(
-                              text: isEmpty ? '' : _formatTimeOfDay(t!),
+                              text: isEmpty ? '' : _formatTimeOfDay(t),
                             ),
                             decoration: InputDecoration(
                               hintText: isEmpty ? '시간을 선택하세요' : '',
@@ -333,9 +347,9 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       final name = _medicineController.text.trim();
-                      final times = _times.whereType<TimeOfDay>().toList();
+                      final times = List<TimeOfDay>.from(_times);
                       if (name.isEmpty) {
                         showDialog(
                           context: context,
@@ -353,7 +367,7 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                         );
                         return;
                       }
-                      if (times.isEmpty || _times.any((t) => t == null)) {
+                      if (times.isEmpty) {
                         showDialog(
                           context: context,
                           builder: (context) => AlertDialog(
@@ -371,12 +385,58 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                       }
                       final everyDay = _selectedDays.length == 7;
                       final alarm = MedicineAlarm(
+                        id: widget.initialAlarm?.id, // 기존 알람이 있으면 ID 유지
                         name: name,
                         times: times,
                         days: List.from(_selectedDays),
                         everyDay: everyDay,
+                        nfcEnabled: _nfcEnabled,
+                        familyNotify: _familyNotify,
                       );
-                      Navigator.pop(context, alarm);
+                      setState(() {
+                        _isLoading = true;
+                      });
+
+                      // 알람 등록
+                      print('🔔 알람 등록 시작');
+                      print('   📝 이름: $name');
+                      print(
+                        '   ⏰ 시간: ${times.map((t) => '${t.hour}:${t.minute}').join(', ')}',
+                      );
+                      print('   📅 요일: ${_selectedDays.join(', ')}');
+
+                      final alarmService = AlarmService();
+                      print('   ✅ AlarmService 사용 준비 완료');
+
+                      final success = await alarmService.scheduleAlarm(alarm);
+                      print('   📊 알람 등록 결과: $success');
+
+                      setState(() {
+                        _isLoading = false;
+                      });
+
+                      if (success) {
+                        if (mounted) {
+                          Navigator.pop(context, alarm);
+                        }
+                      } else {
+                        if (mounted) {
+                          await showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('안내'),
+                              content: const Text('알람 등록에 실패했습니다. 다시 시도해주세요.'),
+                              backgroundColor: Colors.white,
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('확인'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.pinkAccent,
@@ -385,10 +445,19 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text(
-                      '등록하기',
-                      style: TextStyle(color: Colors.white, fontSize: 18),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            '등록하기',
+                            style: TextStyle(color: Colors.white, fontSize: 18),
+                          ),
                   ),
                   const SizedBox(height: 22),
                 ],

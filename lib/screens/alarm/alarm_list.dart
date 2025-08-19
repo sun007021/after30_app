@@ -3,6 +3,7 @@ import 'package:after30/widgets/alarm_list/top_curve_clipper.dart';
 import 'package:after30/widgets/alarm_list/alarm_header.dart';
 import 'package:after30/widgets/alarm_list/alarm_content.dart';
 import 'package:after30/widgets/common/navigationBar.dart';
+import 'package:android_intent_plus/android_intent.dart';
 
 class AlarmPage extends StatelessWidget {
   const AlarmPage({super.key});
@@ -30,7 +31,29 @@ class AlarmPage extends StatelessWidget {
           // 내용
           SafeArea(
             child: Column(
-              children: [const AlarmHeader(), const AlarmContent()],
+              children: [
+                const AlarmHeader(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        const intent = AndroidIntent(
+                          action: 'android.settings.APP_NOTIFICATION_SETTINGS',
+                          arguments: <String, dynamic>{
+                            'android.provider.extra.APP_PACKAGE':
+                                'com.example.after30',
+                          },
+                        );
+                        await intent.launch();
+                      },
+                      child: const Text('권한/팝업 설정 열기'),
+                    ),
+                  ),
+                ),
+                const AlarmContent(),
+              ],
             ),
           ),
         ],
