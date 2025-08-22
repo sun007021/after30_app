@@ -158,26 +158,7 @@ class FullscreenAlarmPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    // 권한 가이드 버튼
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          // 알림/팝업 설정 화면으로 이동 시도 (제조사마다 다를 수 있음)
-                          const intent = AndroidIntent(
-                            action:
-                                'android.settings.APP_NOTIFICATION_SETTINGS',
-                            arguments: <String, dynamic>{
-                              'android.provider.extra.APP_PACKAGE':
-                                  'com.example.after30',
-                            },
-                          );
-                          await intent.launch();
-                        },
-                        child: const Text('권한/팝업 설정 열기'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                    // 권한 가이드 버튼 제거됨
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(

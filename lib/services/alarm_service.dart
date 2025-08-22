@@ -214,17 +214,32 @@ class AlarmService {
         '   ⏰ 시간: ${alarm.times.map((t) => '${t.hour}:${t.minute}').join(', ')}',
       );
 
+      // 기존 알림 ID 가져오기 (수정 시 재사용)
+      final existingNotificationIds = await _getExistingNotificationIds(
+        alarm.id,
+      );
+      print('   🔄 기존 알림 ID: $existingNotificationIds');
+
       // 기존 알람 취소
       await cancelAlarm(alarm.id);
       print('   ✅ 기존 알람 취소 완료');
 
       // 각 요일과 시간에 대해 알람 등록
       final notificationIds = <int>[];
+      int idIndex = 0;
+
       for (final day in alarm.days) {
         for (final time in alarm.times) {
           print('   📅 $day ${time.hour}:${time.minute} 알람 등록 중...');
-          final notificationId = await _scheduleSingleAlarm(alarm, day, time);
+
+          // 기존 ID가 있으면 재사용, 없으면 새로 생성
+          final notificationId = idIndex < existingNotificationIds.length
+              ? existingNotificationIds[idIndex]
+              : _nextNotificationId++;
+
+          await _scheduleSingleAlarmWithId(alarm, day, time, notificationId);
           notificationIds.add(notificationId);
+          idIndex++;
         }
       }
       print('   ✅ 모든 알람 스케줄링 완료');
@@ -240,10 +255,29 @@ class AlarmService {
     }
   }
 
-  Future<int> _scheduleSingleAlarm(
+  // 기존 알림 ID 가져오기
+  Future<List<int>> _getExistingNotificationIds(String alarmId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final notificationIdsKey = 'notification_ids_$alarmId';
+      final notificationIdsString = prefs.getStringList(notificationIdsKey);
+
+      if (notificationIdsString != null) {
+        return notificationIdsString.map((id) => int.parse(id)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('기존 알림 ID 가져오기 실패: $e');
+      return [];
+    }
+  }
+
+  // ID를 지정해서 알람 등록
+  Future<void> _scheduleSingleAlarmWithId(
     MedicineAlarm alarm,
     String day,
     TimeOfDay time,
+    int notificationId,
   ) async {
     try {
       final now = DateTime.now();
@@ -252,18 +286,15 @@ class AlarmService {
       // 다음 해당 요일의 시간 계산
       var nextAlarmTime = _getNextAlarmTime(now, dayIndex, time);
 
-      // 알람 ID 생성 (순차적 ID)
-      final alarmId = _nextNotificationId++;
-
       print(
         '      📅 $day ${time.hour}:${time.minute} - 다음 알람: ${nextAlarmTime.toString()}',
       );
-      print('      🆔 알람 ID: $alarmId');
+      print('      🆔 알람 ID: $notificationId (재사용됨)');
 
       // 알람 스케줄링 (전체화면/웨이크업)
       await AwesomeNotifications().createNotification(
         content: NotificationContent(
-          id: alarmId,
+          id: notificationId,
           channelKey: 'medicine_alarms',
           title: '약 복용 알람',
           body: '${alarm.name} 복용 시간입니다!',
@@ -279,7 +310,7 @@ class AlarmService {
             'medicineName': alarm.name,
             'time': '${time.hour}:${time.minute}',
             'day': day,
-            'notificationId': '$alarmId',
+            'notificationId': '$notificationId',
           },
         ),
         schedule: NotificationCalendar(
@@ -296,7 +327,6 @@ class AlarmService {
         ),
       );
       print('      ✅ 알람 스케줄링 완료');
-      return alarmId;
     } catch (e) {
       print('      ❌ 알람 스케줄링 실패: $e');
       rethrow;
@@ -330,7 +360,7 @@ class AlarmService {
     return nextAlarm;
   }
 
-  // 알람 취소
+  // 알람 취소 (ID는 유지)
   Future<void> cancelAlarm(String alarmId) async {
     try {
       // 저장된 알림 ID 가져오기
@@ -344,9 +374,8 @@ class AlarmService {
           await AwesomeNotifications().cancel(notificationId);
           print('   🔔 알림 취소: $notificationId');
         }
-        // 알림 ID 목록 삭제
-        await prefs.remove(notificationIdsKey);
-        print('   ✅ 알림 ID 목록 삭제 완료');
+        // 알림 ID 목록은 삭제하지 않고 유지 (재사용을 위해)
+        print('   ✅ 알림 취소 완료 (ID 유지됨)');
       }
     } catch (e) {
       print('알람 취소 실패: $e');
@@ -414,7 +443,7 @@ class AlarmService {
     }
   }
 
-  // 알람 삭제
+  // 알람 삭제 (ID도 완전 삭제)
   Future<void> deleteAlarm(String alarmId) async {
     try {
       await cancelAlarm(alarmId);
@@ -425,6 +454,11 @@ class AlarmService {
 
       final alarmsJson = alarms.map((a) => a.toJson()).toList();
       await prefs.setString(_alarmsKey, json.encode(alarmsJson));
+
+      // 알람 삭제 시에는 알림 ID도 완전 삭제
+      final notificationIdsKey = 'notification_ids_$alarmId';
+      await prefs.remove(notificationIdsKey);
+      print('   🗑️ 알림 ID 목록 완전 삭제');
     } catch (e) {
       print('알람 삭제 실패: $e');
     }
