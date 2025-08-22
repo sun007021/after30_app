@@ -91,16 +91,28 @@ class _AlarmContentState extends State<AlarmContent> {
 
   Future<void> _toggleAlarm(int index) async {
     final alarm = _alarms[index];
+    final newState = !alarm.isActive;
+
+    // 즉시 UI 업데이트
+    setState(() {
+      _alarms[index] = alarm.copyWith(isActive: newState);
+    });
+
     try {
-      await _alarmService.toggleAlarm(alarm.id, !alarm.isActive);
-              await _loadAlarms(); // 알람 목록 새로고침
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('알람 상태 변경에 실패했습니다: $e')));
-        }
+      await _alarmService.toggleAlarm(alarm.id, newState);
+      // 성공 시 추가 업데이트는 필요 없음 (이미 setState로 처리됨)
+    } catch (e) {
+      // 실패 시 원래 상태로 되돌리기
+      setState(() {
+        _alarms[index] = alarm.copyWith(isActive: !newState);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('알람 상태 변경에 실패했습니다: $e')));
       }
+    }
   }
 
   @override
@@ -202,6 +214,8 @@ class _AlarmContentState extends State<AlarmContent> {
                             value: alarm.isActive,
                             onChanged: (value) => _toggleAlarm(idx),
                             activeColor: Colors.pink,
+                            inactiveThumbColor: Colors.grey[400],
+                            inactiveTrackColor: Colors.grey[300],
                           ),
                           PopupMenuButton<String>(
                             color: Colors.white,
