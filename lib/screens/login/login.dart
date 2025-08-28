@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/screens/alarm/alarm_list.dart';
+// import 'package:after30/screens/alarm/alarm_list.dart';
+import 'package:after30/screens/main/home.dart';
 import 'package:after30/widgets/login/login_header.dart';
 import 'package:after30/widgets/login/kakao_login_button.dart';
 import 'package:after30/widgets/login/login_footer.dart';
@@ -65,16 +66,12 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
 
-      if (kakaoToken == null) {
-        print('카카오 토큰이 null');
-        _showErrorDialog('카카오 로그인에 실패했습니다.');
-        return;
-      }
+      // kakaoToken이 null이면 위에서 예외 처리됨
 
       print('로그인 성공, 토큰: ${kakaoToken.accessToken}');
 
-      // 카카오 로그인 성공 시 바로 홈 화면으로 이동
-      _navigateToAlarm();
+      // 카카오 로그인 성공 시 홈 화면으로 이동
+      _navigateToHome();
     } catch (e) {
       print('로그인 중 오류 발생: $e');
       _showErrorDialog('로그인 중 오류가 발생했습니다: $e');
@@ -85,9 +82,9 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _navigateToAlarm() {
+  void _navigateToHome() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const AlarmPage()),
+      MaterialPageRoute(builder: (context) => const HomePage()),
     );
   }
 

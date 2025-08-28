@@ -5,6 +5,7 @@ class Medication {
   final String time;
   final DateTime date;
   final String status;
+  final bool nfcEnabled;
 
   Medication({
     required this.id,
@@ -13,6 +14,7 @@ class Medication {
     required this.time,
     required this.date,
     required this.status,
+    this.nfcEnabled = false,
   });
 
   factory Medication.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class Medication {
       time: json['time'],
       date: DateTime.parse(json['date']),
       status: json['status'],
+      nfcEnabled: json['nfcEnabled'] ?? false,
     );
   }
 
@@ -34,6 +37,7 @@ class Medication {
       'time': time,
       'date': date.toIso8601String(),
       'status': status,
+      'nfcEnabled': nfcEnabled,
     };
   }
 }
