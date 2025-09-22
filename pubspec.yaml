@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   kakao_flutter_sdk_user: ^1.9.5 # 카카오 로그인 API 패키지
+  kakao_flutter_sdk_auth: ^1.9.5 # 카카오 인가코드용 Auth API
   table_calendar: ^3.0.9 # 달력 위젯 패키지
   provider: ^6.1.5 # 상태 관리 패키지
   awesome_notifications: ^0.10.1 # 알림 패키지
@@ -40,6 +41,8 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  dio: ^5.6.0 # HTTP 클라이언트
+  json_annotation: ^4.9.0 # 모델 직렬화 어노테이션
 
 dev_dependencies:
   flutter_test:
@@ -51,6 +54,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  build_runner: ^2.4.12 # 코드 생성기
+  json_serializable: ^6.9.0 # JSON 직렬화 코드 생성
+  retrofit_generator: ^8.2.1 # (선택) Retrofit 코드 생성
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

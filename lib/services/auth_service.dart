@@ -1,29 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:after30/services/token_store.dart';
 
 class AuthService {
-  // 로그아웃
+  /// 카카오 로그아웃 + 앱 세션 정리
   static Future<void> logout(BuildContext context) async {
-    // 카카오 로그아웃
     try {
       await UserApi.instance.logout();
-    } catch (e) {
-      // 로그아웃 실패 시에도 로그인 페이지로 이동
+    } catch (_) {}
+    await TokenStore.clear();
+    if (context.mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
     }
-
-    // 로그인 페이지로 이동
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
-  // 회원탈퇴(예시)
+  /// 카카오 연결 해제 후 로그아웃
   static Future<void> withdraw(BuildContext context) async {
-    // 카카오 연결 해제
     try {
       await UserApi.instance.unlink();
-    } catch (e) {
-      // 연결 해제 실패 시에도 로그아웃 처리
-    }
-
+    } catch (_) {}
     await logout(context);
   }
+
+  // 저장/조회는 TokenStore를 직접 사용하세요.
 }

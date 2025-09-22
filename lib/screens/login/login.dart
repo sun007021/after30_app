@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+// 인가코드 교환은 사용하지 않으므로 kakao_auth는 불필요
+import 'package:after30/services/backend_auth_service.dart';
+// import 'package:after30/services/api_config.dart';
 // import 'package:after30/screens/alarm/alarm_list.dart';
 import 'package:after30/screens/main/home.dart';
 import 'package:after30/widgets/login/login_header.dart';
@@ -67,10 +70,29 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       // kakaoToken이 null이면 위에서 예외 처리됨
-
       print('로그인 성공, 토큰: ${kakaoToken.accessToken}');
 
-      // 카카오 로그인 성공 시 홈 화면으로 이동
+      // 백엔드에 카카오 access_token 전달하여 세션 토큰 교환
+      final backend = BackendAuthService();
+      final resp = await backend.loginWithKakaoAccessToken(
+        kakaoToken.accessToken,
+      );
+      String _mask(String v) {
+        if (v.isEmpty) return '';
+        if (v.length <= 10) return '***';
+        return '${v.substring(0, 6)}...${v.substring(v.length - 4)}';
+      }
+
+      print(
+        '백엔드 로그인 응답: '
+        'access_token=${_mask(resp.accessToken)}, '
+        'refresh_token=${_mask(resp.refreshToken)}, '
+        'access_expires_in=${resp.accessExpiresIn}, '
+        'refresh_expires_in=${resp.refreshExpiresIn}, '
+        'is_new_user=${resp.isNewUser}',
+      );
+
+      // 3) 홈으로 이동
       _navigateToHome();
     } catch (e) {
       print('로그인 중 오류 발생: $e');

@@ -3,6 +3,7 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:provider/provider.dart';
 import 'package:after30/screens/login/login.dart';
 import 'package:after30/screens/main/home.dart';
+import 'package:after30/services/backend_auth_service.dart';
 import 'package:after30/screens/family/family_page.dart';
 import 'package:flutter/widgets.dart';
 import 'package:after30/services/medication_service.dart';
@@ -76,8 +77,9 @@ class _MyAppState extends State<MyApp> {
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFEE500)),
           useMaterial3: true,
         ),
-        initialRoute: '/login',
+        initialRoute: '/startup',
         routes: {
+          '/startup': (context) => const StartupPage(),
           '/login': (context) => const LoginPage(),
           '/home': (context) => const HomePage(),
           '/family': (context) => const FamilyPage(),
@@ -96,5 +98,39 @@ class FullscreenAlarmPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     // 실제로는 알람 데이터를 받아와서 FullscreenAlarm을 표시해야 합니다
     return const Scaffold(body: Center(child: Text('전체화면 알림')));
+  }
+}
+
+class StartupPage extends StatefulWidget {
+  const StartupPage({super.key});
+  @override
+  State<StartupPage> createState() => _StartupPageState();
+}
+
+class _StartupPageState extends State<StartupPage> {
+  @override
+  void initState() {
+    super.initState();
+    _attemptRefresh();
+  }
+
+  Future<void> _attemptRefresh() async {
+    try {
+      final ok = await BackendAuthService().refreshSession();
+      if (!mounted) return;
+      if (ok) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/login');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
