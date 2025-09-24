@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/screens/alarm/add_alarm.dart';
 import 'package:after30/models/medicine_alarm.dart';
 import 'package:after30/services/alarm_service.dart';
+import 'package:after30/services/schedule_service.dart';
 
 class AlarmContent extends StatefulWidget {
   const AlarmContent({super.key});
@@ -14,6 +15,7 @@ class AlarmContent extends StatefulWidget {
 class _AlarmContentState extends State<AlarmContent> {
   final List<MedicineAlarm> _alarms = [];
   final AlarmService _alarmService = AlarmService();
+  final ScheduleService _scheduleService = ScheduleService();
   bool _isLoading = true;
 
   @override
@@ -28,10 +30,52 @@ class _AlarmContentState extends State<AlarmContent> {
     });
 
     try {
-      final alarms = await _alarmService.getAlarms();
+      final schedules = await _scheduleService.getSchedules(
+        includeInactive: true,
+      );
+      final mapped = schedules.map<MedicineAlarm>((s) {
+        final m = s as Map<String, dynamic>;
+        final id = (m['id'] as num).toInt().toString();
+        final name = (m['medication_name'] as String?) ?? '';
+        final times = ((m['times'] as List?) ?? [])
+            .map((t) => t.toString())
+            .map((t) {
+              final parts = t.split(':');
+              final h = int.tryParse(parts[0]) ?? 8;
+              final min = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+              return TimeOfDay(hour: h, minute: min);
+            })
+            .toList();
+        final repeatDays = ((m['repeat_days'] as List?) ?? [])
+            .map((d) => d.toString())
+            .toList();
+        const korMap = {
+          'MON': '월',
+          'TUE': '화',
+          'WED': '수',
+          'THU': '목',
+          'FRI': '금',
+          'SAT': '토',
+          'SUN': '일',
+        };
+        final days = repeatDays.map((e) => korMap[e] ?? '월').toList();
+        final everyDay = days.length == 7;
+        final isActive = (m['is_active'] as bool?) ?? true;
+        return MedicineAlarm(
+          id: id,
+          name: name,
+          times: times,
+          days: days,
+          everyDay: everyDay,
+          isActive: isActive,
+          nfcEnabled: false,
+        );
+      }).toList();
+
       setState(() {
-        _alarms.clear();
-        _alarms.addAll(alarms);
+        _alarms
+          ..clear()
+          ..addAll(mapped);
         _isLoading = false;
       });
     } catch (e) {
@@ -77,15 +121,24 @@ class _AlarmContentState extends State<AlarmContent> {
 
     if (confirmed == true) {
       try {
-        await _alarmService.deleteAlarm(alarm.id);
-        await _loadAlarms(); // 알람 목록 새로고침
+        final scheduleId = int.tryParse(alarm.id);
+        if (scheduleId != null) {
+          await _scheduleService.deleteSchedule(scheduleId);
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('알람 삭제에 실패했습니다: $e')));
+          ).showSnackBar(SnackBar(content: Text('서버 삭제 실패: $e')));
         }
+        return;
       }
+
+      // 기기 알림 취소 (로컬 저장 갱신 제거)
+      try {
+        await _alarmService.cancelAlarm(alarm.id);
+      } catch (_) {}
+      await _loadAlarms(); // 목록 새로고침(서버 기준)
     }
   }
 
@@ -99,8 +152,53 @@ class _AlarmContentState extends State<AlarmContent> {
     });
 
     try {
-      await _alarmService.toggleAlarm(alarm.id, newState);
-      // 성공 시 추가 업데이트는 필요 없음 (이미 setState로 처리됨)
+      final scheduleId = int.tryParse(alarm.id);
+      if (!newState) {
+        // OFF: 서버 비활성화 + 기기 알림 취소
+        if (scheduleId != null) {
+          await _scheduleService.deactivateSchedule(scheduleId);
+        }
+        await _alarmService.cancelAlarm(alarm.id);
+      } else {
+        // ON: 서버 업데이트로 재활성화 유도 + 기기 알림 스케줄링
+        if (scheduleId != null) {
+          const dayEnumMap = {
+            '월': 'MON',
+            '화': 'TUE',
+            '수': 'WED',
+            '목': 'THU',
+            '금': 'FRI',
+            '토': 'SAT',
+            '일': 'SUN',
+          };
+          final now = DateTime.now();
+          final startDate =
+              '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+          final timeStrings = alarm.times
+              .map(
+                (t) =>
+                    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
+              )
+              .toList();
+          final repeatDays = alarm.everyDay
+              ? ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+              : alarm.days
+                    .map((d) => dayEnumMap[d])
+                    .whereType<String>()
+                    .toList();
+          final body = {
+            'medication_name': alarm.name,
+            'times': timeStrings,
+            'repeat_days': repeatDays,
+            'start_date': startDate,
+          };
+          await _scheduleService.updateSchedule(scheduleId, body);
+        }
+        await _alarmService.scheduleAlarm(alarm);
+      }
+
+      // 서버/기기 연동 후 목록 갱신(서버 기준)
+      await _loadAlarms();
     } catch (e) {
       // 실패 시 원래 상태로 되돌리기
       setState(() {
@@ -110,7 +208,7 @@ class _AlarmContentState extends State<AlarmContent> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('알람 상태 변경에 실패했습니다: $e')));
+        ).showSnackBar(SnackBar(content: Text('상태 변경 동기화 실패: $e')));
       }
     }
   }
@@ -287,26 +385,6 @@ class _AlarmContentState extends State<AlarmContent> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.blue,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (alarm.familyNotify) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.family_restroom,
-                              size: 16,
-                              color: Colors.orange,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '가족 알림 활성화',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange,
                               ),
                             ),
                           ],

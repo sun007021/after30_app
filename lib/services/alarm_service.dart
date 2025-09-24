@@ -10,6 +10,7 @@ class AlarmService {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
   AlarmService._internal();
+  static const bool _verboseLogs = false; // 상세 로그 스위치
 
   static const String _alarmsKey = 'medicine_alarms';
   static int _nextNotificationId = 1; // 순차적 알람 ID
@@ -208,21 +209,23 @@ class AlarmService {
   // 알람 등록
   Future<bool> scheduleAlarm(MedicineAlarm alarm) async {
     try {
-      print('🔔 scheduleAlarm 시작: ${alarm.name}');
-      print('   📅 요일: ${alarm.days.join(', ')}');
       print(
-        '   ⏰ 시간: ${alarm.times.map((t) => '${t.hour}:${t.minute}').join(', ')}',
+        '🔔 알람 스케줄링: scheduleId=${alarm.id}, name=${alarm.name}, times=${alarm.times.length}, days=${alarm.days.length}',
       );
 
       // 기존 알림 ID 가져오기 (수정 시 재사용)
       final existingNotificationIds = await _getExistingNotificationIds(
         alarm.id,
       );
-      print('   🔄 기존 알림 ID: $existingNotificationIds');
+      if (_verboseLogs) {
+        print('   🔄 기존 알림 ID: $existingNotificationIds');
+      }
 
       // 기존 알람 취소
       await cancelAlarm(alarm.id);
-      print('   ✅ 기존 알람 취소 완료');
+      if (_verboseLogs) {
+        print('   ✅ 기존 알람 취소 완료');
+      }
 
       // 각 요일과 시간에 대해 알람 등록
       final notificationIds = <int>[];
@@ -230,7 +233,9 @@ class AlarmService {
 
       for (final day in alarm.days) {
         for (final time in alarm.times) {
-          print('   📅 $day ${time.hour}:${time.minute} 알람 등록 중...');
+          if (_verboseLogs) {
+            print('   📅 $day ${time.hour}:${time.minute} 알람 등록 중...');
+          }
 
           // 기존 ID가 있으면 재사용, 없으면 새로 생성
           final notificationId = idIndex < existingNotificationIds.length
@@ -242,7 +247,7 @@ class AlarmService {
           idIndex++;
         }
       }
-      print('   ✅ 모든 알람 스케줄링 완료');
+      print('   ✅ 알람 스케줄링 완료: scheduleId=${alarm.id}');
 
       // 알람 저장 (알림 ID 포함)
       await _saveAlarmWithNotificationIds(alarm, notificationIds);
@@ -250,7 +255,7 @@ class AlarmService {
 
       return true;
     } catch (e) {
-      print('❌ 알람 등록 실패: $e');
+      print('❌ 알람 스케줄링 실패: $e');
       return false;
     }
   }
@@ -286,10 +291,12 @@ class AlarmService {
       // 다음 해당 요일의 시간 계산
       var nextAlarmTime = _getNextAlarmTime(now, dayIndex, time);
 
-      print(
-        '      📅 $day ${time.hour}:${time.minute} - 다음 알람: ${nextAlarmTime.toString()}',
-      );
-      print('      🆔 알람 ID: $notificationId (재사용됨)');
+      if (_verboseLogs) {
+        print(
+          '      📅 $day ${time.hour}:${time.minute} - 다음 알람: ${nextAlarmTime.toString()}',
+        );
+        print('      🆔 알림ID: $notificationId (재사용됨)');
+      }
 
       // 알람 스케줄링 (전체화면/웨이크업)
       await AwesomeNotifications().createNotification(
@@ -326,9 +333,11 @@ class AlarmService {
           allowWhileIdle: true,
         ),
       );
-      print('      ✅ 알람 스케줄링 완료');
+      if (_verboseLogs) {
+        print('      ✅ 단일 알람 스케줄링 완료');
+      }
     } catch (e) {
-      print('      ❌ 알람 스케줄링 실패: $e');
+      print('      ❌ 단일 알람 스케줄링 실패: $e');
       rethrow;
     }
   }
@@ -372,10 +381,11 @@ class AlarmService {
         for (final idString in notificationIdsString) {
           final notificationId = int.parse(idString);
           await AwesomeNotifications().cancel(notificationId);
-          print('   🔔 알림 취소: $notificationId');
+          if (_verboseLogs) {
+            print('   🔔 알림 취소: $notificationId');
+          }
         }
-        // 알림 ID 목록은 삭제하지 않고 유지 (재사용을 위해)
-        print('   ✅ 알림 취소 완료 (ID 유지됨)');
+        print('   ✅ 알림 취소 완료: scheduleId=$alarmId');
       }
     } catch (e) {
       print('알람 취소 실패: $e');
@@ -393,19 +403,15 @@ class AlarmService {
     List<int> notificationIds,
   ) async {
     try {
-      print('   💾 _saveAlarmWithNotificationIds 시작');
       final prefs = await SharedPreferences.getInstance();
       final alarms = await getAlarms();
-      print('   📊 기존 알람 수: ${alarms.length}');
 
       // 기존 알람이 있으면 업데이트, 없으면 추가
       final existingIndex = alarms.indexWhere((a) => a.id == alarm.id);
       if (existingIndex >= 0) {
         alarms[existingIndex] = alarm;
-        print('   🔄 기존 알람 업데이트: ${alarm.id}');
       } else {
         alarms.add(alarm);
-        print('   ➕ 새 알람 추가: ${alarm.id}');
       }
 
       // 알림 ID 저장
@@ -414,11 +420,15 @@ class AlarmService {
         notificationIdsKey,
         notificationIds.map((id) => id.toString()).toList(),
       );
-      print('   🔔 알림 ID 저장 완료: $notificationIds');
+      print(
+        '   🔔 알림 저장: scheduleId=${alarm.id}, count=${notificationIds.length}',
+      );
 
       final alarmsJson = alarms.map((a) => a.toJson()).toList();
       await prefs.setString(_alarmsKey, json.encode(alarmsJson));
-      print('   ✅ SharedPreferences 저장 완료');
+      if (_verboseLogs) {
+        print('   ✅ SharedPreferences 저장 완료');
+      }
     } catch (e) {
       print('❌ 알람 저장 실패: $e');
       rethrow;
@@ -458,7 +468,7 @@ class AlarmService {
       // 알람 삭제 시에는 알림 ID도 완전 삭제
       final notificationIdsKey = 'notification_ids_$alarmId';
       await prefs.remove(notificationIdsKey);
-      print('   🗑️ 알림 ID 목록 완전 삭제');
+      print('   🗑️ 알림 데이터 제거: scheduleId=$alarmId');
     } catch (e) {
       print('알람 삭제 실패: $e');
     }

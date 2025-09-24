@@ -3,6 +3,7 @@ import 'package:after30/widgets/alarm_list/top_curve_clipper.dart';
 import 'package:after30/widgets/alarm_list/alarm_header.dart';
 import 'package:after30/models/medicine_alarm.dart';
 import 'package:after30/services/alarm_service.dart';
+import 'package:after30/services/schedule_service.dart';
 
 class MedicineRegisterPage extends StatefulWidget {
   final MedicineAlarm? initialAlarm;
@@ -19,7 +20,6 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   late List<TimeOfDay> _times;
   late bool _allDaysSelected;
   bool _nfcEnabled = false;
-  bool _familyNotify = true;
   bool _isLoading = false;
 
   @override
@@ -36,7 +36,6 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     // 기존 알람이 있으면 설정값 복원
     if (alarm != null) {
       _nfcEnabled = alarm.nfcEnabled;
-      _familyNotify = alarm.familyNotify;
     }
   }
 
@@ -263,7 +262,6 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                   ..._times.asMap().entries.map((entry) {
                     final idx = entry.key;
                     final t = entry.value;
-                    final isEmpty = t == null;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: GestureDetector(
@@ -272,15 +270,12 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                           child: TextField(
                             readOnly: true,
                             controller: TextEditingController(
-                              text: isEmpty ? '' : _formatTimeOfDay(t),
+                              text: _formatTimeOfDay(t),
                             ),
                             decoration: InputDecoration(
-                              hintText: isEmpty ? '시간을 선택하세요' : '',
                               border: const OutlineInputBorder(),
                               filled: true,
-                              fillColor: isEmpty
-                                  ? Colors.grey[200]
-                                  : Colors.white,
+                              fillColor: Colors.white,
                               contentPadding: EdgeInsets.symmetric(
                                 vertical: 8,
                                 horizontal: 12,
@@ -320,42 +315,51 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        '가족에게 알람이 가게 할까요?',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Checkbox(
-                        value: _familyNotify,
-                        onChanged: (v) {
-                          setState(() {
-                            _familyNotify = v ?? false;
-                          });
-                        },
-                        activeColor: Colors.pink,
-                      ),
-                    ],
-                  ),
-                  const Text(
-                    '알람을 꺼먹었을 때, 가족에게 알람이 가요',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () async {
                       final name = _medicineController.text.trim();
                       final times = List<TimeOfDay>.from(_times);
+                      if (name.length < 1 || name.length > 255) {
+                        await showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('안내'),
+                            content: const Text('약 이름은 1~255자 사이여야 합니다.'),
+                            backgroundColor: Colors.white,
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('확인'),
+                              ),
+                            ],
+                          ),
+                        );
+                        return;
+                      }
                       if (name.isEmpty) {
                         showDialog(
                           context: context,
                           builder: (context) => AlertDialog(
                             title: const Text('안내'),
                             content: const Text('약 이름을 입력해 주세요.'),
+                            backgroundColor: Colors.white,
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('확인'),
+                              ),
+                            ],
+                          ),
+                        );
+                        return;
+                      }
+                      if (_selectedDays.isEmpty) {
+                        await showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('안내'),
+                            content: const Text('복용 요일을 1개 이상 선택해 주세요.'),
                             backgroundColor: Colors.white,
                             actions: [
                               TextButton(
@@ -383,30 +387,112 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                         );
                         return;
                       }
-                      final everyDay = _selectedDays.length == 7;
-                      final alarm = MedicineAlarm(
-                        id: widget.initialAlarm?.id, // 기존 알람이 있으면 ID 유지
-                        name: name,
-                        times: times,
-                        days: List.from(_selectedDays),
-                        everyDay: everyDay,
-                        nfcEnabled: _nfcEnabled,
-                        familyNotify: _familyNotify,
-                      );
+                      late final MedicineAlarm alarm;
                       setState(() {
                         _isLoading = true;
                       });
 
+                      // 백엔드 스케줄 생성/수정 API 호출
+                      try {
+                        final scheduleService = ScheduleService();
+                        final now = DateTime.now();
+                        final startDate =
+                            '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+                        final timeStrings = times
+                            .map(
+                              (t) =>
+                                  '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
+                            )
+                            .toList();
+                        const dayEnumMap = {
+                          '월': 'MON',
+                          '화': 'TUE',
+                          '수': 'WED',
+                          '목': 'THU',
+                          '금': 'FRI',
+                          '토': 'SAT',
+                          '일': 'SUN',
+                        };
+                        final repeatDays = _selectedDays
+                            .map((d) => dayEnumMap[d])
+                            .whereType<String>()
+                            .toList();
+                        final body = {
+                          'medication_name': name,
+                          'times': timeStrings,
+                          'repeat_days': repeatDays,
+                          'start_date': startDate,
+                        };
+                        if (widget.initialAlarm == null) {
+                          final created = await scheduleService.createSchedule(
+                            body,
+                          );
+                          // ignore: avoid_print
+                          print('✅ 서버 스케줄 생성 완료: $created');
+                          final createdMap = created as Map<String, dynamic>;
+                          final scheduleId = (createdMap['id'] as num).toInt();
+                          final everyDay = _selectedDays.length == 7;
+                          alarm = MedicineAlarm(
+                            id: scheduleId.toString(),
+                            name: name,
+                            times: times,
+                            days: List.from(_selectedDays),
+                            everyDay: everyDay,
+                            nfcEnabled: _nfcEnabled,
+                          );
+                        } else {
+                          // 수정 모드: existing id를 사용해 서버 업데이트
+                          final scheduleId = int.tryParse(
+                            widget.initialAlarm!.id,
+                          );
+                          if (scheduleId == null) {
+                            throw Exception('기존 알람 ID가 유효하지 않습니다.');
+                          }
+                          final updated = await scheduleService.updateSchedule(
+                            scheduleId,
+                            body,
+                          );
+                          // ignore: avoid_print
+                          print('🔄 서버 스케줄 수정 완료: $updated');
+                          final everyDay = _selectedDays.length == 7;
+                          alarm = MedicineAlarm(
+                            id: widget.initialAlarm!.id,
+                            name: name,
+                            times: times,
+                            days: List.from(_selectedDays),
+                            everyDay: everyDay,
+                            nfcEnabled: _nfcEnabled,
+                          );
+                        }
+                      } catch (e) {
+                        setState(() {
+                          _isLoading = false;
+                        });
+                        if (mounted) {
+                          await showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('오류'),
+                              content: Text('스케줄 생성에 실패했습니다. 다시 시도해주세요.\n$e'),
+                              backgroundColor: Colors.white,
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('확인'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return;
+                      }
+
                       // 알람 등록
-                      print('🔔 알람 등록 시작');
-                      print('   📝 이름: $name');
                       print(
-                        '   ⏰ 시간: ${times.map((t) => '${t.hour}:${t.minute}').join(', ')}',
+                        '🔔 알람 등록: name=$name, times=${times.length}, days=${_selectedDays.length}',
                       );
-                      print('   📅 요일: ${_selectedDays.join(', ')}');
 
                       final alarmService = AlarmService();
-                      print('   ✅ AlarmService 사용 준비 완료');
 
                       final success = await alarmService.scheduleAlarm(alarm);
                       print('   📊 알람 등록 결과: $success');
