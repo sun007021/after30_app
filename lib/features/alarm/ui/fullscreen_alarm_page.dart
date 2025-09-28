@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:after30/models/medicine_alarm.dart';
-import 'package:after30/services/alarm_service.dart';
+import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:android_intent_plus/android_intent.dart';
 
 class FullscreenAlarmPage extends StatelessWidget {
   final MedicineAlarm alarm;
@@ -28,7 +27,6 @@ class FullscreenAlarmPage extends StatelessWidget {
   }
 
   Future<void> _onComplete(BuildContext context) async {
-    // 현재 표시 중인 알림만 닫음(반복 스케줄은 유지)
     await AwesomeNotifications().dismiss(notificationId);
     if (context.mounted) Navigator.of(context).pop('completed');
   }
@@ -158,7 +156,6 @@ class FullscreenAlarmPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    // 권한 가이드 버튼 제거됨
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(

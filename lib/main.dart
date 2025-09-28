@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:provider/provider.dart';
-import 'package:after30/screens/login/login.dart';
-import 'package:after30/screens/main/home.dart';
-import 'package:after30/services/backend_auth_service.dart';
-import 'package:after30/screens/family/family_page.dart';
+import 'package:after30/features/login/ui/login.dart';
+import 'package:after30/features/home/ui/home.dart';
+import 'package:after30/features/login/data/backend_auth_service.dart';
+import 'package:after30/features/family/ui/family_page.dart';
 import 'package:flutter/widgets.dart';
-import 'package:after30/services/medication_service.dart';
-import 'package:after30/services/alarm_service.dart';
-import 'package:after30/viewmodels/invite_view_model.dart';
+import 'package:after30/features/calendar/data/medication_service.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
+import 'package:after30/services/invite_view_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

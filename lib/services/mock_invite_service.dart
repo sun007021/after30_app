@@ -1,6 +1,6 @@
-import 'package:after30/models/invite.dart';
-import 'package:after30/services/invite_service.dart';
-import 'package:after30/services/phone_util.dart';
+import 'package:after30/features/family/models/invite.dart';
+import 'package:after30/features/family/data/invite_service.dart';
+import 'package:after30/features/family/data/phone_util.dart';
 
 /// Mock 초대 서비스 구현체
 /// TODO: 다음달 API 연동 포인트 - ApiInviteService로 교체 예정
