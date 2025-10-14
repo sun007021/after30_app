@@ -103,7 +103,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   ..sort((a, b) => a.time.compareTo(b.time));
                 final total = medications.length;
                 final done = medications
-                    .where((m) => m.status == '복용완료')
+                    .where((m) => m.status == 'taken')
                     .length;
 
                 if (medications.isEmpty) {
@@ -166,7 +166,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     ),
                     const SizedBox(height: 16),
                     ...medications.map((m) {
-                      final isDone = m.status == '복용완료';
+                      final isDone = m.status == 'taken';
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
@@ -180,23 +180,56 @@ class _CalendarPageState extends State<CalendarPage> {
                         ),
                         child: Row(
                           children: [
-                            Text(
-                              m.time,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  m.time.substring(0, 5),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (m.takenAt != null) ...[
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    Icons.check_circle,
+                                    size: 16,
+                                    color: Colors.green[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '복약 ${m.takenAt!.hour.toString().padLeft(2, '0')}:${m.takenAt!.minute.toString().padLeft(2, '0')}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                             const SizedBox(width: 24),
                             Expanded(
                               child: Row(
                                 children: [
-                                  Text(
-                                    m.name,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        m.name,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        '상태: ${m.status}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black45,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   if (m.nfcEnabled) ...[
                                     const SizedBox(width: 6),
@@ -249,7 +282,7 @@ class _CalendarPageState extends State<CalendarPage> {
           ),
         ],
       ),
-      bottomNavigationBar: const AlarmBottomNavigation(),
+      bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 3),
     );
   }
 

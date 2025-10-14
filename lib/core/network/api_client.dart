@@ -24,7 +24,16 @@ class ApiClient {
               options.headers['Authorization'] = 'Bearer $token';
             }
           }
+          // ignore: avoid_print
+          print('➡️  ${options.method} ${options.path}');
           handler.next(options);
+        },
+        onResponse: (response, handler) {
+          // ignore: avoid_print
+          print(
+            '✅ ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.path}',
+          );
+          handler.next(response);
         },
         onError: (error, handler) async {
           final skipAuth = error.requestOptions.extra['skipAuth'] == true;
@@ -37,6 +46,10 @@ class ApiClient {
               } catch (_) {}
             }
           }
+          // ignore: avoid_print
+          print(
+            '❌ ${error.response?.statusCode ?? '-'} ${error.requestOptions.method} ${error.requestOptions.path}',
+          );
           handler.next(error);
         },
       ),

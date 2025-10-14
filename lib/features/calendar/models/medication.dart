@@ -7,6 +7,8 @@ class Medication {
   final String status;
   final bool nfcEnabled;
   final int? scheduleId;
+  final int? historyId;
+  final DateTime? takenAt;
 
   Medication({
     required this.id,
@@ -17,6 +19,8 @@ class Medication {
     required this.status,
     this.nfcEnabled = false,
     this.scheduleId,
+    this.historyId,
+    this.takenAt,
   });
 
   factory Medication.fromJson(Map<String, dynamic> json) {
@@ -29,6 +33,8 @@ class Medication {
       status: json['status'],
       nfcEnabled: json['nfcEnabled'] ?? false,
       scheduleId: json['scheduleId'],
+      historyId: json['historyId'],
+      takenAt: json['takenAt'] != null ? DateTime.parse(json['takenAt']) : null,
     );
   }
 
@@ -42,6 +48,34 @@ class Medication {
       'status': status,
       'nfcEnabled': nfcEnabled,
       'scheduleId': scheduleId,
+      'historyId': historyId,
+      'takenAt': takenAt?.toIso8601String(),
     };
+  }
+
+  Medication copyWith({
+    String? id,
+    String? name,
+    String? dosage,
+    String? time,
+    DateTime? date,
+    String? status,
+    bool? nfcEnabled,
+    int? scheduleId,
+    int? historyId,
+    DateTime? takenAt,
+  }) {
+    return Medication(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      dosage: dosage ?? this.dosage,
+      time: time ?? this.time,
+      date: date ?? this.date,
+      status: status ?? this.status,
+      nfcEnabled: nfcEnabled ?? this.nfcEnabled,
+      scheduleId: scheduleId ?? this.scheduleId,
+      historyId: historyId ?? this.historyId,
+      takenAt: takenAt ?? this.takenAt,
+    );
   }
 }

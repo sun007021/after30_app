@@ -43,6 +43,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   dio: ^5.6.0 # HTTP 클라이언트
   json_annotation: ^4.9.0 # 모델 직렬화 어노테이션
+  flutter_svg: ^2.0.10+1 # SVG 렌더링
+  dotted_border: ^2.1.0 # 점선 테두리 위젯
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +72,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/images/navicon/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

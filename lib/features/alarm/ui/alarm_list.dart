@@ -12,7 +12,7 @@ class AlarmPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      bottomNavigationBar: const AlarmBottomNavigation(),
+      bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 0),
       body: Stack(
         children: [
           Positioned(
