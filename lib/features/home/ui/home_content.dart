@@ -139,6 +139,13 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   // 시간 유틸 제거됨 (서버 문자열 사용)
+  String _formatHHmm(DateTime dt) {
+    // 서버에서 오는 완료 시간이 UTC 기준이므로 KST(+6)로 보정
+    final adjusted = dt.add(const Duration(hours: 9));
+    final hh = adjusted.hour.toString().padLeft(2, '0');
+    final mm = adjusted.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
 
   Future<void> _markCompleted(String doseKey) async {
     try {
@@ -259,14 +266,17 @@ class _HomeContentState extends State<HomeContent> {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 10),
-                                  child: Text(
-                                    '오늘의 복약',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.black,
-                                      fontWeight: FontWeight.w600,
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 10),
+                                  child: Container(
+                                    alignment: Alignment.centerLeft,
+                                    child: const Text(
+                                      '오늘의 복약',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -334,6 +344,26 @@ class _HomeContentState extends State<HomeContent> {
                                         isOverdue = isPast;
                                       }
                                     } catch (_) {}
+                                    final nowDate = DateTime.now();
+                                    final bool isToday =
+                                        _selectedDate.year == nowDate.year &&
+                                        _selectedDate.month == nowDate.month &&
+                                        _selectedDate.day == nowDate.day;
+                                    final DateTime todayOnly = DateTime(
+                                      nowDate.year,
+                                      nowDate.month,
+                                      nowDate.day,
+                                    );
+                                    final DateTime selectedOnly = DateTime(
+                                      _selectedDate.year,
+                                      _selectedDate.month,
+                                      _selectedDate.day,
+                                    );
+                                    final bool isPastDay = selectedOnly
+                                        .isBefore(todayOnly);
+                                    final bool isMissed =
+                                        !isCompleted &&
+                                        (isPastDay || isOverdue);
 
                                     return Center(
                                       child: SizedBox(
@@ -345,7 +375,7 @@ class _HomeContentState extends State<HomeContent> {
                                           decoration: BoxDecoration(
                                             color: isCompleted
                                                 ? lightBlueBg
-                                                : (isOverdue
+                                                : (isMissed
                                                       ? lightRedBg
                                                       : lightGreyBg),
                                             borderRadius: BorderRadius.circular(
@@ -354,7 +384,7 @@ class _HomeContentState extends State<HomeContent> {
                                             border: Border.all(
                                               color: isCompleted
                                                   ? primaryBlue
-                                                  : (isOverdue
+                                                  : (isMissed
                                                         ? lightRedBorder
                                                         : greyBorder),
                                               width: 1.5,
@@ -373,44 +403,111 @@ class _HomeContentState extends State<HomeContent> {
                                               children: [
                                                 Row(
                                                   children: [
-                                                    Icon(
-                                                      isCompleted
-                                                          ? Icons.check_circle
-                                                          : (isOverdue
-                                                                ? Icons
-                                                                      .error_outline
-                                                                : Icons
-                                                                      .access_time),
-                                                      color: isCompleted
-                                                          ? primaryBlue
-                                                          : (isOverdue
-                                                                ? dangerRed
-                                                                : Colors
-                                                                      .black38),
-                                                      size: 20,
-                                                    ),
+                                                    if (isCompleted)
+                                                      SvgPicture.asset(
+                                                        'assets/images/check.svg',
+                                                        width: 20,
+                                                        height: 20,
+                                                        colorFilter:
+                                                            ColorFilter.mode(
+                                                              primaryBlue,
+                                                              BlendMode.srcIn,
+                                                            ),
+                                                      )
+                                                    else
+                                                      Icon(
+                                                        isMissed
+                                                            ? Icons
+                                                                  .error_outline
+                                                            : Icons.access_time,
+                                                        color: isMissed
+                                                            ? dangerRed
+                                                            : Colors.black38,
+                                                        size: 25,
+                                                      ),
                                                     const SizedBox(width: 6),
                                                     Text(
                                                       isCompleted
                                                           ? '복용 완료'
-                                                          : (isOverdue
-                                                                ? '복용 미완료'
-                                                                : '복용 예정'),
+                                                          : (isMissed
+                                                                ? '미복용'
+                                                                : '복약 예정'),
                                                       style: TextStyle(
                                                         fontSize: 14,
                                                         fontWeight:
                                                             FontWeight.w700,
                                                         color: isCompleted
                                                             ? primaryBlue
-                                                            : (isOverdue
+                                                            : (isMissed
                                                                   ? dangerRed
                                                                   : Colors
                                                                         .black45),
                                                       ),
                                                     ),
+                                                    const SizedBox(width: 8),
+                                                    if (isCompleted &&
+                                                        m.takenAt != null)
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 2,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                12,
+                                                              ),
+                                                          boxShadow: [
+                                                            BoxShadow(
+                                                              color: Colors
+                                                                  .black
+                                                                  .withOpacity(
+                                                                    0.04,
+                                                                  ),
+                                                              blurRadius: 4,
+                                                              offset:
+                                                                  const Offset(
+                                                                    0,
+                                                                    1,
+                                                                  ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        child: Text(
+                                                          _formatHHmm(
+                                                            m.takenAt!,
+                                                          ),
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            color: primaryBlue,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    const Spacer(),
+                                                    if (isCompleted || isMissed)
+                                                      GestureDetector(
+                                                        behavior:
+                                                            HitTestBehavior
+                                                                .opaque,
+                                                        onTap: () {},
+                                                        child: const SizedBox(
+                                                          width: 24,
+                                                          height: 24,
+                                                          child: Icon(
+                                                            Icons.more_vert,
+                                                            size: 24,
+                                                            color:
+                                                                Colors.black26,
+                                                          ),
+                                                        ),
+                                                      ),
                                                   ],
                                                 ),
-                                                const SizedBox(height: 25),
+                                                const SizedBox(height: 12),
                                                 Row(
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.center,
@@ -459,6 +556,7 @@ class _HomeContentState extends State<HomeContent> {
                                                       ),
                                                     ),
                                                     if (!isCompleted &&
+                                                        isToday &&
                                                         !isOverdue)
                                                       Padding(
                                                         padding:
