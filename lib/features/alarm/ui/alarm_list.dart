@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:after30/features/alarm/ui/widgets/top_curve_clipper.dart';
-import 'package:after30/features/alarm/ui/widgets/alarm_header.dart';
 import 'package:after30/features/alarm/ui/alarm_content.dart';
 import 'package:after30/features/common/navigationBar.dart';
-import 'package:android_intent_plus/android_intent.dart';
 
 class AlarmPage extends StatelessWidget {
   const AlarmPage({super.key});
@@ -13,45 +10,23 @@ class AlarmPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 0),
-      body: Stack(
-        children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ClipPath(
-              clipper: TopCurveClipper(),
-              child: Container(height: 300, color: const Color(0xFFFFEBEE)),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 64),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 30),
+              child: Text(
+                '등록된 약',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                const AlarmHeader(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () async {
-                        const intent = AndroidIntent(
-                          action: 'android.settings.APP_NOTIFICATION_SETTINGS',
-                          arguments: <String, dynamic>{
-                            'android.provider.extra.APP_PACKAGE':
-                                'com.example.after30',
-                          },
-                        );
-                        await intent.launch();
-                      },
-                      child: const Text('권한/팝업 설정 열기'),
-                    ),
-                  ),
-                ),
-                const AlarmContent(),
-              ],
-            ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            // 본문 리스트 및 상단 우측 'NFC 관리하기'는 AlarmContent에서 렌더링
+            const AlarmContent(),
+          ],
+        ),
       ),
     );
   }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:after30/features/alarm/ui/widgets/top_curve_clipper.dart';
-import 'package:after30/features/alarm/ui/widgets/alarm_header.dart';
+import 'package:after30/features/common/navigationBar.dart';
+
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
@@ -22,12 +22,20 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   bool _nfcEnabled = false;
   bool _isLoading = false;
 
+  int get _currentStep {
+    final hasName = _medicineController.text.trim().isNotEmpty;
+    final hasDays = _selectedDays.isNotEmpty;
+    if (!hasName) return 1;
+    if (!hasDays) return 2;
+    return 3;
+  }
+
   @override
   void initState() {
     super.initState();
     final alarm = widget.initialAlarm;
     _medicineController = TextEditingController(text: alarm?.name ?? '');
-    _selectedDays = alarm?.days ?? ['월', '화', '수', '목', '금', '토', '일'];
+    _selectedDays = alarm?.days ?? [];
     _times = alarm != null
         ? List<TimeOfDay>.from(alarm.times)
         : [TimeOfDay(hour: 8, minute: 0)];
@@ -131,29 +139,33 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
+      bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 0),
       body: Stack(
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ClipPath(
-              clipper: TopCurveClipper(),
-              child: Container(height: 300, color: const Color(0xFFFFEBEE)),
-            ),
-          ),
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AlarmHeader(showBackButton: true),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _StepHeader(currentStep: _currentStep),
+                  const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: const [
                       Text(
-                        '어떤 약을 드시나요?',
+                        '1. 어떤 약을 드시나요?',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -161,37 +173,36 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 20),
                   TextField(
                     controller: _medicineController,
                     decoration: InputDecoration(
                       hintText: '약 이름을 입력 해주세요',
                       border: const OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 12,
+                      ),
                       filled: true,
                       fillColor: _isMedicineEmpty
                           ? Colors.grey[200]
                           : Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 55),
                   const Text(
-                    '복용 날짜를 선택해주세요',
+                    '2. 복용 날짜를 선택해주세요',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton.icon(
-                        onPressed: _toggleAllDays,
-                        icon: Icon(
-                          _allDaysSelected
-                              ? Icons.check_box
-                              : Icons.check_box_outline_blank,
-                          color: Colors.pink,
-                        ),
-                        label: const Text(
-                          '전체선택',
-                          style: TextStyle(color: Colors.black),
-                        ),
+                      const Spacer(),
+                      const Text('전체선택'),
+                      Checkbox(
+                        value: _allDaysSelected,
+                        onChanged: (_) => _toggleAllDays(),
+                        activeColor: const Color(0xFF235DFF),
                       ),
                     ],
                   ),
@@ -202,34 +213,42 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                       return GestureDetector(
                         onTap: () => _toggleDay(day),
                         child: Container(
-                          width: 40,
-                          height: 48,
+                          width: 44,
+                          height: 44,
                           alignment: Alignment.center,
                           margin: const EdgeInsets.symmetric(horizontal: 2),
                           decoration: BoxDecoration(
                             color: selected
-                                ? Colors.pinkAccent
-                                : const Color(0xFF9E9E9E),
-                            borderRadius: BorderRadius.circular(8),
+                                ? const Color(0xFF235DFF)
+                                : Colors.white,
+                            border: Border.all(
+                              color: const Color(0xFF235DFF),
+                              width: 2,
+                            ),
+                            shape: BoxShape.circle,
                           ),
                           child: Text(
                             day,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
+                            style: TextStyle(
+                              color: selected
+                                  ? Colors.white
+                                  : const Color(0xFF235DFF),
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              fontSize: 16,
                             ),
                           ),
                         ),
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 45),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        '복용 시간을 알려주세요',
+                        '3. 복용 시간을 알려주세요',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -255,11 +274,12 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 15),
                   ..._times.asMap().entries.map((entry) {
                     final idx = entry.key;
                     final t = entry.value;
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.only(bottom: 10),
                       child: GestureDetector(
                         onTap: () => _pickTime(idx),
                         child: AbsorbPointer(
@@ -283,34 +303,8 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                     );
                   }),
                   const SizedBox(height: 16),
-                  const Text(
-                    'NFC 태그에 해당 약을 연동 할까요?',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const Text(
-                    '알람의 강제성이 높아져 복용을 잊지 않고 할 수 있어요',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
+                  // NFC 섹션 제거
                   const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _nfcEnabled = !_nfcEnabled;
-                      });
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.pink[200],
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'NFC 연동하기',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () async {
@@ -508,7 +502,7 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.pinkAccent,
+                      backgroundColor: const Color(0xFF235DFF),
                       minimumSize: const Size.fromHeight(48),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -533,6 +527,85 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepHeader extends StatelessWidget {
+  final int currentStep; // 1~3
+  const _StepHeader({required this.currentStep});
+
+  Widget _circle(int step) {
+    final isActive = currentStep == step;
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: isActive ? const Color(0xFF235DFF) : Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isActive ? const Color(0xFF235DFF) : const Color(0xFF020204),
+          width: 2,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '$step',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+          color: isActive ? Colors.white : const Color(0xFF020204),
+        ),
+      ),
+    );
+  }
+
+  Widget _label(int step, String label) {
+    final isActive = currentStep == step;
+    return Text(
+      label,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontSize: 12,
+        color: isActive ? const Color(0xFF235DFF) : const Color(0xFF020204),
+      ),
+    );
+  }
+
+  Widget _step(int step, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [_circle(step), const SizedBox(height: 6), _label(step, label)],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _step(1, '약 정보 입력'),
+          SizedBox(
+            width: 64,
+            height: 34,
+            child: Center(
+              child: Container(height: 2, color: const Color(0xFF020204)),
+            ),
+          ),
+          _step(2, '복용 날짜 설정'),
+          SizedBox(
+            width: 64,
+            height: 34,
+            child: Center(
+              child: Container(height: 2, color: const Color(0xFF020204)),
+            ),
+          ),
+          _step(3, '복용 시간 설정'),
         ],
       ),
     );

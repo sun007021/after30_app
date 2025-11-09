@@ -2,9 +2,9 @@ class Medication {
   final String id;
   final String name;
   final String dosage;
-  final String time;
-  final DateTime date;
-  final String status;
+  final String time; // HH:mm
+  final DateTime date; // scheduled date (local)
+  final String status; // pending|taken|postponed|cancelled|missed
   final bool nfcEnabled;
   final int? scheduleId;
   final int? historyId;
@@ -22,36 +22,6 @@ class Medication {
     this.historyId,
     this.takenAt,
   });
-
-  factory Medication.fromJson(Map<String, dynamic> json) {
-    return Medication(
-      id: json['id'],
-      name: json['name'],
-      dosage: json['dosage'],
-      time: json['time'],
-      date: DateTime.parse(json['date']),
-      status: json['status'],
-      nfcEnabled: json['nfcEnabled'] ?? false,
-      scheduleId: json['scheduleId'],
-      historyId: json['historyId'],
-      takenAt: json['takenAt'] != null ? DateTime.parse(json['takenAt']) : null,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'dosage': dosage,
-      'time': time,
-      'date': date.toIso8601String(),
-      'status': status,
-      'nfcEnabled': nfcEnabled,
-      'scheduleId': scheduleId,
-      'historyId': historyId,
-      'takenAt': takenAt?.toIso8601String(),
-    };
-  }
 
   Medication copyWith({
     String? id,
@@ -76,6 +46,27 @@ class Medication {
       scheduleId: scheduleId ?? this.scheduleId,
       historyId: historyId ?? this.historyId,
       takenAt: takenAt ?? this.takenAt,
+    );
+  }
+
+  factory Medication.fromJson(Map<String, dynamic> json) {
+    return Medication(
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? json['medication_name'] ?? '').toString(),
+      dosage: (json['dosage'] ?? json['dosage_value'] ?? '').toString(),
+      time: (json['time'] ?? json['scheduled_time'] ?? '00:00').toString(),
+      date:
+          DateTime.tryParse(
+            (json['date'] ?? json['scheduled_date'] ?? '').toString(),
+          ) ??
+          DateTime.now(),
+      status: (json['status'] ?? 'pending').toString(),
+      nfcEnabled: (json['nfcEnabled'] as bool?) ?? false,
+      scheduleId: (json['schedule_id'] as num?)?.toInt(),
+      historyId: (json['history_id'] as num?)?.toInt(),
+      takenAt: json['taken_at'] != null
+          ? DateTime.tryParse(json['taken_at'].toString())
+          : null,
     );
   }
 }

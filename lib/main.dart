@@ -6,9 +6,10 @@ import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/features/family/ui/family_page.dart';
 import 'package:flutter/widgets.dart';
-import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/services/invite_view_model.dart';
+import 'package:after30/features/my/my_page.dart';
+import 'package:after30/features/my/my_info_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,10 +67,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => MedicationProvider()),
-        ChangeNotifierProvider(create: (_) => InviteViewModel()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => InviteViewModel())],
       child: MaterialApp(
         navigatorKey: _navigatorKey,
         title: '식후 30분',
@@ -84,6 +82,8 @@ class _MyAppState extends State<MyApp> {
           '/home': (context) => const HomePage(),
           '/family': (context) => const FamilyPage(),
           '/fullscreen_alarm': (context) => const FullscreenAlarmPlaceholder(),
+          '/my': (context) => const MyPage(),
+          '/my-info': (context) => const MyInfoPage(),
         },
       ),
     );

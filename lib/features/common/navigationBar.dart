@@ -13,8 +13,18 @@ class AlarmBottomNavigation extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 0),
       child: Container(
-        color: const Color.fromARGB(255, 252, 252, 252),
         padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: const BoxDecoration(
+          color: Color.fromARGB(255, 252, 252, 252),
+          boxShadow: [
+            const BoxShadow(
+              color: Colors.black12,
+              blurRadius: 16,
+              spreadRadius: 0,
+              offset: Offset(0, -2),
+            ),
+          ],
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -102,17 +112,19 @@ class AlarmBottomNavigation extends StatelessWidget {
                   MaterialPageRoute(builder: (context) => const CalendarPage()),
                 );
               },
-              child: Icon(
-                Icons.calendar_today,
-                size: 50,
-                color: currentIndex == 3 ? Colors.black : Colors.black54,
+              child: SvgPicture.asset(
+                currentIndex == 3
+                    ? 'assets/images/navicon/his_active.svg'
+                    : 'assets/images/navicon/his_deactive.svg',
+                width: 50,
+                height: 50,
               ),
             ),
             const SizedBox(width: 40),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
-                // 마이 페이지: 아직 연결된 페이지가 없다면 필요 시 추가
+                Navigator.of(context).pushReplacementNamed('/my');
               },
               child: SvgPicture.asset(
                 currentIndex == 4

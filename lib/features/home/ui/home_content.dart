@@ -4,8 +4,8 @@ import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/alarm/ui/add_alarm.dart';
 import 'package:after30/features/calendar/data/history_service.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/features/common/topbar.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:dotted_border/dotted_border.dart';
 
 class HomeContent extends StatefulWidget {
@@ -99,7 +99,6 @@ class _HomeContentState extends State<HomeContent> {
       context,
       MaterialPageRoute(builder: (context) => const MedicineRegisterPage()),
     );
-    // 등록/수정 여부와 무관하게 서버 기준으로 다시 로드
     await _loadDosesForDate(_selectedDate);
     await _loadCompletedFromServer(_selectedDate);
   }
@@ -112,16 +111,42 @@ class _HomeContentState extends State<HomeContent> {
     _loadCompletedFromServer(_selectedDate);
   }
 
+  String _formatKoreanDate(DateTime d) {
+    const days = ['월', '화', '수', '목', '금', '토', '일'];
+    final weekday = days[(d.weekday + 6) % 7];
+    return '${d.month}/${d.day} ($weekday)';
+  }
+
+  String _yyyymmdd(DateTime d) {
+    return '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+  }
+
+  String _formatKoreanTime(String hhmmss) {
+    final parts = hhmmss.split(':');
+    int hour = 0;
+    int minute = 0;
+    if (parts.isNotEmpty) {
+      hour = int.tryParse(parts[0]) ?? 0;
+    }
+    if (parts.length > 1) {
+      minute = int.tryParse(parts[1]) ?? 0;
+    }
+    final isPm = hour >= 12;
+    final ampm = isPm ? '오후' : '오전';
+    final hour12 = hour % 12 == 0 ? 12 : hour % 12;
+    final mm = minute.toString().padLeft(2, '0');
+    return '$ampm $hour12:$mm';
+  }
+
+  // 시간 유틸 제거됨 (서버 문자열 사용)
+
   Future<void> _markCompleted(String doseKey) async {
-    // doseKey: `${scheduleId}_${yyyymmdd}_${HH:mm[:ss]}`
     try {
       final parts = doseKey.split('_');
       if (parts.length >= 3) {
         final scheduleId = int.tryParse(parts[0]);
-        // 날짜는 _selectedDate 기준으로 yyyy-MM-dd 생성
         final dateStr =
-            '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}'
-                .toString();
+            '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
         final timeStr = parts[2];
         if (scheduleId != null) {
           final hs = HistoryService();
@@ -134,21 +159,7 @@ class _HomeContentState extends State<HomeContent> {
           await _loadCompletedFromServer(_selectedDate);
         }
       }
-    } catch (_) {
-      // ignore
-    }
-  }
-
-  String _formatKoreanDate(DateTime d) {
-    const days = ['월', '화', '수', '목', '금', '토', '일'];
-    final weekday = days[(d.weekday + 6) % 7];
-    return '${d.month}/${d.day} ($weekday)';
-  }
-
-  // 시간 유틸 제거됨 (서버 문자열 사용)
-
-  String _yyyymmdd(DateTime d) {
-    return '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+    } catch (_) {}
   }
 
   @override
@@ -208,13 +219,12 @@ class _HomeContentState extends State<HomeContent> {
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 16,
+                              vertical: 24,
+                              horizontal: 24,
                             ),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                // 날짜 선택 바
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -250,7 +260,7 @@ class _HomeContentState extends State<HomeContent> {
                                 ),
                                 const SizedBox(height: 8),
                                 const Padding(
-                                  padding: EdgeInsets.only(left: 20),
+                                  padding: EdgeInsets.only(left: 10),
                                   child: Text(
                                     '오늘의 복약',
                                     style: TextStyle(
@@ -271,133 +281,242 @@ class _HomeContentState extends State<HomeContent> {
                                 else if (dayMeds.isEmpty)
                                   _EmptyMedicineSection(onAdd: _goToRegister)
                                 else ...[
-                                  // 선택한 날짜의 알람만 표시
-                                  if (dayMeds.isEmpty)
-                                    _EmptyMedicineSection(
-                                      onAdd: _goToRegister,
-                                      title: '해당 날짜에 복약 일정이 없어요',
-                                    )
-                                  else ...[
-                                    // 약 목록 렌더링
-                                    ...dayMeds.map((m) {
-                                      final timeLabel = m.time.substring(0, 5);
-                                      final isCompleted = m.status == 'taken';
-                                      final doseKey =
-                                          '${m.scheduleId ?? m.id}_${_yyyymmdd(_selectedDate)}_${m.time}';
-                                      return Card(
-                                        margin: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                          horizontal: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                  ...dayMeds.map((m) {
+                                    final isCompleted = m.status == 'taken';
+                                    final doseKey =
+                                        '${m.scheduleId ?? m.id}_${_yyyymmdd(_selectedDate)}_${m.time}';
+                                    final timeLabel = _formatKoreanTime(m.time);
+                                    final Color primaryBlue = const Color(
+                                      0xFF235DFF,
+                                    );
+                                    final Color lightBlueBg = const Color(
+                                      0xFFE6F0FF,
+                                    );
+                                    final Color lightGreyBg = const Color(
+                                      0xFFF7F8FA,
+                                    );
+                                    final Color greyBorder = const Color(
+                                      0xFFD9D9D9,
+                                    );
+                                    final Color dangerRed = const Color(
+                                      0xFFE50000,
+                                    );
+                                    final Color lightRedBg = const Color(
+                                      0xFFFFE8EA,
+                                    );
+                                    final Color lightRedBorder = const Color(
+                                      0xFFED9793,
+                                    );
+
+                                    bool isOverdue = false;
+                                    try {
+                                      final now = DateTime.now();
+                                      final isSameDay =
+                                          _selectedDate.year == now.year &&
+                                          _selectedDate.month == now.month &&
+                                          _selectedDate.day == now.day;
+                                      if (!isCompleted && isSameDay) {
+                                        final parts = m.time.split(':');
+                                        final hh =
+                                            int.tryParse(
+                                              parts.isNotEmpty ? parts[0] : '0',
+                                            ) ??
+                                            0;
+                                        final mm =
+                                            int.tryParse(
+                                              parts.length > 1 ? parts[1] : '0',
+                                            ) ??
+                                            0;
+                                        final isPast =
+                                            hh < now.hour ||
+                                            (hh == now.hour &&
+                                                mm <= now.minute);
+                                        isOverdue = isPast;
+                                      }
+                                    } catch (_) {}
+
+                                    return Center(
+                                      child: SizedBox(
+                                        width: 320,
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            vertical: 6,
                                           ),
-                                          side: const BorderSide(
-                                            color: Colors.grey,
+                                          decoration: BoxDecoration(
+                                            color: isCompleted
+                                                ? lightBlueBg
+                                                : (isOverdue
+                                                      ? lightRedBg
+                                                      : lightGreyBg),
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                            border: Border.all(
+                                              color: isCompleted
+                                                  ? primaryBlue
+                                                  : (isOverdue
+                                                        ? lightRedBorder
+                                                        : greyBorder),
+                                              width: 1.5,
+                                            ),
                                           ),
-                                        ),
-                                        elevation: 0,
-                                        color: Colors.white,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  const Icon(
-                                                    Icons.access_time,
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(timeLabel),
-                                                  const Spacer(),
-                                                  if (!isCompleted)
-                                                    ElevatedButton(
-                                                      onPressed: () =>
-                                                          _markCompleted(
-                                                            doseKey,
-                                                          ),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            const Color(
-                                                              0xFF4F7EFF,
-                                                            ),
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 8,
-                                                            ),
-                                                        minimumSize: const Size(
-                                                          0,
-                                                          36,
-                                                        ),
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                        ),
-                                                        elevation: 0,
-                                                      ),
-                                                      child: const Text(
-                                                        '복용 완료',
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    isCompleted
-                                                        ? Icons.task_alt
-                                                        : Icons.access_time,
-                                                    color: isCompleted
-                                                        ? const Color(
-                                                            0xFF1A73E8,
-                                                          )
-                                                        : Colors.black38,
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(
-                                                    isCompleted
-                                                        ? '복용 완료'
-                                                        : '복용 미완료',
-                                                    style: TextStyle(
+                                          child: Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              20,
+                                              14,
+                                              20,
+                                              3,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      isCompleted
+                                                          ? Icons.check_circle
+                                                          : (isOverdue
+                                                                ? Icons
+                                                                      .error_outline
+                                                                : Icons
+                                                                      .access_time),
                                                       color: isCompleted
-                                                          ? const Color(
-                                                              0xFF1A73E8,
-                                                            )
-                                                          : Colors.black45,
-                                                      fontWeight:
-                                                          FontWeight.w700,
+                                                          ? primaryBlue
+                                                          : (isOverdue
+                                                                ? dangerRed
+                                                                : Colors
+                                                                      .black38),
+                                                      size: 20,
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 12),
-                                              Text(
-                                                m.name,
-                                                style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w700,
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      isCompleted
+                                                          ? '복용 완료'
+                                                          : (isOverdue
+                                                                ? '복용 미완료'
+                                                                : '복용 예정'),
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: isCompleted
+                                                            ? primaryBlue
+                                                            : (isOverdue
+                                                                  ? dangerRed
+                                                                  : Colors
+                                                                        .black45),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                              ),
-                                            ],
+                                                const SizedBox(height: 25),
+                                                Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.center,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Text(
+                                                            m.name,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 18,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color: Colors
+                                                                      .black,
+                                                                ),
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                          const SizedBox(
+                                                            height: 2,
+                                                          ),
+                                                          Padding(
+                                                            padding:
+                                                                const EdgeInsets.only(
+                                                                  bottom: 12,
+                                                                ),
+                                                            child: Text(
+                                                              timeLabel,
+                                                              style:
+                                                                  const TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                    color: Colors
+                                                                        .black87,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    if (!isCompleted &&
+                                                        !isOverdue)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              top: 8,
+                                                            ),
+                                                        child: ElevatedButton(
+                                                          onPressed: () =>
+                                                              _markCompleted(
+                                                                doseKey,
+                                                              ),
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor:
+                                                                primaryBlue,
+                                                            foregroundColor:
+                                                                Colors.white,
+                                                            elevation: 0,
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      12,
+                                                                  vertical: 5,
+                                                                ),
+                                                            minimumSize:
+                                                                const Size(
+                                                                  0,
+                                                                  20,
+                                                                ),
+                                                            shape: RoundedRectangleBorder(
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    10,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                          child: const Text(
+                                                            '복용 완료',
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      );
-                                    }),
-                                  ],
+                                      ),
+                                    );
+                                  }),
                                   const SizedBox(height: 8),
-                                  _AddMedicineTile(onTap: _goToRegister),
-                                  const SizedBox(height: 12),
+                                  _AddMedicineTile(onAdd: _goToRegister),
+                                  const SizedBox(height: 10),
                                 ],
                               ],
                             ),
@@ -418,8 +537,8 @@ class _HomeContentState extends State<HomeContent> {
 }
 
 class _AddMedicineTile extends StatelessWidget {
-  final VoidCallback onTap;
-  const _AddMedicineTile({required this.onTap});
+  final VoidCallback onAdd;
+  const _AddMedicineTile({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -427,7 +546,7 @@ class _AddMedicineTile extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        onTap: onAdd,
         child: DottedBorder(
           color: const Color(0xFFBDBDBD),
           strokeWidth: 1.5,
@@ -435,7 +554,7 @@ class _AddMedicineTile extends StatelessWidget {
           borderType: BorderType.RRect,
           radius: const Radius.circular(12),
           child: Container(
-            decoration: BoxDecoration(color: Colors.white),
+            decoration: const BoxDecoration(color: Colors.white),
             padding: const EdgeInsets.symmetric(vertical: 20),
             alignment: Alignment.center,
             child: Column(
@@ -463,7 +582,7 @@ class _EmptyMedicineSection extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          Icon(Icons.medication, size: 60, color: Colors.black54),
+          const Icon(Icons.medication, size: 60, color: Colors.black54),
           const SizedBox(height: 8),
           Text(
             title ?? '등록된 약이 없어요',

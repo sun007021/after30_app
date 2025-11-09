@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/calendar/data/medication_service.dart';
+import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/common/navigationBar.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
+enum _DayMark { none, scheduled, completed }
+
+const double _kDaySize = 33.0;
+const double _kGaugeStroke = 5.0;
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -13,282 +18,320 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
-  late DateTime _focusedDay;
-  late DateTime _selectedDay;
-  late CalendarFormat _calendarFormat;
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+  final Map<DateTime, int> _totalByDay = {};
+  final Map<DateTime, int> _doneByDay = {};
 
   @override
   void initState() {
     super.initState();
-    _focusedDay = DateTime.now();
-    _selectedDay = DateTime.now();
-    _calendarFormat = CalendarFormat.month;
+    _selectedDay = DateTime(
+      _focusedDay.year,
+      _focusedDay.month,
+      _focusedDay.day,
+    );
+    _loadMonth(_focusedDay);
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<MedicationProvider>().fetchMedications(
-        _focusedDay.subtract(const Duration(days: 30)),
-        _focusedDay.add(const Duration(days: 30)),
+  Future<void> _loadMonth(DateTime anyDayInMonth) async {
+    final first = DateTime(anyDayInMonth.year, anyDayInMonth.month, 1);
+    final last = DateTime(anyDayInMonth.year, anyDayInMonth.month + 1, 0);
+    try {
+      final List<Medication> meds = await MedicationService.fetchMedications(
+        first,
+        last,
       );
-    });
+      final totalsByDay = <DateTime, int>{};
+      final completedByDay = <DateTime, int>{};
+      for (final m in meds) {
+        final key = DateTime(m.date.year, m.date.month, m.date.day);
+        totalsByDay.update(key, (v) => v + 1, ifAbsent: () => 1);
+        if ((m.status).toLowerCase() == 'taken') {
+          completedByDay.update(key, (v) => v + 1, ifAbsent: () => 1);
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _totalByDay
+          ..clear()
+          ..addAll(totalsByDay);
+        _doneByDay
+          ..clear()
+          ..addAll(completedByDay);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _totalByDay.clear();
+        _doneByDay.clear();
+      });
+    }
+  }
+
+  Widget _buildBaseDay(DateTime day, Color primaryBlue) {
+    final key = DateTime(day.year, day.month, day.day);
+    final total = _totalByDay[key] ?? 0;
+    final done = _doneByDay[key] ?? 0;
+    final text = day.day.toString();
+    if (total == 0) {
+      return Center(child: Text(text, style: const TextStyle(fontSize: 14)));
+    }
+    if (done >= total) {
+      return _FilledDay(text: text, bg: primaryBlue, fg: Colors.white);
+    }
+    final percent = total > 0 ? (done / total) : 0.0;
+    return _GaugeDay(
+      text: text,
+      percent: percent,
+      track: const Color(0xFFEDEFF2),
+      progress: primaryBlue,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    const primaryBlue = Color(0xFF235DFF);
+    const lightBlueBg = Color(0xFFEAF2FF);
+
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('복용 기록'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          TableCalendar<Medication>(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            eventLoader: (day) {
-              final provider = context.read<MedicationProvider>();
-              return provider.getMedicationsForDate(day);
-            },
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
-              });
-              // 클릭(선택)한 날을 기준으로 앞뒤 한 달 범위 조회
-              context.read<MedicationProvider>().fetchMedications(
-                selectedDay.subtract(const Duration(days: 30)),
-                selectedDay.add(const Duration(days: 30)),
-              );
-            },
-            onFormatChanged: (format) => setState(() {
-              _calendarFormat = format;
-            }),
-            onPageChanged: (focusedDay) {
-              setState(() {
-                _focusedDay = focusedDay;
-              });
-              context.read<MedicationProvider>().fetchMedications(
-                focusedDay.subtract(const Duration(days: 30)),
-                focusedDay.add(const Duration(days: 30)),
-              );
-            },
-            calendarStyle: const CalendarStyle(
-              selectedDecoration: BoxDecoration(
-                color: Color(0xFFFFEBEE),
-                shape: BoxShape.circle,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
               ),
-              todayDecoration: BoxDecoration(
-                color: Color(0xFFFEE500),
-                shape: BoxShape.circle,
-              ),
-            ),
-            headerStyle: const HeaderStyle(
-              formatButtonVisible: true,
-              titleCentered: true,
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: Consumer<MedicationProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final medications = provider.getMedicationsForDate(_selectedDay)
-                  ..sort((a, b) => a.time.compareTo(b.time));
-                final total = medications.length;
-                final done = medications
-                    .where((m) => m.status == 'taken')
-                    .length;
-
-                if (medications.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      '복용 기록이 없습니다.',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                  );
-                }
-
-                return ListView(
-                  padding: const EdgeInsets.all(16),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
+                child: Column(
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: SvgPicture.asset(
+                            'assets/images/chevron_left.svg',
+                            width: 8,
+                            height: 14,
                           ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            '${_selectedDay.month}월 ${_selectedDay.day}일 (${_weekdayKor(_selectedDay.weekday)})',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
+                          onPressed: () {
+                            final prev = DateTime(
+                              _focusedDay.year,
+                              _focusedDay.month - 1,
+                              1,
+                            );
+                            setState(() => _focusedDay = prev);
+                            _loadMonth(prev);
+                          },
+                        ),
+                        Text(
+                          '${_focusedDay.year}년 ${_focusedDay.month.toString().padLeft(2, '0')}월',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()
+                              ..scale(-1.0, 1.0, 1.0),
+                            child: SvgPicture.asset(
+                              'assets/images/chevron_left.svg',
+                              width: 8,
+                              height: 14,
                             ),
                           ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE9F0FF),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
+                          onPressed: () {
+                            final next = DateTime(
+                              _focusedDay.year,
+                              _focusedDay.month + 1,
+                              1,
+                            );
+                            setState(() => _focusedDay = next);
+                            _loadMonth(next);
+                          },
+                        ),
+                      ],
+                    ),
+                    TableCalendar(
+                      firstDay: DateTime(2000),
+                      lastDay: DateTime(2100, 12, 31),
+                      focusedDay: _focusedDay,
+                      headerVisible: false,
+                      startingDayOfWeek: StartingDayOfWeek.sunday,
+                      selectedDayPredicate: (d) =>
+                          _selectedDay != null &&
+                          d.year == _selectedDay!.year &&
+                          d.month == _selectedDay!.month &&
+                          d.day == _selectedDay!.day,
+                      onDaySelected: (selectedDay, focusedDay) {
+                        setState(() {
+                          _selectedDay = DateTime(
+                            selectedDay.year,
+                            selectedDay.month,
+                            selectedDay.day,
+                          );
+                          _focusedDay = focusedDay;
+                        });
+                      },
+                      onPageChanged: (focusedDay) {
+                        setState(() => _focusedDay = focusedDay);
+                        _loadMonth(focusedDay);
+                      },
+                      calendarStyle: const CalendarStyle(
+                        outsideDaysVisible: false,
+                      ),
+                      daysOfWeekHeight: 24,
+                      calendarBuilders: CalendarBuilders(
+                        dowBuilder: (context, day) {
+                          const labels = ['일', '월', '화', '수', '목', '금', '토'];
+                          final label = labels[day.weekday % 7];
+                          return Center(
                             child: Text(
-                              '$done/$total',
+                              label,
                               style: const TextStyle(
-                                color: Color(0xFF3761FF),
-                                fontWeight: FontWeight.w700,
+                                color: Colors.black54,
+                                fontSize: 12,
                               ),
                             ),
-                          ),
-                        ],
+                          );
+                        },
+                        selectedBuilder: (context, day, focusedDay) {
+                          // 선택된 날짜에는 게이지 숨김: 모두 완료면 꽉 찬 파란 원, 아니면 테두리만
+                          final key = DateTime(day.year, day.month, day.day);
+                          final total = _totalByDay[key] ?? 0;
+                          final done = _doneByDay[key] ?? 0;
+                          if (total > 0 && done >= total) {
+                            return _FilledDay(
+                              text: day.day.toString(),
+                              bg: primaryBlue,
+                              fg: Colors.white,
+                            );
+                          }
+                          return _OutlinedDay(
+                            text: day.day.toString(),
+                            color: primaryBlue,
+                          );
+                        },
+                        defaultBuilder: (context, day, focusedDay) {
+                          return _buildBaseDay(day, primaryBlue);
+                        },
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    ...medications.map((m) {
-                      final isDone = m.status == 'taken';
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE6E6E6)),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        child: Row(
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  m.time.substring(0, 5),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                if (m.takenAt != null) ...[
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    Icons.check_circle,
-                                    size: 16,
-                                    color: Colors.green[600],
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '복약 ${m.takenAt!.hour.toString().padLeft(2, '0')}:${m.takenAt!.minute.toString().padLeft(2, '0')}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(width: 24),
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        m.name,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      Text(
-                                        '상태: ${m.status}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.black45,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (m.nfcEnabled) ...[
-                                    const SizedBox(width: 6),
-                                    const Icon(
-                                      Icons.nfc,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    const Text(
-                                      'NFC',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () async {
-                                if (isDone) {
-                                  await context
-                                      .read<MedicationProvider>()
-                                      .unmarkCompleted(m.id);
-                                } else {
-                                  await context
-                                      .read<MedicationProvider>()
-                                      .markCompleted(m.id);
-                                }
-                              },
-                              child: Icon(
-                                isDone
-                                    ? Icons.check_circle
-                                    : Icons.circle_outlined,
-                                color: isDone
-                                    ? const Color(0xFF39C36E)
-                                    : Colors.black38,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
                   ],
-                );
-              },
+                ),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(color: lightBlueBg),
+              ),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 3),
     );
   }
+}
 
-  String _weekdayKor(int weekday) {
-    const days = ['월', '화', '수', '목', '금', '토', '일'];
-    final idx = (weekday - 1).clamp(0, 6);
-    return days[idx];
+class _FilledDay extends StatelessWidget {
+  final String text;
+  final Color bg;
+  final Color fg;
+  const _FilledDay({required this.text, required this.bg, required this.fg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: _kDaySize,
+        height: _kDaySize,
+        decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+        alignment: Alignment.center,
+        child: Text(
+          text,
+          style: TextStyle(color: fg, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+class _OutlinedDay extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _OutlinedDay({required this.text, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: _kDaySize,
+        height: _kDaySize,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color, width: 3),
+          color: Colors.white,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          text,
+          style: TextStyle(color: color, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+class _GaugeDay extends StatelessWidget {
+  final String text;
+  final double percent;
+  final Color track;
+  final Color progress;
+  const _GaugeDay({
+    required this.text,
+    required this.percent,
+    required this.track,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final value = percent.clamp(0.0, 1.0);
+    return Center(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0.0, end: value),
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+        builder: (context, animated, _) {
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: _kDaySize,
+                height: _kDaySize,
+                child: CircularProgressIndicator(
+                  value: animated,
+                  strokeWidth: _kGaugeStroke,
+                  backgroundColor: track,
+                  color: progress,
+                ),
+              ),
+              Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
