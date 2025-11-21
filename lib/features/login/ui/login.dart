@@ -204,7 +204,9 @@ class _LoginPageState extends State<LoginPage> {
                         SizedBox(
                           height: 45,
                           child: ElevatedButton(
-                            onPressed: _handleKakaoLogin,
+                            onPressed: () {
+                              Navigator.of(context).pushNamed('/signup-intro');
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryBlue,
                               foregroundColor: Colors.white,
