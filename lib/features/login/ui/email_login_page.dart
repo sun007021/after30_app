@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/features/login/data/backend_auth_service.dart';
+import 'package:after30/core/storage/user_store.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
+import 'package:after30/features/home/ui/home.dart';
 
 class EmailLoginPage extends StatefulWidget {
   const EmailLoginPage({super.key});
@@ -22,6 +26,7 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePw = true;
+  bool _submitting = false;
 
   bool get _isFormValid {
     final email = _emailController.text.trim();
@@ -107,7 +112,9 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                           height: 30,
                           width: 120,
                           child: ElevatedButton(
-                            onPressed: _isFormValid ? _onSubmit : null,
+                            onPressed: _isFormValid && !_submitting
+                                ? _onSubmit
+                                : null,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _primaryBlue,
                               foregroundColor: Colors.white,
@@ -118,13 +125,24 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                                 borderRadius: BorderRadius.circular(5),
                               ),
                             ),
-                            child: const Text(
-                              '로그인',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            child: _submitting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    '로그인',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -280,10 +298,44 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
     );
   }
 
-  void _onSubmit() {
-    // 이메일 로그인 연동 전까지 안내만
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('이메일 로그인 준비 중입니다')));
+  Future<void> _onSubmit() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    setState(() {
+      _submitting = true;
+    });
+    try {
+      await BackendAuthService().loginWithEmail(
+        email: email,
+        password: password,
+      );
+      await UserStore.setCurrentUserId(email);
+      AlarmService.setCurrentUserId(email);
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomePage()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final friendly = _friendlyLoginErrorMessage(e);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendly)));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
+  }
+
+  String _friendlyLoginErrorMessage(Object error) {
+    final s = error.toString();
+    if (s.contains('(401)') || s.contains('401') || s.contains('일치하지 않습니다')) {
+      return '이메일 또는 비밀번호가 일치하지 않습니다.';
+    }
+    return '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
   }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/features/login/data/backend_auth_service.dart';
+import 'package:after30/core/storage/token_store.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -18,6 +20,7 @@ class _SignupPageState extends State<SignupPage> {
   String? _selectedGender; // '남' or '여'
   bool _obscurePw = true;
   bool _obscurePwConfirm = true;
+  bool _submitting = false;
 
   static const Color _primaryBlue = Color(0xFF235DFF);
   static const BorderRadius _fieldRadius = BorderRadius.all(
@@ -169,7 +172,9 @@ class _SignupPageState extends State<SignupPage> {
                           height: 30,
                           width: 120,
                           child: ElevatedButton(
-                            onPressed: _isFormValid ? _onSubmit : null,
+                            onPressed: _isFormValid && !_submitting
+                                ? _onSubmit
+                                : null,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _primaryBlue,
                               foregroundColor: Colors.white,
@@ -180,13 +185,24 @@ class _SignupPageState extends State<SignupPage> {
                                 borderRadius: BorderRadius.circular(5),
                               ),
                             ),
-                            child: const Text(
-                              '등록',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            child: _submitting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    '등록',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -369,10 +385,46 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  void _onSubmit() {
-    // 실제 회원가입 API 연동 전까지는 단순 안내만 표시
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('회원가입 데이터 전송 준비 중입니다')));
+  Future<void> _onSubmit() async {
+    final name = _nameController.text.trim();
+    final gender = _selectedGender ?? '';
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    setState(() {
+      _submitting = true;
+    });
+    try {
+      await BackendAuthService().registerWithEmail(
+        name: name,
+        gender: gender,
+        email: email,
+        password: password,
+      );
+      // 가입 후에는 토큰/세션을 정리하고 로그인 화면으로 유도
+      await TokenStore.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('회원가입이 완료되었습니다. 로그인 화면으로 이동합니다.')),
+      );
+      await Future.delayed(const Duration(milliseconds: 800));
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/email-login', (route) => false);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = _onlyMessage(e);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
+  }
+
+  String _onlyMessage(Object error) {
+    final s = error.toString();
+    return s.replaceFirst(RegExp(r'^Exception:\s*'), '');
   }
 }

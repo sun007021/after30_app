@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/home/ui/home_content.dart';
-import 'package:after30/features/login/data/auth_service.dart';
 import 'package:after30/features/common/navigationBar.dart';
 
 class HomePage extends StatefulWidget {
@@ -27,8 +26,12 @@ class _HomePageState extends State<HomePage> {
         _user = user;
       });
     } catch (error) {
+      // 카카오 세션이 없는 이메일 로그인 등에서는 Kakao 사용자 정보가 없을 수 있음
+      // 이 경우 앱 세션을 유지하고 홈을 그대로 보여준다.
       if (!mounted) return;
-      await AuthService.logout(context);
+      setState(() {
+        _user = null;
+      });
     }
   }
 

@@ -87,7 +87,7 @@ class _MyPageState extends State<MyPage> {
                 ),
                 const SizedBox(height: 8),
                 _ProfileTile(
-                  nickname: _nickname ?? '사용자님의 정보',
+                  nickname: _nickname ?? '사용자',
                   imageUrl: _profileImageUrl,
                   onTap: () {
                     Navigator.of(context).pushNamed(
