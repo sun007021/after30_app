@@ -132,10 +132,7 @@ class _LoginPageState extends State<LoginPage> {
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () {
-                    // TODO: 이메일 로그인 화면 연결 시 이곳에서 라우팅
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('이메일 로그인 준비 중입니다')),
-                    );
+                    Navigator.of(context).pushNamed('/email-login');
                   },
                   style: OutlinedButton.styleFrom(
                     backgroundColor: Colors.white,

@@ -99,10 +99,14 @@ class _MyInfoPageState extends State<MyInfoPage> {
                     children: [
                       const _SectionTitle('기타 정보'),
                       const Divider(height: 24),
-                      _InfoRow(
-                        label: '광고 정보 수신 동의',
-                        value: _marketingConsent ? '동의' : '미동의',
-                      ),
+                      const SizedBox(height: 4),
+                      const _InfoRow(label: '개인정보 수집 및 이용 동의', value: '동의'),
+                      const SizedBox(height: 12),
+                      const _InfoRow(label: '서비스 이용약관', value: '동의'),
+                      const SizedBox(height: 12),
+                      const _InfoRow(label: '실명 인증된 아이디로 가입', value: '동의'),
+                      const SizedBox(height: 12),
+                      const _InfoRow(label: '위치기반 서비스 이용약관', value: '동의'),
                     ],
                   ),
                 ),
@@ -171,7 +175,7 @@ class _InfoRow extends StatelessWidget {
             style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 1),
         Expanded(
           child: Align(
             alignment: Alignment.centerRight,

@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:after30/features/login/ui/login.dart';
 import 'package:after30/features/login/ui/signup_page.dart';
 import 'package:after30/features/login/ui/signup_intro.dart';
+import 'package:after30/features/login/ui/terms_agreement_page.dart';
+import 'package:after30/features/login/ui/email_login_page.dart';
 import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/features/family/ui/family_page.dart';
@@ -92,6 +94,8 @@ class _MyAppState extends State<MyApp> {
           '/startup': (context) => const StartupPage(),
           '/login': (context) => const LoginPage(),
           '/signup-intro': (context) => const SignupIntroPage(),
+          '/signup-terms': (context) => const TermsAgreementPage(),
+          '/email-login': (context) => const EmailLoginPage(),
           '/signup': (context) => const SignupPage(),
           '/home': (context) => const HomePage(),
           '/family': (context) => const FamilyPage(),

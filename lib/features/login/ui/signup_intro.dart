@@ -135,7 +135,7 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
                         height: 48,
                         child: OutlinedButton(
                           onPressed: () {
-                            Navigator.of(context).pushNamed('/signup');
+                            Navigator.of(context).pushNamed('/signup-terms');
                           },
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF111111),
@@ -170,7 +170,7 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 5, 24, 59),
+      padding: const EdgeInsets.fromLTRB(24, 5, 24, 50),
       decoration: const BoxDecoration(color: _primaryBlue),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,6 +215,7 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
               ],
             ),
           ),
+          const SizedBox(height: 9),
           Padding(
             padding: const EdgeInsets.only(left: 12),
             child: Row(

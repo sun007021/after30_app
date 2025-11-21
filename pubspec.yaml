@@ -75,6 +75,7 @@ flutter:
     - assets/images/
     - assets/images/navicon/
     - assets/images/signupicon/
+    - assets/images/term/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
