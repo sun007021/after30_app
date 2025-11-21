@@ -107,10 +107,9 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   }
 
   String _formatTimeOfDay(TimeOfDay tod) {
-    final hour = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
-    final minute = tod.minute.toString().padLeft(2, '0');
-    final period = tod.period == DayPeriod.am ? '오전' : '오후';
-    return '$period $hour:$minute';
+    final hh = tod.hour.toString().padLeft(2, '0');
+    final mm = tod.minute.toString().padLeft(2, '0');
+    return '알람 $hh:$mm';
   }
 
   Future<void> _pickTime(int idx) async {

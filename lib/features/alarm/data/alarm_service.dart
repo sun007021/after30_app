@@ -12,12 +12,30 @@ class AlarmService {
   AlarmService._internal();
   static const bool _verboseLogs = false; // 상세 로그 스위치
 
-  static const String _alarmsKey = 'medicine_alarms';
+  static const String _alarmsKeyLegacy = 'medicine_alarms';
+  static String? _currentUserId; // 사용자 네임스페이스
   static int _nextNotificationId = 1; // 순차적 알람 ID
   static GlobalKey<NavigatorState>? _navigatorKey; // 전체화면 네비게이션용
 
   static void setNavigatorKey(GlobalKey<NavigatorState> key) {
     _navigatorKey = key;
+  }
+
+  // 로그인/앱 시작 시 현재 사용자 설정
+  static void setCurrentUserId(String? userId) {
+    _currentUserId = userId;
+  }
+
+  String _alarmsKeyForUser() {
+    return _currentUserId == null
+        ? _alarmsKeyLegacy
+        : 'medicine_alarms_${_currentUserId}';
+  }
+
+  String _notificationIdsKeyFor(String alarmId) {
+    return _currentUserId == null
+        ? 'notification_ids_$alarmId'
+        : 'notification_ids_${_currentUserId}_$alarmId';
   }
 
   Future<void> initialize() async {
@@ -264,7 +282,7 @@ class AlarmService {
   Future<List<int>> _getExistingNotificationIds(String alarmId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final notificationIdsKey = 'notification_ids_$alarmId';
+      final notificationIdsKey = _notificationIdsKeyFor(alarmId);
       final notificationIdsString = prefs.getStringList(notificationIdsKey);
 
       if (notificationIdsString != null) {
@@ -374,7 +392,7 @@ class AlarmService {
     try {
       // 저장된 알림 ID 가져오기
       final prefs = await SharedPreferences.getInstance();
-      final notificationIdsKey = 'notification_ids_$alarmId';
+      final notificationIdsKey = _notificationIdsKeyFor(alarmId);
       final notificationIdsString = prefs.getStringList(notificationIdsKey);
 
       if (notificationIdsString != null) {
@@ -397,6 +415,44 @@ class AlarmService {
     await AwesomeNotifications().cancelAll();
   }
 
+  // 모든 알람 데이터(스케줄 + 저장소) 정리
+  Future<void> clearAllAlarmData() async {
+    try {
+      // 모든 스케줄 취소
+      await cancelAllAlarms();
+      // 저장된 알람 목록 및 각 알림 ID 키 제거
+      final prefs = await SharedPreferences.getInstance();
+      // 레거시 키 제거
+      await prefs.remove(_alarmsKeyLegacy);
+      // 사용자별 키 제거
+      final keys = prefs.getKeys().toList();
+      for (final key in keys) {
+        if (key.startsWith('medicine_alarms_')) {
+          await prefs.remove(key);
+        }
+        if (key.startsWith('notification_ids_')) {
+          await prefs.remove(key);
+        }
+      }
+    } catch (e) {
+      print('알람 전체 데이터 정리 실패: $e');
+    }
+  }
+
+  // 저장된 알람을 불러와 활성화된 항목만 재스케줄
+  Future<void> rescheduleAllActiveFromStorage() async {
+    try {
+      final alarms = await getAlarms();
+      for (final alarm in alarms) {
+        if (alarm.isActive) {
+          await scheduleAlarm(alarm);
+        }
+      }
+    } catch (e) {
+      print('알람 재스케줄 실패: $e');
+    }
+  }
+
   // 알람 저장 (알림 ID 포함)
   Future<void> _saveAlarmWithNotificationIds(
     MedicineAlarm alarm,
@@ -415,7 +471,7 @@ class AlarmService {
       }
 
       // 알림 ID 저장
-      final notificationIdsKey = 'notification_ids_${alarm.id}';
+      final notificationIdsKey = _notificationIdsKeyFor(alarm.id);
       await prefs.setStringList(
         notificationIdsKey,
         notificationIds.map((id) => id.toString()).toList(),
@@ -425,7 +481,7 @@ class AlarmService {
       );
 
       final alarmsJson = alarms.map((a) => a.toJson()).toList();
-      await prefs.setString(_alarmsKey, json.encode(alarmsJson));
+      await prefs.setString(_alarmsKeyForUser(), json.encode(alarmsJson));
       if (_verboseLogs) {
         print('   ✅ SharedPreferences 저장 완료');
       }
@@ -441,7 +497,10 @@ class AlarmService {
   Future<List<MedicineAlarm>> getAlarms() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final alarmsString = prefs.getString(_alarmsKey);
+      // 사용자별 키 먼저, 없으면 레거시 키로 백필
+      final alarmsString =
+          prefs.getString(_alarmsKeyForUser()) ??
+          prefs.getString(_alarmsKeyLegacy);
 
       if (alarmsString == null) return [];
 
@@ -463,10 +522,10 @@ class AlarmService {
       alarms.removeWhere((a) => a.id == alarmId);
 
       final alarmsJson = alarms.map((a) => a.toJson()).toList();
-      await prefs.setString(_alarmsKey, json.encode(alarmsJson));
+      await prefs.setString(_alarmsKeyForUser(), json.encode(alarmsJson));
 
       // 알람 삭제 시에는 알림 ID도 완전 삭제
-      final notificationIdsKey = 'notification_ids_$alarmId';
+      final notificationIdsKey = _notificationIdsKeyFor(alarmId);
       await prefs.remove(notificationIdsKey);
       print('   🗑️ 알림 데이터 제거: scheduleId=$alarmId');
     } catch (e) {
@@ -492,7 +551,7 @@ class AlarmService {
 
         final prefs = await SharedPreferences.getInstance();
         final alarmsJson = alarms.map((a) => a.toJson()).toList();
-        await prefs.setString(_alarmsKey, json.encode(alarmsJson));
+        await prefs.setString(_alarmsKeyForUser(), json.encode(alarmsJson));
       }
     } catch (e) {
       print('알람 상태 변경 실패: $e');

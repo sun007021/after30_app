@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:after30/features/common/page_title.dart';
 
 class MyInfoPage extends StatefulWidget {
   const MyInfoPage({super.key});
@@ -55,23 +56,23 @@ class _MyInfoPageState extends State<MyInfoPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    InkWell(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: const Icon(Icons.arrow_back_ios_new, size: 22),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '내 정보 조회',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
+                Padding(
+                  padding: const EdgeInsets.only(top: 18),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const Icon(Icons.arrow_back_ios_new, size: 22),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      const PageTitle(
+                        title: '내 정보 조회',
+                        margin: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
 
                 // 기본 정보 카드
                 _Card(

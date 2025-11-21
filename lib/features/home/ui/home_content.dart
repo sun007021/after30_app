@@ -5,6 +5,7 @@ import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/alarm/ui/add_alarm.dart';
 import 'package:after30/features/calendar/data/history_service.dart';
 import 'package:after30/features/common/topbar.dart';
+import 'package:after30/features/common/page_title.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:dotted_border/dotted_border.dart';
 
@@ -123,28 +124,20 @@ class _HomeContentState extends State<HomeContent> {
 
   String _formatKoreanTime(String hhmmss) {
     final parts = hhmmss.split(':');
-    int hour = 0;
-    int minute = 0;
-    if (parts.isNotEmpty) {
-      hour = int.tryParse(parts[0]) ?? 0;
-    }
-    if (parts.length > 1) {
-      minute = int.tryParse(parts[1]) ?? 0;
-    }
-    final isPm = hour >= 12;
-    final ampm = isPm ? '오후' : '오전';
-    final hour12 = hour % 12 == 0 ? 12 : hour % 12;
+    final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
+    final minute = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+    final hh = hour.toString().padLeft(2, '0');
     final mm = minute.toString().padLeft(2, '0');
-    return '$ampm $hour12:$mm';
+    return '알람 $hh:$mm';
   }
 
   // 시간 유틸 제거됨 (서버 문자열 사용)
   String _formatHHmm(DateTime dt) {
-    // 서버에서 오는 완료 시간이 UTC 기준이므로 KST(+6)로 보정
+    // 서버에서 오는 완료 시간이 UTC 기준이므로 KST(+9)로 보정 후 24시간제로 변환
     final adjusted = dt.add(const Duration(hours: 9));
     final hh = adjusted.hour.toString().padLeft(2, '0');
     final mm = adjusted.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
+    return '알람 $hh:$mm';
   }
 
   Future<void> _markCompleted(String doseKey) async {
@@ -157,11 +150,79 @@ class _HomeContentState extends State<HomeContent> {
         final timeStr = parts[2];
         if (scheduleId != null) {
           final hs = HistoryService();
-          await hs.markTaken(
-            scheduleId: scheduleId,
-            scheduledDate: dateStr,
-            scheduledTime: timeStr,
+          // 같은 일정/시간의 히스토리가 있으면 PUT으로 taken + taken_at 갱신,
+          // 없으면 process API로 신규 완료 처리
+          int? historyId;
+          try {
+            final list = await hs.getUserHistories(
+              startDate: dateStr,
+              endDate: dateStr,
+            );
+            for (final item in list) {
+              if (item is! Map<String, dynamic>) continue;
+              final sid = (item['schedule_id'] as num?)?.toInt();
+              final scheduledTime = (item['scheduled_time'] ?? '').toString();
+              if (sid == scheduleId &&
+                  (scheduledTime == timeStr ||
+                      scheduledTime.startsWith(timeStr))) {
+                historyId = (item['id'] as num?)?.toInt();
+                break;
+              }
+            }
+          } catch (_) {}
+          if (historyId != null) {
+            await hs.updateHistoryStatus(
+              historyId: historyId,
+              status: 'taken',
+              takenAt: DateTime.now(),
+            );
+          } else {
+            await hs.markTaken(
+              scheduleId: scheduleId,
+              scheduledDate: dateStr,
+              scheduledTime: timeStr,
+            );
+          }
+          await _loadDosesForDate(_selectedDate);
+          await _loadCompletedFromServer(_selectedDate);
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _markUncompleted(String doseKey) async {
+    try {
+      final parts = doseKey.split('_');
+      if (parts.length >= 3) {
+        final scheduleId = int.tryParse(parts[0]);
+        final dateStr =
+            '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+        final timeStr = parts[2];
+        if (scheduleId != null) {
+          final hs = HistoryService();
+          // 선택한 날짜의 히스토리에서 해당 일정의 완료 기록을 찾아 ID로 상태 업데이트
+          final list = await hs.getUserHistories(
+            startDate: dateStr,
+            endDate: dateStr,
           );
+          int? historyId;
+          for (final item in list) {
+            if (item is! Map<String, dynamic>) continue;
+            final sid = (item['schedule_id'] as num?)?.toInt();
+            final scheduledTime = (item['scheduled_time'] ?? '').toString();
+            if (sid == scheduleId &&
+                (scheduledTime == timeStr ||
+                    scheduledTime.startsWith(timeStr))) {
+              historyId = (item['id'] as num?)?.toInt();
+              break;
+            }
+          }
+          if (historyId != null) {
+            await hs.updateHistoryStatus(
+              historyId: historyId,
+              status: 'cancelled',
+            );
+          }
           await _loadDosesForDate(_selectedDate);
           await _loadCompletedFromServer(_selectedDate);
         }
@@ -173,13 +234,16 @@ class _HomeContentState extends State<HomeContent> {
   Widget build(BuildContext context) {
     final List<Medication> dayMeds = [..._medications]
       ..sort((a, b) => a.time.compareTo(b.time));
+    final double bottomSafe = MediaQuery.of(context).padding.bottom;
     return Scaffold(
-      backgroundColor: const Color(0xFFEBF0FF),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // 본문 레이어
-            Column(
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          // 상단 영역 하늘색 배경
+          Container(height: 220, color: const Color(0xFFEBF0FF)),
+          // 본문 레이어
+          SafeArea(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 본문 스크롤
@@ -191,26 +255,21 @@ class _HomeContentState extends State<HomeContent> {
                       children: [
                         // 상단 흰 배경 바 + 알람 아이콘
                         const AlarmTopBar(),
-                        const SizedBox(height: 8),
                         // 상단 파란 배경 스트립 + 타이틀
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.only(
                             left: 22,
                             right: 16,
-                            top: 5,
                             bottom: 5,
                           ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEAF2FF),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text(
-                            '나의 복약 체크 리스트',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          child: const PageTitle(
+                            title: '나의 복약 체크 리스트',
+                            margin: EdgeInsets.zero,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -220,14 +279,14 @@ class _HomeContentState extends State<HomeContent> {
                             borderRadius: BorderRadius.only(
                               topLeft: Radius.circular(32),
                               topRight: Radius.circular(32),
-                              bottomLeft: Radius.circular(16),
-                              bottomRight: Radius.circular(16),
                             ),
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 24,
-                              horizontal: 24,
+                            padding: EdgeInsets.fromLTRB(
+                              24,
+                              24,
+                              24,
+                              24 + bottomSafe,
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
@@ -246,7 +305,7 @@ class _HomeContentState extends State<HomeContent> {
                                     Text(
                                       _formatKoreanDate(_selectedDate),
                                       style: const TextStyle(
-                                        fontSize: 15,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -264,21 +323,6 @@ class _HomeContentState extends State<HomeContent> {
                                       ),
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 8),
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 10),
-                                  child: Container(
-                                    alignment: Alignment.centerLeft,
-                                    child: const Text(
-                                      '오늘의 복약',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
                                 ),
                                 const SizedBox(height: 8),
                                 if (_isLoading)
@@ -303,7 +347,7 @@ class _HomeContentState extends State<HomeContent> {
                                       0xFFE6F0FF,
                                     );
                                     final Color lightGreyBg = const Color(
-                                      0xFFF7F8FA,
+                                      0xFFFCFCFC,
                                     );
                                     final Color greyBorder = const Color(
                                       0xFFD9D9D9,
@@ -437,7 +481,9 @@ class _HomeContentState extends State<HomeContent> {
                                                         fontWeight:
                                                             FontWeight.w700,
                                                         color: isCompleted
-                                                            ? primaryBlue
+                                                            ? const Color(
+                                                                0xFF0034C4,
+                                                              )
                                                             : (isMissed
                                                                   ? dangerRed
                                                                   : Colors
@@ -482,26 +528,134 @@ class _HomeContentState extends State<HomeContent> {
                                                           style: TextStyle(
                                                             fontSize: 12,
                                                             fontWeight:
-                                                                FontWeight.w800,
-                                                            color: primaryBlue,
+                                                                FontWeight.w500,
+                                                            color: const Color(
+                                                              0xFF0034C4,
+                                                            ),
                                                           ),
                                                         ),
                                                       ),
                                                     const Spacer(),
                                                     if (isCompleted || isMissed)
-                                                      GestureDetector(
-                                                        behavior:
-                                                            HitTestBehavior
-                                                                .opaque,
-                                                        onTap: () {},
-                                                        child: const SizedBox(
-                                                          width: 24,
-                                                          height: 24,
-                                                          child: Icon(
-                                                            Icons.more_vert,
-                                                            size: 24,
-                                                            color:
-                                                                Colors.black26,
+                                                      Builder(
+                                                        builder: (buttonCtx) => GestureDetector(
+                                                          behavior:
+                                                              HitTestBehavior
+                                                                  .opaque,
+                                                          onTapDown:
+                                                              (
+                                                                TapDownDetails
+                                                                details,
+                                                              ) async {
+                                                                try {
+                                                                  final RenderBox
+                                                                  buttonBox =
+                                                                      buttonCtx
+                                                                              .findRenderObject()
+                                                                          as RenderBox;
+                                                                  final RenderBox
+                                                                  overlay =
+                                                                      Overlay.of(
+                                                                            buttonCtx,
+                                                                          ).context.findRenderObject()
+                                                                          as RenderBox;
+                                                                  final Offset
+                                                                  topLeft = buttonBox
+                                                                      .localToGlobal(
+                                                                        Offset
+                                                                            .zero,
+                                                                        ancestor:
+                                                                            overlay,
+                                                                      );
+                                                                  final Offset
+                                                                  bottomRight = buttonBox.localToGlobal(
+                                                                    buttonBox
+                                                                        .size
+                                                                        .bottomRight(
+                                                                          Offset
+                                                                              .zero,
+                                                                        ),
+                                                                    ancestor:
+                                                                        overlay,
+                                                                  );
+                                                                  final position = RelativeRect.fromLTRB(
+                                                                    topLeft.dx,
+                                                                    topLeft.dy,
+                                                                    overlay
+                                                                            .size
+                                                                            .width -
+                                                                        bottomRight
+                                                                            .dx,
+                                                                    overlay
+                                                                            .size
+                                                                            .height -
+                                                                        bottomRight
+                                                                            .dy,
+                                                                  );
+                                                                  final List<
+                                                                    PopupMenuEntry<
+                                                                      String
+                                                                    >
+                                                                  >
+                                                                  items =
+                                                                      isCompleted
+                                                                      ? const [
+                                                                          PopupMenuItem<
+                                                                            String
+                                                                          >(
+                                                                            value:
+                                                                                'undo',
+                                                                            child: Text(
+                                                                              '복약 미완료',
+                                                                            ),
+                                                                          ),
+                                                                        ]
+                                                                      : const [
+                                                                          PopupMenuItem<
+                                                                            String
+                                                                          >(
+                                                                            value:
+                                                                                'complete',
+                                                                            child: Text(
+                                                                              '복용 완료',
+                                                                            ),
+                                                                          ),
+                                                                        ];
+                                                                  final selected =
+                                                                      await showMenu<
+                                                                        String
+                                                                      >(
+                                                                        context:
+                                                                            buttonCtx,
+                                                                        position:
+                                                                            position,
+                                                                        color: Colors
+                                                                            .white,
+                                                                        items:
+                                                                            items,
+                                                                      );
+                                                                  if (selected ==
+                                                                      'complete') {
+                                                                    await _markCompleted(
+                                                                      doseKey,
+                                                                    );
+                                                                  } else if (selected ==
+                                                                      'undo') {
+                                                                    await _markUncompleted(
+                                                                      doseKey,
+                                                                    );
+                                                                  }
+                                                                } catch (_) {}
+                                                              },
+                                                          child: const SizedBox(
+                                                            width: 24,
+                                                            height: 24,
+                                                            child: Icon(
+                                                              Icons.more_vert,
+                                                              size: 24,
+                                                              color: Colors
+                                                                  .black26,
+                                                            ),
                                                           ),
                                                         ),
                                                       ),
@@ -620,15 +774,18 @@ class _HomeContentState extends State<HomeContent> {
                             ),
                           ),
                         ),
-                        Container(height: 120, color: Colors.white),
+                        Container(
+                          height: 120 + bottomSafe,
+                          color: Colors.white,
+                        ),
                       ],
                     ),
                   ),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -676,22 +833,53 @@ class _EmptyMedicineSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color primaryBlue = const Color(0xFF235DFF);
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.medication, size: 60, color: Colors.black54),
           const SizedBox(height: 8),
+          SvgPicture.asset(
+            'assets/images/medi_icon.svg',
+            width: 100,
+            height: 100,
+          ),
+          const SizedBox(height: 50),
           Text(
             title ?? '등록된 약이 없어요',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black87,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
+          const SizedBox(height: 14),
+          ElevatedButton(
             onPressed: onAdd,
-            icon: const Icon(Icons.add),
-            label: const Text('약 등록하기'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryBlue,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 5),
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Text(
+                  '약 등록하기',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                SizedBox(width: 8),
+                Icon(Icons.add, size: 18, color: Colors.white),
+              ],
+            ),
           ),
+          const SizedBox(height: 8),
         ],
       ),
     );

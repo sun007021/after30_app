@@ -1,6 +1,8 @@
 import 'package:after30/features/alarm/data/schedule_service.dart';
 import 'package:after30/features/calendar/data/history_service.dart';
 import 'package:after30/features/calendar/models/medication.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:after30/core/storage/user_store.dart';
 
 class MedicationService {
   static String _formatYMD(DateTime d) {
@@ -28,6 +30,8 @@ class MedicationService {
   ) async {
     final scheduleService = ScheduleService();
     final schedules = await scheduleService.getSchedules(includeInactive: true);
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await UserStore.getCurrentUserId();
 
     final totalDays = end.difference(start).inDays.abs() + 1;
     final daysInRange = List.generate(
@@ -47,10 +51,12 @@ class MedicationService {
     };
 
     final meds = <Medication>[];
+    final scheduleIdToName = <int, String>{};
     for (final s in schedules) {
       if (s is! Map<String, dynamic>) continue;
       final scheduleId = (s['id'] as num).toInt();
       final medName = (s['medication_name'] as String?) ?? '';
+      scheduleIdToName[scheduleId] = medName;
       final times = ((s['times'] as List?) ?? [])
           .map((t) => _normalizeTime(t.toString()).substring(0, 5))
           .toList();
@@ -58,10 +64,89 @@ class MedicationService {
           .map((d) => d.toString())
           .toList();
       final isActive = (s['is_active'] as bool?) ?? true;
-      if (!isActive) continue;
       final everyDay = repeatDays.isEmpty || repeatDays.length == 7;
 
+      // 스케줄 시작일(start_date) 이전에는 약 항목을 생성하지 않도록 필터링
+      DateTime? startDate;
+      final startDateStr = (s['start_date'] as String?);
+      if (startDateStr != null && startDateStr.trim().isNotEmpty) {
+        // 기대 포맷: YYYY-MM-DD
+        try {
+          final parts = startDateStr.split('-');
+          if (parts.length >= 3) {
+            final y = int.tryParse(parts[0]) ?? 0;
+            final m = int.tryParse(parts[1]) ?? 1;
+            final d = int.tryParse(parts[2]) ?? 1;
+            startDate = DateTime(y, m, d);
+          }
+        } catch (_) {
+          startDate = null;
+        }
+      }
+
       for (final d in daysInRange) {
+        // 시작일이 지정된 경우, 시작일 이전 날짜는 스킵
+        if (startDate != null) {
+          final onlyDay = DateTime(d.year, d.month, d.day);
+          if (onlyDay.isBefore(startDate)) continue;
+        }
+        // 비활성 스케줄일 경우, '비활성화한 날짜' 이전 날짜만 생성
+        if (!isActive) {
+          DateTime? cutoff;
+          // 서버 제공 비활성화 일자 추정
+          final serverCutoffStr =
+              (s['deactivated_at'] ??
+                      s['deactivated_date'] ??
+                      s['inactive_since'] ??
+                      s['ended_at'] ??
+                      s['end_date'] ??
+                      s['stop_date'])
+                  ?.toString();
+          if (serverCutoffStr != null && serverCutoffStr.trim().isNotEmpty) {
+            DateTime? parsed = DateTime.tryParse(serverCutoffStr);
+            if (parsed == null) {
+              try {
+                final p = serverCutoffStr.split('-');
+                if (p.length >= 3) {
+                  parsed = DateTime(
+                    int.tryParse(p[0]) ?? 0,
+                    int.tryParse(p[1]) ?? 1,
+                    int.tryParse(p[2]) ?? 1,
+                  );
+                }
+              } catch (_) {}
+            }
+            if (parsed != null) {
+              cutoff = DateTime(parsed.year, parsed.month, parsed.day);
+            }
+          }
+          // 로컬 저장 기준일(토글 시점) 사용 - 사용자별 네임스페이스 우선, 없으면 레거시 키 사용
+          if (cutoff == null) {
+            final keyNs = userId != null
+                ? 'inactive_since_${userId}_${scheduleId.toString()}'
+                : 'inactive_since_${scheduleId.toString()}';
+            final localStr =
+                prefs.getString(keyNs) ??
+                prefs.getString('inactive_since_${scheduleId.toString()}');
+            if (localStr != null && localStr.trim().isNotEmpty) {
+              final p = localStr.split('-');
+              if (p.length >= 3) {
+                cutoff = DateTime(
+                  int.tryParse(p[0]) ?? 0,
+                  int.tryParse(p[1]) ?? 1,
+                  int.tryParse(p[2]) ?? 1,
+                );
+              }
+            }
+          }
+          // 최후 수단: 오늘 날짜
+          cutoff ??= () {
+            final t = DateTime.now();
+            return DateTime(t.year, t.month, t.day);
+          }();
+          final onlyDay = DateTime(d.year, d.month, d.day);
+          if (!onlyDay.isBefore(cutoff)) continue;
+        }
         final enumDay = weekdayEnum[d.weekday] ?? 'MON';
         if (!everyDay && !repeatDays.contains(enumDay)) continue;
         for (final t in times) {
@@ -113,6 +198,46 @@ class MedicationService {
         takenAt: h['taken_at'] != null
             ? DateTime.tryParse(h['taken_at'].toString())
             : null,
+      );
+    }
+
+    // 비활성 스케줄이라 기본 생성이 없더라도, 해당 기간 히스토리가 있으면 표시용 항목 보강
+    final existingKeys = meds
+        .map((m) => '${m.scheduleId}_${_formatYMD(m.date)}_${m.time}')
+        .toSet();
+    for (final h in histList) {
+      if (h is! Map<String, dynamic>) continue;
+      final sid = (h['schedule_id'] as num?)?.toInt();
+      final dateStr = h['scheduled_date']?.toString();
+      final timeStr = h['scheduled_time']?.toString();
+      if (sid == null || dateStr == null || timeStr == null) continue;
+      final tNorm = _normalizeTime(timeStr).substring(0, 5);
+      final key = '${sid}_${dateStr}_$tNorm';
+      if (existingKeys.contains(key)) continue;
+      DateTime? date;
+      try {
+        date = DateTime.tryParse(dateStr);
+      } catch (_) {
+        date = null;
+      }
+      if (date == null) continue;
+      String status = (h['status']?.toString() ?? '').toLowerCase();
+      if (status.isEmpty) status = 'pending';
+      meds.add(
+        Medication(
+          id: key,
+          name: scheduleIdToName[sid] ?? '',
+          dosage: '1정',
+          time: tNorm,
+          date: date,
+          status: status,
+          nfcEnabled: false,
+          scheduleId: sid,
+          historyId: (h['id'] as num?)?.toInt(),
+          takenAt: h['taken_at'] != null
+              ? DateTime.tryParse(h['taken_at'].toString())
+              : null,
+        ),
       );
     }
 

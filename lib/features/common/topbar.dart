@@ -17,30 +17,39 @@ class AlarmTopBar extends StatelessWidget {
             onTap: () async {
               await showModalBottomSheet(
                 context: context,
+                useSafeArea: true,
+                isScrollControlled: true,
                 backgroundColor: const Color(0xFFEBF0FF),
                 shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 builder: (ctx) {
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          '곧 출시될 기능입니다',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                  final bottomSafe = MediaQuery.of(ctx).viewPadding.bottom;
+                  return SafeArea(
+                    top: false,
+                    left: false,
+                    right: false,
+                    bottom: true,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 20, 20, 32 + bottomSafe),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            '곧 출시될 기능입니다',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          '알림을 더 편하게 모아볼 수 있도록 준비하고 있어요.',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                      ],
+                          SizedBox(height: 8),
+                          Text(
+                            '알림을 더 편하게 모아볼 수 있도록 준비하고 있어요.',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },

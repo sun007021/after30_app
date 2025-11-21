@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/features/home/ui/home.dart';
-import 'package:after30/features/login/ui/login_header.dart';
-import 'package:after30/features/login/ui/kakao_login_button.dart';
-import 'package:after30/features/login/ui/login_footer.dart';
+import 'package:after30/core/storage/user_store.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,13 +15,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  bool _isLoading = false;
-
   Future<void> _handleKakaoLogin() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
       bool kakaoTalkInstalled = await isKakaoTalkInstalled();
       OAuthToken? kakaoToken;
@@ -30,9 +24,6 @@ class _LoginPageState extends State<LoginPage> {
           kakaoToken = await UserApi.instance.loginWithKakaoTalk();
         } catch (error) {
           if (error is PlatformException && error.code == 'CANCELED') {
-            setState(() {
-              _isLoading = false;
-            });
             return;
           }
           kakaoToken = await UserApi.instance.loginWithKakaoAccount();
@@ -57,13 +48,17 @@ class _LoginPageState extends State<LoginPage> {
       // ignore: avoid_print
       print('🔐 Backend access token: $beAccess');
 
+      // 현재 사용자 ID 저장 및 알람 네임스페이스 설정
+      final me = await UserApi.instance.me();
+      final userId = me.id.toString();
+      await UserStore.setCurrentUserId(userId);
+      AlarmService.setCurrentUserId(userId);
+      // 저장된 알람을 불러와 활성 항목 재스케줄
+      await AlarmService().rescheduleAllActiveFromStorage();
+
       _navigateToHome();
     } catch (e) {
       _showErrorDialog('로그인 중 오류가 발생했습니다: $e');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
@@ -93,26 +88,172 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  Future<void> _showLoginOptionsSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFFEBF0FF),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) {
+        final bottomSafe = MediaQuery.of(ctx).viewPadding.bottom;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, bottomSafe + 72),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 48,
+                width: double.infinity,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () async {
+                        Navigator.of(ctx).pop();
+                        await _handleKakaoLogin();
+                      },
+                      child: Ink.image(
+                        image: const AssetImage(
+                          'assets/images/kakao_login_medium_wide.png',
+                        ),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 48,
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    // TODO: 이메일 로그인 화면 연결 시 이곳에서 라우팅
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('이메일 로그인 준비 중입니다')),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF111111),
+                    side: const BorderSide(color: Colors.transparent),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    '이메일로 로그인',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bottomSafe = MediaQuery.of(context).viewPadding.bottom;
+            const primaryBlue = Color(0xFF1963FF);
+            const double buttonsLift = 20.0;
+            const double logoLift = 42.0; // 로고를 살짝 위로
+            return Stack(
               children: [
-                const LoginHeader(),
-                KakaoLoginButton(
-                  isLoading: _isLoading,
-                  onPressed: _handleKakaoLogin,
+                Align(
+                  alignment: Alignment.center,
+                  child: Transform.translate(
+                    offset: const Offset(0, -logoLift),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 중앙 로고 (고정)
+                        SvgPicture.asset(
+                          'assets/images/logowithname.svg',
+                          width: 140,
+                          height: 140,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                const LoginFooter(),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      39,
+                      0,
+                      39,
+                      bottomSafe + 39 + buttonsLift,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 45,
+                          child: ElevatedButton(
+                            onPressed: _handleKakaoLogin,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryBlue,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              '회원가입',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 45,
+                          child: OutlinedButton(
+                            onPressed: _showLoginOptionsSheet,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: primaryBlue,
+                              side: const BorderSide(
+                                color: primaryBlue,
+                                width: 1,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              '로그인',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

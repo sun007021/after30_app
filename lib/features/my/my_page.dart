@@ -1,11 +1,12 @@
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/my/settings_store.dart';
-import 'package:after30/core/storage/token_store.dart';
+import 'package:after30/features/login/data/auth_service.dart';
 import 'dart:io';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:after30/features/common/page_title.dart';
 
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
@@ -80,14 +81,11 @@ class _MyPageState extends State<MyPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: const Text(
-                    '마이페이지',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-                  ),
+                const PageTitle(
+                  title: '마이페이지',
+                  margin: EdgeInsets.only(left: 16, top: 20),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 _ProfileTile(
                   nickname: _nickname ?? '사용자님의 정보',
                   imageUrl: _profileImageUrl,
@@ -242,9 +240,7 @@ class _CardContainer extends StatelessWidget {
 }
 
 Future<void> _logout(BuildContext context) async {
-  await TokenStore.clear();
-  if (!context.mounted) return;
-  Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+  await AuthService.logout(context);
 }
 
 class _SwitchRow extends StatelessWidget {

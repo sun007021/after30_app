@@ -10,6 +10,7 @@ import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/services/invite_view_model.dart';
 import 'package:after30/features/my/my_page.dart';
 import 'package:after30/features/my/my_info_page.dart';
+import 'package:after30/core/storage/user_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,6 +75,15 @@ class _MyAppState extends State<MyApp> {
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFEE500)),
           useMaterial3: true,
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: NoTransitionsPageTransitionsBuilder(),
+              TargetPlatform.iOS: NoTransitionsPageTransitionsBuilder(),
+              TargetPlatform.macOS: NoTransitionsPageTransitionsBuilder(),
+              TargetPlatform.windows: NoTransitionsPageTransitionsBuilder(),
+              TargetPlatform.linux: NoTransitionsPageTransitionsBuilder(),
+            },
+          ),
         ),
         initialRoute: '/startup',
         routes: {
@@ -87,6 +97,21 @@ class _MyAppState extends State<MyApp> {
         },
       ),
     );
+  }
+}
+
+class NoTransitionsPageTransitionsBuilder extends PageTransitionsBuilder {
+  const NoTransitionsPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return child;
   }
 }
 
@@ -119,6 +144,10 @@ class _StartupPageState extends State<StartupPage> {
       final ok = await BackendAuthService().refreshSession();
       if (!mounted) return;
       if (ok) {
+        // 저장된 사용자 ID가 있다면 네임스페이스 설정 후 재스케줄
+        final userId = await UserStore.getCurrentUserId();
+        AlarmService.setCurrentUserId(userId);
+        await AlarmService().rescheduleAllActiveFromStorage();
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
         Navigator.of(context).pushReplacementNamed('/login');

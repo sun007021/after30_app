@@ -32,7 +32,9 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   void initState() {
     super.initState();
-    _selectedDay = null; // 첫 진입 시에는 선택 없음
+    // 첫 진입 시 오늘 날짜를 선택하고 시트를 보이도록 설정
+    _selectedDay = _dateKey(_focusedDay);
+    _sheetVisible = true;
     _loadMonth(_focusedDay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _recalculateSheetFractions();
@@ -42,7 +44,7 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime _dateKey(DateTime d) => DateTime(d.year, d.month, d.day);
 
   void _recalculateSheetFractions() {
-    if (!_sheetVisible) return; // 시트가 보일 때만 계산/애니메이션
+    if (!_sheetVisible) return; // 시트가 보일 때만 계산애니메이션
     final headerCtx = _monthHeaderKey.currentContext;
     final cardCtx = _calendarCardKey.currentContext;
     if (headerCtx == null || cardCtx == null) return;
@@ -54,12 +56,12 @@ class _CalendarPageState extends State<CalendarPage> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     final maxFraction = ((screenHeight - headerTop) / screenHeight).clamp(
-      0.4,
+      0.38,
       0.95,
     );
     // 초기 위치를 화면 "맨 아래"에 가깝게 (핸들바만 보이도록) 고정
     // max 대비 여유는 0.02 남김
-    final initialFraction = (0.40).clamp(0.1, maxFraction - 0.02);
+    final initialFraction = (0.38).clamp(0.1, maxFraction - 0.02);
 
     if (!mounted) return;
     setState(() {
@@ -69,11 +71,15 @@ class _CalendarPageState extends State<CalendarPage> {
     // 첫 프레임에서도 아래 위치로 보장
     try {
       if (_minInitialSheetFraction != null) {
-        _dragController.animateTo(
-          _minInitialSheetFraction!,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-        );
+        // 이미 사용자가 시트를 더 올려둔 상태라면, 현재 위치를 유지하고 내려가지 않도록 함
+        final current = _dragController.size;
+        if (current <= (_minInitialSheetFraction! + 0.001)) {
+          _dragController.animateTo(
+            _minInitialSheetFraction!,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+          );
+        }
       }
     } catch (_) {}
   }
@@ -239,63 +245,31 @@ class _CalendarPageState extends State<CalendarPage> {
         });
       }
 
-      return Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          // 기존 간격/레이아웃은 그대로 유지
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: days.map(dayItem).toList(),
-            ),
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (details) {
+          final v = details.primaryVelocity ?? 0;
+          if (v < -100) {
+            moveWeek(7); // 왼쪽으로 스와이프 → 다음 주
+          } else if (v > 100) {
+            moveWeek(-7); // 오른쪽으로 스와이프 → 이전 주
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: days.map(dayItem).toList(),
           ),
-          // 좌우 페이지네이션 버튼 - 오버레이로 배치하여 간격에 영향 주지 않음
-          Positioned(
-            //
-            left: -28,
-            top: 12,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-              icon: SvgPicture.asset(
-                'assets/images/chevron_left.svg',
-                width: 9,
-                height: 14,
-              ),
-              onPressed: () => moveWeek(-7),
-            ),
-          ),
-          Positioned(
-            right: -28,
-            top: 12,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-              icon: Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                child: SvgPicture.asset(
-                  'assets/images/chevron_left.svg',
-                  width: 9,
-                  height: 14,
-                ),
-              ),
-              onPressed: () => moveWeek(7),
-            ),
-          ),
-        ],
+        ),
       );
     }
 
     String _formatKorTime(String hhmm) {
       final parts = hhmm.split(':');
-      int h = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
+      final int h = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
       final int m = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
-      final bool pm = h >= 12;
-      final int h12 = h % 12 == 0 ? 12 : h % 12;
-      return '${pm ? '오후' : '오전'} $h12:${m.toString().padLeft(2, '0')}';
+      return '알람 ${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
     }
 
     String _formatHHmmKST(DateTime dt) {
@@ -331,7 +305,7 @@ class _CalendarPageState extends State<CalendarPage> {
               text,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: fg,
               ),
             ),
@@ -342,16 +316,45 @@ class _CalendarPageState extends State<CalendarPage> {
 
     Widget _medicationTile(Medication m) {
       const primaryBlue = Color(0xFF235DFF);
+      const dangerRed = Color(0xFFE50000);
       final bool isTaken = (m.status.toLowerCase() == 'taken');
 
+      // 미복용 판단: 선택한 날짜가 과거이거나, 오늘이면서 예정 시각이 지났고 아직 완료 아님
+      bool isMissed = false;
+      try {
+        if (!isTaken && _selectedDay != null) {
+          final now = DateTime.now();
+          final DateTime todayOnly = DateTime(now.year, now.month, now.day);
+          final DateTime selectedOnly = DateTime(
+            _selectedDay!.year,
+            _selectedDay!.month,
+            _selectedDay!.day,
+          );
+          final bool isPastDay = selectedOnly.isBefore(todayOnly);
+          bool overdueToday = false;
+          if (selectedOnly == todayOnly) {
+            final parts = m.time.split(':');
+            final hh = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
+            final mm = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+            overdueToday =
+                hh < now.hour || (hh == now.hour && mm <= now.minute);
+          }
+          isMissed = isPastDay || overdueToday;
+        }
+      } catch (_) {}
+
       final BoxDecoration deco = BoxDecoration(
-        color: isTaken ? const Color(0xFFEAF2FF) : const Color(0xFFFCFCFC),
+        color: isTaken
+            ? const Color(0xFFEAF2FF)
+            : (isMissed ? const Color(0xFFFFE8EA) : const Color(0xFFFCFCFC)),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isTaken ? primaryBlue : const Color(0xFFDBDBDB),
+          color: isTaken
+              ? primaryBlue
+              : (isMissed ? const Color(0xFFED9793) : const Color(0xFFDBDBDB)),
           width: 1.5,
         ),
-        boxShadow: isTaken
+        boxShadow: isTaken || isMissed
             ? []
             : [
                 BoxShadow(
@@ -383,14 +386,14 @@ class _CalendarPageState extends State<CalendarPage> {
                   else
                     _chip(
                       text: _formatKorTime(m.time),
-                      fg: Colors.black54,
-                      bg: const Color(0xFFFCFCFC),
+                      fg: isMissed ? dangerRed : Colors.black54,
+                      bg: Colors.white,
                     ),
                   if (isTaken)
                     _chip(
                       text:
                           '복용 완료${m.takenAt != null ? ' ${_formatHHmmKST(m.takenAt!)}' : ''}',
-                      fg: primaryBlue,
+                      fg: const Color(0xFF0034C4),
                       bg: Colors.white,
                       leading: SvgPicture.asset(
                         'assets/images/check.svg',
@@ -401,6 +404,13 @@ class _CalendarPageState extends State<CalendarPage> {
                           BlendMode.srcIn,
                         ),
                       ),
+                    )
+                  else if (isMissed)
+                    _chip(
+                      text: '미복용',
+                      fg: dangerRed,
+                      bg: Colors.white,
+                      icon: Icons.error_outline,
                     )
                   else
                     _chip(
@@ -425,11 +435,17 @@ class _CalendarPageState extends State<CalendarPage> {
                             width: 45,
                             height: 45,
                           )
-                        : SvgPicture.asset(
-                            'assets/images/alarmList_deactive.svg',
-                            width: 45,
-                            height: 45,
-                          ),
+                        : (isMissed
+                              ? SvgPicture.asset(
+                                  'assets/images/alarmList_late.svg',
+                                  width: 45,
+                                  height: 45,
+                                )
+                              : SvgPicture.asset(
+                                  'assets/images/alarmList_deactive.svg',
+                                  width: 45,
+                                  height: 45,
+                                )),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -544,6 +560,8 @@ class _CalendarPageState extends State<CalendarPage> {
                           lastDay: DateTime(2100, 12, 31),
                           focusedDay: _focusedDay,
                           headerVisible: false,
+                          sixWeekMonthsEnforced: true,
+                          rowHeight: 50,
                           startingDayOfWeek: StartingDayOfWeek.sunday,
                           selectedDayPredicate: (d) =>
                               _selectedDay != null &&
@@ -576,7 +594,7 @@ class _CalendarPageState extends State<CalendarPage> {
                           calendarStyle: const CalendarStyle(
                             outsideDaysVisible: false,
                           ),
-                          daysOfWeekHeight: 24,
+                          daysOfWeekHeight: 28,
                           calendarBuilders: CalendarBuilders(
                             dowBuilder: (context, day) {
                               const labels = [
@@ -629,7 +647,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 1),
+                Container(height: 3, color: const Color(0xFFE5E7EB)),
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -644,22 +662,13 @@ class _CalendarPageState extends State<CalendarPage> {
                 controller: _dragController,
                 expand: false,
                 snap: true,
-                snapSizes: [
-                  (_minInitialSheetFraction ?? 0.40),
-                  (_maxSheetFraction ?? 0.7),
-                ],
-                minChildSize: (_minInitialSheetFraction ?? 0.40),
-                initialChildSize: (_minInitialSheetFraction ?? 0.40),
-                maxChildSize: (_maxSheetFraction ?? 0.7),
+                snapSizes: [(_minInitialSheetFraction ?? 0.38), 1.0],
+                minChildSize: (_minInitialSheetFraction ?? 0.38),
+                initialChildSize: (_minInitialSheetFraction ?? 0.38),
+                maxChildSize: 1.0,
                 builder: (context, scrollController) {
                   return Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(30),
-                        topRight: Radius.circular(30),
-                      ),
-                    ),
+                    decoration: const BoxDecoration(color: Colors.white),
                     child: CustomScrollView(
                       controller: scrollController,
                       slivers: [
@@ -707,34 +716,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                                   _totalByDay[key] ?? 0;
                                               final done = _doneByDay[key] ?? 0;
                                               if (total <= 0) {
-                                                return Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 10,
-                                                        vertical: 6,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          999,
-                                                        ),
-                                                    border: Border.all(
-                                                      color: const Color(
-                                                        0xFFDBDBDB,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  child: const Text(
-                                                    '기록 없음',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: Colors.black87,
-                                                    ),
-                                                  ),
-                                                );
+                                                return const SizedBox.shrink();
                                               }
                                               final double frac = (done / total)
                                                   .clamp(0.0, 1.0);
@@ -751,7 +733,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                                     children: [
                                                       Container(
                                                         color: const Color(
-                                                          0xFFD6E4FF,
+                                                          0xFFC1D1FF,
                                                         ),
                                                       ),
                                                       Align(
@@ -763,7 +745,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                                           widthFactor: frac,
                                                           child: Container(
                                                             color: const Color(
-                                                              0xFF235DFF,
+                                                              0xFFF235DFF,
                                                             ),
                                                           ),
                                                         ),
@@ -806,6 +788,8 @@ class _CalendarPageState extends State<CalendarPage> {
                             ),
                           ),
                         ),
+                        //주간, 약 목록 간격
+                        const SliverToBoxAdapter(child: SizedBox(height: 12)),
                         Builder(
                           builder: (_) {
                             final list = medsForSelected();
