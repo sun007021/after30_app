@@ -17,6 +17,22 @@ import 'package:after30/features/my/my_info_page.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'dart:io';
+import 'package:flutter/services.dart';
+
+// 네이티브 상태 조회 채널 및 헬퍼(전역)
+const MethodChannel kNativeChannel = MethodChannel('after30/native');
+Future<bool> isDeviceLocked() async {
+  if (!Platform.isAndroid) return false;
+  try {
+    final locked = await kNativeChannel.invokeMethod<bool>('isDeviceLocked');
+    return locked ?? false;
+  } catch (_) {
+    return false;
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -156,6 +172,40 @@ class _StartupPageState extends State<StartupPage> {
 
   Future<void> _attemptRefresh() async {
     try {
+      // FullScreen Intent로 앱이 기동된 경우에만 풀스크린 라우트로 이동
+      try {
+        final initialAction = await AwesomeNotifications()
+            .getInitialNotificationAction();
+        if (initialAction != null) {
+          final payload = initialAction.payload ?? {};
+          final isFs = payload['fs'] == '1';
+          final locked = await isDeviceLocked();
+          if (isFs && locked) {
+            final alarmId = payload['alarmId'] ?? '';
+            final name = payload['medicineName'] ?? '약';
+            final timeStr = payload['time'] ?? '08:00';
+            final day = payload['day'] ?? '월';
+            final notifId = initialAction.id ?? 0;
+            final hour = int.tryParse(timeStr.split(':').first) ?? 8;
+            final minute = int.tryParse(timeStr.split(':').last) ?? 0;
+            if (!mounted) return;
+            AlarmService.showFullscreenAlarm(
+              context,
+              MedicineAlarm(
+                id: alarmId.isEmpty ? null : alarmId,
+                name: name,
+                times: [TimeOfDay(hour: hour, minute: minute)],
+                days: [day],
+              ),
+              TimeOfDay(hour: hour, minute: minute),
+              day,
+              notificationId: notifId,
+            );
+            return;
+          }
+        }
+      } catch (_) {}
+
       final ok = await BackendAuthService().refreshSession();
       if (!mounted) return;
       if (ok) {

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
-import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
-class FullscreenAlarmPage extends StatelessWidget {
+class FullscreenAlarmPage extends StatefulWidget {
   final MedicineAlarm alarm;
   final TimeOfDay time;
   final String day;
@@ -17,172 +16,230 @@ class FullscreenAlarmPage extends StatelessWidget {
     required this.notificationId,
   });
 
-  Future<void> _onSnooze(BuildContext context) async {
-    await AlarmService().snoozeNotification(
-      baseNotificationId: notificationId,
-      alarm: alarm,
-      minutes: 10,
-    );
-    if (context.mounted) Navigator.of(context).pop('snooze');
+  @override
+  State<FullscreenAlarmPage> createState() => _FullscreenAlarmPageState();
+}
+
+class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
+  @override
+  void initState() {
+    super.initState();
   }
 
-  Future<void> _onComplete(BuildContext context) async {
-    await AwesomeNotifications().dismiss(notificationId);
-    if (context.mounted) Navigator.of(context).pop('completed');
+  @override
+  void dispose() {
+    super.dispose();
   }
 
-  void _onCheckOthers(BuildContext context) {
-    Navigator.of(context).pop('check_others');
+  Future<void> _onCheckOthers(BuildContext context) async {
+    // 알림(소리/진동) 정지
+    try {
+      await AwesomeNotifications().cancel(widget.notificationId);
+    } catch (_) {}
+    // 홈으로 이동하면서 기존 스택 제거 -> 뒤로가기 시 풀스크린으로 돌아오지 않도록
+    if (context.mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final currentDate = '${now.month}월 ${now.day}일 ${_getDayName(now.weekday)}';
+    final currentDate =
+        '${now.month}월 ${now.day}일 ${_getDayLongName(now.weekday)}';
     final currentTime =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-    return Scaffold(
-      backgroundColor: Colors.black87,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              flex: 2,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF2B2B2B),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 24),
+                // 상단 시각
+                Text(
+                  currentTime,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 88,
+                    fontWeight: FontWeight.w700,
+                    height: 1.0,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                // 날짜/부가 정보
+                Column(
                   children: [
                     Text(
                       currentDate,
-                      style: const TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      currentTime,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              child: Center(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 32),
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        alarm.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        '드실 시간 입니다!',
-                        style: TextStyle(color: Colors.white, fontSize: 18),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    const Text(
-                      '복용체크 해주세요',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 16,
                       ),
+                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () => _onSnooze(context),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey[300],
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text('10분 미루기'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () => _onCheckOthers(context),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text('이외 약 체크'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () => _onComplete(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        child: const Text('복용 완료'),
+                    const SizedBox(height: 4),
+                    Text(
+                      '식후 30분',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 16,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
-              ),
+                const Spacer(),
+                // 약 이름/안내
+                Text(
+                  widget.alarm.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '먹을 시간입니다.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
+                // 중앙 슬라이드(약 체크하러 가기)
+                _SlideToActButton(
+                  label: '슬라이드하여 약 체크하러 가기',
+                  backgroundColor: const Color(0xFF3A3A3A),
+                  onCompleted: () => _onCheckOthers(context),
+                  icon: Icons.arrow_forward_rounded,
+                  iconColor: Colors.white,
+                ),
+                const Spacer(),
+                const SizedBox(height: 24),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  String _getDayName(int weekday) {
-    const days = ['월', '화', '수', '목', '금', '토', '일'];
+  String _getDayLongName(int weekday) {
+    const days = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
     return days[weekday - 1];
+  }
+}
+
+class _SlideToActButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onCompleted;
+  final Color backgroundColor;
+  final IconData icon;
+  final Color iconColor;
+
+  const _SlideToActButton({
+    required this.label,
+    required this.onCompleted,
+    required this.backgroundColor,
+    required this.icon,
+    required this.iconColor,
+  });
+
+  @override
+  State<_SlideToActButton> createState() => _SlideToActButtonState();
+}
+
+class _SlideToActButtonState extends State<_SlideToActButton> {
+  double _dragPx = 0;
+  bool _completed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final trackWidth = constraints.maxWidth;
+        final trackHeight = 64.0;
+        final knobSize = 56.0;
+        final maxDrag = trackWidth - knobSize - 8.0;
+        final progress = (_dragPx / maxDrag).clamp(0.0, 1.0);
+
+        return Container(
+          height: trackHeight,
+          decoration: BoxDecoration(
+            color: widget.backgroundColor,
+            borderRadius: BorderRadius.circular(trackHeight / 2),
+          ),
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Center(
+                child: Opacity(
+                  opacity: 1.0 - progress * 0.8,
+                  child: Text(
+                    widget.label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 4.0 + _dragPx,
+                child: GestureDetector(
+                  onPanUpdate: (details) {
+                    if (_completed) return;
+                    setState(() {
+                      _dragPx = (_dragPx + details.delta.dx).clamp(
+                        0.0,
+                        maxDrag,
+                      );
+                    });
+                  },
+                  onPanEnd: (_) {
+                    if (_completed) return;
+                    if (_dragPx >= maxDrag * 0.85) {
+                      _completed = true;
+                      widget.onCompleted();
+                    } else {
+                      setState(() {
+                        _dragPx = 0;
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: knobSize,
+                    height: knobSize,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Icon(widget.icon, color: widget.iconColor, size: 28),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

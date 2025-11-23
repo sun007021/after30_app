@@ -58,6 +58,9 @@ class AlarmService {
           defaultColor: Colors.pink,
           ledColor: Colors.pink,
           importance: NotificationImportance.Max,
+          playSound: true,
+          // 시스템 기본 알람 스트림 사용(벨소리 반복은 풀스크린에서 직접 재생)
+          defaultRingtoneType: DefaultRingtoneType.Alarm,
           channelShowBadge: true,
           enableVibration: true,
           enableLights: true,
@@ -96,15 +99,18 @@ class AlarmService {
           wakeUpScreen: true,
           fullScreenIntent: true,
           autoDismissible: false,
+          locked: true,
           category: NotificationCategory.Alarm,
           displayOnBackground: true,
           displayOnForeground: true,
           payload: {
             'alarmId': alarm.id,
             'medicineName': alarm.name,
-            'time': '${target.hour}:${target.minute}',
+            'time':
+                '${target.hour.toString().padLeft(2, '0')}:${target.minute.toString().padLeft(2, '0')}',
             'day': _weekdayToKor(target.weekday),
             'notificationId': '$snoozeId',
+            'fs': '1',
           },
         ),
         actionButtons: [
@@ -113,7 +119,7 @@ class AlarmService {
             label: '복용 완료',
             actionType: ActionType.SilentAction,
           ),
-          NotificationActionButton(key: actionKeyCheckOthers, label: '이의 약 체크'),
+          NotificationActionButton(key: actionKeyCheckOthers, label: '이외 약 체크'),
         ],
         schedule: NotificationCalendar(
           year: target.year,
@@ -220,14 +226,28 @@ class AlarmService {
       await HistoryService().markTaken(
         scheduleId: matchId,
         scheduledDate: _formatYMD(today),
+        // 백엔드는 HH:mm 형식을 기대할 수 있어 분 단위로 전달
         scheduledTime: timeHms.substring(0, 5),
       );
       if (_verboseLogs) {
-        print('복용 완료 처리 API 호출 성공: scheduleId=$matchId');
+        print('복용 완료 처리 API 호출 성공: scheduleId=$matchId time=$timeHms');
       }
     } catch (e) {
       print('복용 완료 API 호출 실패: $e');
     }
+  }
+
+  // 외부(UI)에서 복용 완료를 호출할 수 있도록 공개 메서드 제공
+  static Future<void> markTakenFromUi({
+    required String medicineName,
+    required String dayKor,
+    required String hhmm,
+  }) async {
+    await _markTakenBestEffort(
+      medicineName: medicineName,
+      dayKor: dayKor,
+      hhmm: hhmm,
+    );
   }
 
   @pragma('vm:entry-point')
@@ -275,21 +295,12 @@ class AlarmService {
         // 홈 화면으로 이동
         final state = _navigatorKey?.currentState;
         if (state != null) {
-          state.pushNamed('/home');
+          state.pushNamedAndRemoveUntil('/home', (route) => false);
           return;
         }
       }
-      _navigatorKey?.currentState?.push(
-        MaterialPageRoute(
-          builder: (_) => FullscreenAlarmPage(
-            alarm: alarm,
-            time: TimeOfDay(hour: hour, minute: minute),
-            day: day,
-            notificationId: notifId,
-          ),
-          fullscreenDialog: true,
-        ),
-      );
+      // 기본 동작(버튼 키 없음)은 아무 것도 하지 않음 - 자동 네비게이션 방지
+      return;
     } catch (e) {
       print('전체화면 이동 실패: $e');
     }
@@ -307,42 +318,8 @@ class AlarmService {
     ReceivedNotification receivedNotification,
   ) async {
     print('알림 표시됨: ${receivedNotification.title}');
-    try {
-      final payload = receivedNotification.payload ?? {};
-      final alarmId = payload['alarmId'] ?? '';
-      final name = payload['medicineName'] ?? '약';
-      final timeStr = payload['time'] ?? '08:00';
-      final day = payload['day'] ?? '월';
-      final notifId = receivedNotification.id ?? 0;
-
-      final hour = int.tryParse(timeStr.split(':').first) ?? 8;
-      final minute = int.tryParse(timeStr.split(':').last) ?? 0;
-
-      // 앱이 전경에 올라온 직후 Navigator가 준비될 시간을 주기 위해 지연
-      Future.delayed(const Duration(milliseconds: 150), () {
-        final state = _navigatorKey?.currentState;
-        if (state != null) {
-          state.push(
-            MaterialPageRoute(
-              builder: (_) => FullscreenAlarmPage(
-                alarm: MedicineAlarm(
-                  id: alarmId.isEmpty ? null : alarmId,
-                  name: name,
-                  times: [TimeOfDay(hour: hour, minute: minute)],
-                  days: [day],
-                ),
-                time: TimeOfDay(hour: hour, minute: minute),
-                day: day,
-                notificationId: notifId,
-              ),
-              fullscreenDialog: true,
-            ),
-          );
-        }
-      });
-    } catch (e) {
-      print('표시 콜백 내 네비게이션 실패: $e');
-    }
+    // FullScreen Intent 구조: 표시 콜백에서는 네비게이션하지 않음.
+    // 안드로이드가 풀스크린 인텐트로 앱을 깨울 때, 앱 시작(initial action)에서 풀스크린 라우트로 이동.
   }
 
   @pragma('vm:entry-point')
@@ -455,15 +432,18 @@ class AlarmService {
           wakeUpScreen: true,
           fullScreenIntent: true,
           autoDismissible: false,
+          locked: true,
           category: NotificationCategory.Alarm,
           displayOnBackground: true,
           displayOnForeground: true,
           payload: {
             'alarmId': alarm.id,
             'medicineName': alarm.name,
-            'time': '${time.hour}:${time.minute}',
+            'time':
+                '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
             'day': day,
             'notificationId': '$notificationId',
+            'fs': '1',
           },
         ),
         actionButtons: [
@@ -472,7 +452,7 @@ class AlarmService {
             label: '복용 완료',
             actionType: ActionType.SilentAction,
           ),
-          NotificationActionButton(key: actionKeyCheckOthers, label: '이의 약 체크'),
+          NotificationActionButton(key: actionKeyCheckOthers, label: '이외 약 체크'),
         ],
         schedule: NotificationCalendar(
           year: nextAlarmTime.year,
