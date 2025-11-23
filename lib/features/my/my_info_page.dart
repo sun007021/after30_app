@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/common/page_title.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class MyInfoPage extends StatefulWidget {
   const MyInfoPage({super.key});
@@ -15,6 +16,13 @@ class _MyInfoPageState extends State<MyInfoPage> {
   String? _email;
   String? _imageUrl;
   bool _marketingConsent = false;
+
+  Future<void> _openExternalLink(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -100,13 +108,21 @@ class _MyInfoPageState extends State<MyInfoPage> {
                       const _SectionTitle('기타 정보'),
                       const Divider(height: 24),
                       const SizedBox(height: 4),
-                      const _InfoRow(label: '개인정보 수집 및 이용 동의', value: '동의'),
+                      _InfoRow(
+                        label: '개인정보 수집 및 이용 동의',
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openExternalLink(
+                          'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link',
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      const _InfoRow(label: '서비스 이용약관', value: '동의'),
-                      const SizedBox(height: 12),
-                      const _InfoRow(label: '실명 인증된 아이디로 가입', value: '동의'),
-                      const SizedBox(height: 12),
-                      const _InfoRow(label: '위치기반 서비스 이용약관', value: '동의'),
+                      _InfoRow(
+                        label: '서비스 이용약관',
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openExternalLink(
+                          'https://www.notion.so/30-2b2ac07ca4e98040a729c7433c26a896?source=copy_link',
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -161,8 +177,10 @@ class _SectionTitle extends StatelessWidget {
 
 class _InfoRow extends StatelessWidget {
   final String label;
-  final String value;
-  const _InfoRow({required this.label, required this.value});
+  final String? value;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  const _InfoRow({required this.label, this.value, this.trailing, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -179,16 +197,32 @@ class _InfoRow extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.centerRight,
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
-            ),
+            child: onTap != null
+                ? InkWell(
+                    onTap: onTap,
+                    child:
+                        trailing ??
+                        Text(
+                          value ?? '-',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                        ),
+                  )
+                : (trailing ??
+                      Text(
+                        value ?? '-',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                      )),
           ),
         ),
       ],
     );
   }
 }
-
-// (삭제됨) 우측 화살표 행은 더 이상 사용하지 않습니다.

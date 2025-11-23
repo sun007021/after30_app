@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'package:after30/features/calendar/data/history_service.dart';
+import 'package:after30/features/alarm/data/schedule_service.dart';
 import 'package:after30/features/alarm/ui/fullscreen_alarm_page.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+@pragma('vm:entry-point')
 class AlarmService {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
   AlarmService._internal();
   static const bool _verboseLogs = false; // 상세 로그 스위치
+  static const String actionKeySnooze10 = 'SNOOZE_10';
+  static const String actionKeyCheckOthers = 'CHECK_OTHERS';
 
   static const String _alarmsKeyLegacy = 'medicine_alarms';
   static String? _currentUserId; // 사용자 네임스페이스
@@ -102,6 +107,14 @@ class AlarmService {
             'notificationId': '$snoozeId',
           },
         ),
+        actionButtons: [
+          NotificationActionButton(
+            key: actionKeySnooze10,
+            label: '복용 완료',
+            actionType: ActionType.SilentAction,
+          ),
+          NotificationActionButton(key: actionKeyCheckOthers, label: '이의 약 체크'),
+        ],
         schedule: NotificationCalendar(
           year: target.year,
           month: target.month,
@@ -126,12 +139,104 @@ class AlarmService {
     return days[idx];
   }
 
+  static String _formatYMD(DateTime d) {
+    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  static String _normalizeTimeToHhMmSs(String s) {
+    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?').firstMatch(s);
+    if (m != null) {
+      final hh = (m.group(1) ?? '0').padLeft(2, '0');
+      final mm = m.group(2) ?? '00';
+      final ss = m.group(3) ?? '00';
+      return '$hh:$mm:$ss';
+    }
+    if (RegExp(r'^\d{3,4}$').hasMatch(s)) {
+      final p = s.padLeft(4, '0');
+      return '${p.substring(0, 2)}:${p.substring(2, 4)}:00';
+    }
+    return s;
+  }
+
+  static String _korDayToEnum(String dayKor) {
+    switch (dayKor) {
+      case '월':
+        return 'MON';
+      case '화':
+        return 'TUE';
+      case '수':
+        return 'WED';
+      case '목':
+        return 'THU';
+      case '금':
+        return 'FRI';
+      case '토':
+        return 'SAT';
+      case '일':
+        return 'SUN';
+      default:
+        return 'MON';
+    }
+  }
+
+  static Future<void> _markTakenBestEffort({
+    required String medicineName,
+    required String dayKor,
+    required String hhmm,
+  }) async {
+    try {
+      final schedules = await ScheduleService().getSchedules(
+        includeInactive: false,
+      );
+      final dayEnum = _korDayToEnum(dayKor);
+      final timeHms = _normalizeTimeToHhMmSs(hhmm);
+      int? matchId;
+      for (final s in schedules) {
+        if (s is! Map<String, dynamic>) continue;
+        final name = (s['medication_name'] as String?) ?? '';
+        final times = ((s['times'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList();
+        final repeatDays = ((s['repeat_days'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList();
+        final normalizedTimes = times.map(_normalizeTimeToHhMmSs).toList();
+        final everyDay = repeatDays.isEmpty || repeatDays.length == 7;
+        final dayOk = everyDay || repeatDays.contains(dayEnum);
+        if (name == medicineName &&
+            dayOk &&
+            normalizedTimes.contains(timeHms)) {
+          matchId = (s['id'] as num?)?.toInt();
+          if (matchId != null) break;
+        }
+      }
+      if (matchId == null) {
+        if (_verboseLogs) {
+          print('복용 완료 매칭 실패: name=$medicineName day=$dayEnum time=$timeHms');
+        }
+        return;
+      }
+      final today = DateTime.now();
+      await HistoryService().markTaken(
+        scheduleId: matchId,
+        scheduledDate: _formatYMD(today),
+        scheduledTime: timeHms.substring(0, 5),
+      );
+      if (_verboseLogs) {
+        print('복용 완료 처리 API 호출 성공: scheduleId=$matchId');
+      }
+    } catch (e) {
+      print('복용 완료 API 호출 실패: $e');
+    }
+  }
+
   @pragma('vm:entry-point')
   static Future<void> _onNotificationTapped(
     ReceivedAction receivedAction,
   ) async {
     // 알람 탭 시 전체화면 페이지로 이동
     try {
+      final pressedKey = receivedAction.buttonKeyPressed;
       final payload = receivedAction.payload ?? {};
       final alarmId = payload['alarmId'] ?? '';
       final name = payload['medicineName'] ?? '약';
@@ -151,6 +256,29 @@ class AlarmService {
         days: [day],
       );
 
+      // 액션 버튼 처리
+      if (pressedKey == actionKeySnooze10) {
+        // 복용 완료: 현재 알림만 닫고 종료
+        try {
+          await _markTakenBestEffort(
+            medicineName: name,
+            dayKor: day,
+            hhmm: timeStr,
+          );
+          await AwesomeNotifications().cancel(notifId);
+          print('복용 완료 처리됨: notificationId=$notifId');
+        } catch (e) {
+          print('복용 완료 처리 실패: $e');
+        }
+        return;
+      } else if (pressedKey == actionKeyCheckOthers) {
+        // 홈 화면으로 이동
+        final state = _navigatorKey?.currentState;
+        if (state != null) {
+          state.pushNamed('/home');
+          return;
+        }
+      }
       _navigatorKey?.currentState?.push(
         MaterialPageRoute(
           builder: (_) => FullscreenAlarmPage(
@@ -338,6 +466,14 @@ class AlarmService {
             'notificationId': '$notificationId',
           },
         ),
+        actionButtons: [
+          NotificationActionButton(
+            key: actionKeySnooze10,
+            label: '복용 완료',
+            actionType: ActionType.SilentAction,
+          ),
+          NotificationActionButton(key: actionKeyCheckOthers, label: '이의 약 체크'),
+        ],
         schedule: NotificationCalendar(
           year: nextAlarmTime.year,
           month: nextAlarmTime.month,

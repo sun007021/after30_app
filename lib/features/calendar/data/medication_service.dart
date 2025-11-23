@@ -33,6 +33,27 @@ class MedicationService {
     final prefs = await SharedPreferences.getInstance();
     final userId = await UserStore.getCurrentUserId();
 
+    // /schedules/의 created_at 기준일(가장 이른 생성일)을 계산
+    DateTime? earliestCreatedAtDateOnly;
+    try {
+      for (final s in schedules) {
+        if (s is! Map<String, dynamic>) continue;
+        final createdAtStr = s['created_at']?.toString();
+        if (createdAtStr == null || createdAtStr.trim().isEmpty) continue;
+        final parsed = DateTime.tryParse(createdAtStr);
+        if (parsed == null) continue;
+        final local = parsed.toLocal();
+        final only = DateTime(local.year, local.month, local.day);
+        if (earliestCreatedAtDateOnly == null ||
+            only.isBefore(earliestCreatedAtDateOnly)) {
+          earliestCreatedAtDateOnly = only;
+        }
+      }
+    } catch (_) {
+      // created_at 파싱 실패 시 필터 미적용
+      earliestCreatedAtDateOnly = null;
+    }
+
     final totalDays = end.difference(start).inDays.abs() + 1;
     final daysInRange = List.generate(
       totalDays,
@@ -85,6 +106,11 @@ class MedicationService {
       }
 
       for (final d in daysInRange) {
+        // created_at 이전 날짜는 달력 게이지(=약 항목) 생성 안 함
+        if (earliestCreatedAtDateOnly != null) {
+          final onlyDay = DateTime(d.year, d.month, d.day);
+          if (onlyDay.isBefore(earliestCreatedAtDateOnly)) continue;
+        }
         // 시작일이 지정된 경우, 시작일 이전 날짜는 스킵
         if (startDate != null) {
           final onlyDay = DateTime(d.year, d.month, d.day);
@@ -242,6 +268,13 @@ class MedicationService {
     }
 
     meds.sort((a, b) => a.time.compareTo(b.time));
+    // 히스토리 보강 이후에도 created_at 이전 날짜 항목은 제거
+    if (earliestCreatedAtDateOnly != null) {
+      meds.removeWhere((m) {
+        final only = DateTime(m.date.year, m.date.month, m.date.day);
+        return only.isBefore(earliestCreatedAtDateOnly!);
+      });
+    }
     return meds;
   }
 }

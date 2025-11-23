@@ -15,12 +15,17 @@ import 'package:after30/services/invite_view_model.dart';
 import 'package:after30/features/my/my_page.dart';
 import 'package:after30/features/my/my_info_page.dart';
 import 'package:after30/core/storage/user_store.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:after30/services/notifications/fcm_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
 
   // 알람 서비스 초기화
   await AlarmService().initialize();
+  // FCM 서비스 초기화(포그라운드 수신 시 로컬 알림 표시)
+  await FcmService.initialize();
   // 내비게이터 키 등록(알림 탭 시 라우팅)
   AlarmService.setNavigatorKey(_navigatorKey);
 
@@ -68,6 +73,8 @@ class _MyAppState extends State<MyApp> {
     // AlarmService의 알림 리스너 설정
     // 실제로는 MethodChannel을 사용하여 네이티브 코드와 통신해야 합니다
   }
+
+  // FCM 관련 로직은 FcmService에서 전역 등록됩니다.
 
   @override
   Widget build(BuildContext context) {

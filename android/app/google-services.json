@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "608048776627",
+    "project_id": "after30-c854a",
+    "storage_bucket": "after30-c854a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608048776627:android:b7b093b6780c4eef87b7c6",
+        "android_client_info": {
+          "package_name": "com.example.after30"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzRlQdfiymQEiShuxuShH-99a8tYY4kYM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

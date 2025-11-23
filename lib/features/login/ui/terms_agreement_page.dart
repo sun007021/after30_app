@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TermsAgreementPage extends StatefulWidget {
   const TermsAgreementPage({super.key});
@@ -36,6 +37,15 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     });
   }
 
+  Future<void> _openExternalLink(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      debugPrint('Could not launch $url');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,7 +60,7 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(
                     _horizontalPadding,
-                    200,
+                    300,
                     _horizontalPadding,
                     24,
                   ),
@@ -65,29 +75,16 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
                         value: _agreePersonalInfo,
                         onChanged: (v) =>
                             setState(() => _agreePersonalInfo = v),
+                        linkUrl:
+                            'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link',
                       ),
                       _buildTermRow(
                         title: '(필수)서비스 이용약관',
                         value: _agreeServiceTerms,
                         onChanged: (v) =>
                             setState(() => _agreeServiceTerms = v),
-                      ),
-                      _buildTermRow(
-                        title: '(필수)실명 인증된 아이디로 가입',
-                        value: _agreeRealNameId,
-                        onChanged: (v) => setState(() => _agreeRealNameId = v),
-                      ),
-                      _buildTermRow(
-                        title: '(필수)위치기반 서비스 이용약관',
-                        value: _agreeLocationBased,
-                        onChanged: (v) =>
-                            setState(() => _agreeLocationBased = v),
-                      ),
-                      _buildTermRow(
-                        title: '(선택)광고 정보 수신 동의',
-                        value: _agreeMarketing,
-                        onChanged: (v) => setState(() => _agreeMarketing = v),
-                        isOptional: true,
+                        linkUrl:
+                            'https://www.notion.so/30-2b2ac07ca4e98040a729c7433c26a896?source=copy_link',
                       ),
                       const SizedBox(height: 24),
                       _buildAgreeButton(context),
@@ -209,7 +206,7 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     required String title,
     required bool value,
     required ValueChanged<bool> onChanged,
-    bool isOptional = false,
+    String? linkUrl,
   }) {
     return InkWell(
       onTap: () => onChanged(!value),
@@ -239,7 +236,10 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
                 ),
               ),
             ),
-            const Icon(Icons.chevron_right, color: Color(0xFF111111)),
+            InkWell(
+              onTap: linkUrl != null ? () => _openExternalLink(linkUrl) : null,
+              child: const Icon(Icons.chevron_right, color: Color(0xFF111111)),
+            ),
           ],
         ),
       ),
