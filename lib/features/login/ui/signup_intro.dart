@@ -6,6 +6,7 @@ import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/home/ui/home.dart';
+import 'package:after30/services/notifications/fcm_service.dart';
 
 class SignupIntroPage extends StatefulWidget {
   const SignupIntroPage({super.key});
@@ -42,6 +43,8 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
       await UserStore.setCurrentUserId(userId);
       AlarmService.setCurrentUserId(userId);
       await AlarmService().rescheduleAllActiveFromStorage();
+      // 로그인 성공 시 FCM 토큰을 백엔드로 동기화
+      await FcmService.syncTokenToBackend();
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const HomePage()),

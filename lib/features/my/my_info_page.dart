@@ -3,6 +3,7 @@ import 'package:after30/features/common/navigationBar.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/common/page_title.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:after30/features/my/data/my_profile_service.dart';
 
 class MyInfoPage extends StatefulWidget {
   const MyInfoPage({super.key});
@@ -16,6 +17,7 @@ class _MyInfoPageState extends State<MyInfoPage> {
   String? _email;
   String? _imageUrl;
   bool _marketingConsent = false;
+  bool _isKakaoLoggedIn = false;
 
   Future<void> _openExternalLink(String url) async {
     final Uri uri = Uri.parse(url);
@@ -45,11 +47,30 @@ class _MyInfoPageState extends State<MyInfoPage> {
         _nickname = _nickname ?? account?.profile?.nickname ?? '사용자';
         _imageUrl = _imageUrl ?? account?.profile?.profileImageUrl;
         _email = account?.email;
+        _isKakaoLoggedIn = true;
       });
     } catch (_) {
-      // 권한이 없거나 로그인 안 된 경우: 전달받은 값만 사용
+      // 카카오 미로그인(=이메일 로그인 등)인 경우 백엔드 프로필 조회
+      await _loadBackendProfile();
+    }
+  }
+
+  Future<void> _loadBackendProfile() async {
+    try {
+      final profile = await MyProfileService().getMyProfile();
       if (!mounted) return;
-      setState(() {});
+      setState(() {
+        _nickname = _nickname ?? profile.name ?? '사용자';
+        _email = profile.email ?? _email;
+        _marketingConsent = profile.allowMarketing ?? _marketingConsent;
+        _imageUrl = _imageUrl ?? profile.profileImageUrl;
+        _isKakaoLoggedIn = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isKakaoLoggedIn = false;
+      });
     }
   }
 
@@ -93,7 +114,8 @@ class _MyInfoPageState extends State<MyInfoPage> {
                       const SizedBox(height: 16),
                       _InfoRow(label: '이메일 주소', value: _email ?? '-'),
                       const SizedBox(height: 16),
-                      const _InfoRow(label: '연동된 SSO', value: '카카오톡'),
+                      if (_isKakaoLoggedIn)
+                        const _InfoRow(label: '연동된 SSO', value: '카카오톡'),
                     ],
                   ),
                 ),

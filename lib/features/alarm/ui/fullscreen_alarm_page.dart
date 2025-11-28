@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 class FullscreenAlarmPage extends StatefulWidget {
@@ -38,6 +39,23 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
     } catch (_) {}
     // 홈으로 이동하면서 기존 스택 제거 -> 뒤로가기 시 풀스크린으로 돌아오지 않도록
     if (context.mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+    }
+  }
+
+  Future<void> _onComplete(BuildContext context) async {
+    try {
+      final hh = widget.time.hour.toString().padLeft(2, '0');
+      final mm = widget.time.minute.toString().padLeft(2, '0');
+      await AlarmService.markTakenFromUi(
+        medicineName: widget.alarm.name,
+        dayKor: widget.day,
+        hhmm: '$hh:$mm',
+      );
+      await AwesomeNotifications().cancel(widget.notificationId);
+    } catch (_) {}
+    if (context.mounted) {
+      // 스택을 정리하고 홈으로 이동하여 스타트업 스피너(무한 로딩) 상태를 피한다
       Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     }
   }
@@ -116,15 +134,23 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 40),
-                // 중앙 슬라이드(약 체크하러 가기)
+                // 상단 슬라이드(복용 완료)
+                _SlideToActButton(
+                  label: '슬라이드하여 복용 완료',
+                  backgroundColor: const Color(0xFF3A3A3A),
+                  onCompleted: () => _onComplete(context),
+                  icon: Icons.check_rounded,
+                  iconColor: const Color(0xFF4CAF50),
+                ),
+                const SizedBox(height: 16),
+                // 하단 슬라이드(약 체크하러 가기)
                 _SlideToActButton(
                   label: '슬라이드하여 약 체크하러 가기',
-                  backgroundColor: const Color(0xFF3A3A3A),
+                  backgroundColor: const Color(0xFF505050),
                   onCompleted: () => _onCheckOthers(context),
                   icon: Icons.arrow_forward_rounded,
                   iconColor: Colors.white,
                 ),
-                const Spacer(),
                 const SizedBox(height: 24),
               ],
             ),

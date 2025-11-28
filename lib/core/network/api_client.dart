@@ -37,7 +37,8 @@ class ApiClient {
         },
         onError: (error, handler) async {
           final skipAuth = error.requestOptions.extra['skipAuth'] == true;
-          if (!skipAuth && _shouldAttemptRefresh(error)) {
+          final noRefresh = error.requestOptions.extra['noRefresh'] == true;
+          if (!skipAuth && !noRefresh && _shouldAttemptRefresh(error)) {
             final refreshed = await _refreshAccessToken();
             if (refreshed) {
               try {

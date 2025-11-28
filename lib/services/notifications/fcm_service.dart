@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:after30/features/my/data/my_profile_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> fcmBackgroundHandler(RemoteMessage message) async {
@@ -38,7 +39,8 @@ class FcmService {
         await AwesomeNotifications().createNotification(
           content: NotificationContent(
             id: id,
-            channelKey: 'medicine_alarms',
+            // 진동이 없는 푸시 전용 채널 사용
+            channelKey: 'push_messages',
             title: title,
             body: body,
             notificationLayout: NotificationLayout.Default,
@@ -58,9 +60,13 @@ class FcmService {
 
     // 토큰 로깅 및 갱신 구독
     await logToken();
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       debugPrint('FCM 토큰 갱신: $newToken');
-      // TODO: 필요 시 백엔드에 갱신 토큰 전송
+      try {
+        await MyProfileService().updateFcmToken(newToken);
+      } catch (e) {
+        debugPrint('FCM 토큰 갱신 백엔드 전송 실패: $e');
+      }
     });
   }
 
@@ -74,6 +80,20 @@ class FcmService {
       }
     } catch (e) {
       debugPrint('FCM 토큰 조회 실패: $e');
+    }
+  }
+
+  static Future<void> syncTokenToBackend() async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null) {
+        debugPrint('FCM 토큰이 없어 백엔드 전송을 건너뜁니다.');
+        return;
+      }
+      await MyProfileService().updateFcmToken(token);
+      debugPrint('FCM 토큰을 백엔드로 동기화했습니다.');
+    } catch (e) {
+      debugPrint('FCM 토큰 백엔드 동기화 실패: $e');
     }
   }
 }

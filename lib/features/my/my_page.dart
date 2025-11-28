@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/common/page_title.dart';
+import 'package:after30/features/my/data/my_profile_service.dart';
+import 'package:dio/dio.dart';
 
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
@@ -49,7 +51,21 @@ class _MyPageState extends State<MyPage> {
         _profileImageUrl = imageUrl;
       });
     } catch (_) {
-      // 무시: 로그인 상태가 아니거나 권한 오류 시 기본 값 사용
+      // 카카오 세션이 없으면 백엔드 프로필 조회 (이메일 로그인 등)
+      await _loadBackendProfile();
+    }
+  }
+
+  Future<void> _loadBackendProfile() async {
+    try {
+      final profile = await MyProfileService().getMyProfile();
+      if (!mounted) return;
+      setState(() {
+        _nickname = profile.name ?? _nickname ?? '사용자';
+        _profileImageUrl = profile.profileImageUrl ?? _profileImageUrl;
+      });
+    } catch (_) {
+      // 프로필 조회 실패 시 기존 기본값 유지
     }
   }
 
@@ -139,7 +155,13 @@ class _MyPageState extends State<MyPage> {
                 Padding(
                   padding: const EdgeInsets.only(left: 16),
                   child: _LinkList(
-                    items: const ['앱 정보', '개인정보 처리방침', '로그아웃', '계정탈퇴', '고객센터'],
+                    items: const [
+                      '앱 정보',
+                      '개인정보 처리방침',
+                      '로그아웃',
+                      '계정탈퇴',
+                      '사용자 의견 보내기',
+                    ],
                     onTapIndex: (i) async {
                       if (i == 2) {
                         // 로그아웃: 토큰 삭제 후 로그인으로 이동
@@ -154,6 +176,8 @@ class _MyPageState extends State<MyPage> {
                             mode: LaunchMode.externalApplication,
                           );
                         }
+                      } else if (i == 3) {
+                        await _handleDeleteAccount(context);
                       }
                     },
                   ),
@@ -241,6 +265,370 @@ class _CardContainer extends StatelessWidget {
 
 Future<void> _logout(BuildContext context) async {
   await AuthService.logout(context);
+}
+
+Future<void> _handleDeleteAccount(BuildContext context) async {
+  // 현재 카카오 세션이 있는지 확인
+  bool hasKakaoSession = false;
+  try {
+    await UserApi.instance.accessTokenInfo();
+    hasKakaoSession = true;
+  } catch (_) {
+    hasKakaoSession = false;
+  }
+
+  if (hasKakaoSession) {
+    // 카카오 재인증 안내 후 재로그인 절차 진행
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            '계정 탈퇴',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+          ),
+          content: const Text('계정 탈퇴를 위해 카카오 인증이 필요합니다. 계속하시겠습니까?'),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      foregroundColor: const Color(0xFF111111),
+                      side: const BorderSide(color: Colors.transparent),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('취소'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1963FF),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('완료'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    try {
+      bool kakaoTalkInstalled = await isKakaoTalkInstalled();
+      OAuthToken? token;
+      if (kakaoTalkInstalled) {
+        try {
+          token = await UserApi.instance.loginWithKakaoTalk();
+        } catch (_) {
+          token = await UserApi.instance.loginWithKakaoAccount();
+        }
+      } else {
+        token = await UserApi.instance.loginWithKakaoAccount();
+      }
+      // 백엔드에 삭제 요청
+      await MyProfileService().deleteAccountWithKakao(token.accessToken);
+      // 카카오 연결 해제 시도 (실패해도 무시)
+      try {
+        await UserApi.instance.unlink();
+      } catch (_) {}
+      if (context.mounted) {
+        await AuthService.logout(context);
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('탈퇴 실패'),
+          content: Text('계정 탈퇴 중 오류가 발생했습니다: $e'),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      foregroundColor: const Color(0xFF111111),
+                      side: const BorderSide(color: Colors.transparent),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('취소'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1963FF),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('확인'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+  } else {
+    // 이메일 로그인: 비밀번호 재입력
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final canSubmit = controller.text.trim().isNotEmpty;
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                '계정 탈퇴',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('계정 탈퇴를 위해 비밀번호를 입력해주세요.'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    obscureText: true,
+                    autofocus: true,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: '비밀번호',
+                      filled: true,
+                      fillColor: const Color(0xFFF9FAFB),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFE5E7EB),
+                          width: 1,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF1963FF),
+                          width: 1.2,
+                        ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              actions: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          foregroundColor: const Color(0xFF111111),
+                          side: const BorderSide(color: Colors.transparent),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          minimumSize: const Size.fromHeight(44),
+                        ),
+                        child: const Text('취소'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: canSubmit
+                            ? () => Navigator.of(ctx).pop(true)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1963FF),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFFD3DEFF),
+                          disabledForegroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          minimumSize: const Size.fromHeight(44),
+                        ),
+                        child: const Text('탈퇴'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (confirmed != true) return;
+    final password = controller.text;
+    if (password.isEmpty) return;
+    try {
+      await MyProfileService().deleteAccountWithPassword(password);
+      if (context.mounted) {
+        await AuthService.logout(context);
+      }
+    } on DioException catch (e) {
+      if (!context.mounted) return;
+      final status = e.response?.statusCode;
+      final message = status == 401
+          ? '비밀번호가 올바르지 않습니다.'
+          : '계정 탈퇴 중 오류가 발생했습니다.';
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('탈퇴 실패'),
+          content: Text(message),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      foregroundColor: const Color(0xFF111111),
+                      side: const BorderSide(color: Colors.transparent),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('취소'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1963FF),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('확인'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('탈퇴 실패'),
+          content: Text('계정 탈퇴 중 오류가 발생했습니다: $e'),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      foregroundColor: const Color(0xFF111111),
+                      side: const BorderSide(color: Colors.transparent),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('취소'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1963FF),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    child: const Text('확인'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+  }
 }
 
 class _SwitchRow extends StatelessWidget {

@@ -65,6 +65,20 @@ class AlarmService {
           enableVibration: true,
           enableLights: true,
         ),
+        // 일반 푸시 알림(FCM) 전용 채널 - 진동 비활성화
+        NotificationChannel(
+          channelKey: 'push_messages',
+          channelName: '푸시 알림',
+          channelDescription: '일반 푸시 알림 채널(진동 없음)',
+          importance: NotificationImportance.High,
+          defaultColor: Colors.blue,
+          ledColor: Colors.blue,
+          playSound: true,
+          defaultRingtoneType: DefaultRingtoneType.Notification,
+          channelShowBadge: true,
+          enableVibration: false,
+          enableLights: true,
+        ),
       ],
     );
 
@@ -531,11 +545,17 @@ class AlarmService {
     await AwesomeNotifications().cancelAll();
   }
 
+  // 모든 예약(스케줄)만 취소
+  Future<void> cancelAllAlarmSchedules() async {
+    await AwesomeNotifications().cancelAllSchedules();
+  }
+
   // 모든 알람 데이터(스케줄 + 저장소) 정리
   Future<void> clearAllAlarmData() async {
     try {
-      // 모든 스케줄 취소
+      // 표시/대기 중인 모든 알림 및 모든 예약 스케줄 취소
       await cancelAllAlarms();
+      await cancelAllAlarmSchedules();
       // 저장된 알람 목록 및 각 알림 ID 키 제거
       final prefs = await SharedPreferences.getInstance();
       // 레거시 키 제거
