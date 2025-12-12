@@ -19,24 +19,25 @@ class AlarmBottomNavigation extends StatelessWidget {
       );
     }
 
-    return SafeArea(
-      top: false,
-      left: false,
-      right: false,
-      bottom: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: const BoxDecoration(
-          color: Color.fromARGB(255, 252, 252, 252),
-          boxShadow: [
-            const BoxShadow(
-              color: Colors.black12,
-              blurRadius: 16,
-              spreadRadius: 0,
-              offset: Offset(0, -2),
-            ),
-          ],
-        ),
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    return Container(
+      padding: EdgeInsets.only(top: 16, bottom: 16 + bottomPadding - 8),
+      decoration: const BoxDecoration(
+        color: Color.fromARGB(255, 252, 252, 252),
+        boxShadow: [
+          const BoxShadow(
+            color: Colors.black12,
+            blurRadius: 16,
+            spreadRadius: 0,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        left: false,
+        right: false,
+        bottom: false,
         child: Transform.translate(
           offset: const Offset(-4, 0),
           child: Row(
