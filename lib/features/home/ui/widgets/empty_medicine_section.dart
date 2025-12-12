@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/utils/responsive.dart';
 
 /// 약이 없을 때 표시되는 빈 상태 섹션
 class EmptyMedicineSection extends StatelessWidget {
@@ -12,51 +13,63 @@ class EmptyMedicineSection extends StatelessWidget {
   Widget build(BuildContext context) {
     const primaryBlue = Color(0xFF235DFF);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+      padding: Responsive.responsivePadding(context, 24, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 8),
+          SizedBox(height: Responsive.responsiveHeight(context, 8)),
           SvgPicture.asset(
             'assets/images/medi_icon.svg',
-            width: 100,
-            height: 100,
+            width: Responsive.responsiveValue(context, 100),
+            height: Responsive.responsiveValue(context, 100),
           ),
-          const SizedBox(height: 50),
+          SizedBox(height: Responsive.responsiveHeight(context, 50)),
           Text(
             title ?? '등록된 약이 없어요',
-            style: const TextStyle(
-              fontSize: 13,
+            style: TextStyle(
+              fontSize: Responsive.responsiveFontSize(context, 13),
               color: Colors.black87,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: Responsive.responsiveHeight(context, 14)),
           ElevatedButton(
             onPressed: onAdd,
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryBlue,
               foregroundColor: Colors.white,
               elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 5),
+              padding: EdgeInsets.symmetric(
+                horizontal: Responsive.responsiveValue(context, 40),
+                vertical: Responsive.responsiveValue(context, 5),
+              ),
               visualDensity: VisualDensity.compact,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(
+                  Responsive.responsiveValue(context, 4),
+                ),
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Text(
                   '약 등록하기',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: Responsive.responsiveFontSize(context, 12),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                SizedBox(width: 8),
-                Icon(Icons.add, size: 18, color: Colors.white),
+                SizedBox(width: Responsive.responsiveWidth(context, 8)),
+                Icon(
+                  Icons.add,
+                  size: Responsive.responsiveIconSize(context, 18),
+                  color: Colors.white,
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: Responsive.responsiveHeight(context, 8)),
         ],
       ),
     );

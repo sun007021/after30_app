@@ -10,6 +10,7 @@ import 'package:after30/features/calendar/ui/widgets/medication_tile.dart';
 import 'package:after30/features/calendar/ui/widgets/week_strip.dart';
 import 'package:after30/features/calendar/ui/widgets/calendar_month_header.dart';
 import 'package:after30/features/calendar/ui/widgets/medication_sheet_header.dart';
+import 'package:after30/utils/responsive.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -57,12 +58,12 @@ class _CalendarPageState extends State<CalendarPage> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     final maxFraction = ((screenHeight - headerTop) / screenHeight).clamp(
-      0.38,
+      0.43,
       0.95,
     );
     // 초기 위치를 화면 "맨 아래"에 가깝게 (핸들바만 보이도록) 고정
     // max 대비 여유는 0.02 남김
-    final initialFraction = (0.38).clamp(0.1, maxFraction - 0.02);
+    final initialFraction = (0.43).clamp(0.1, maxFraction - 0.02);
 
     if (!mounted) return;
     setState(() {
@@ -196,16 +197,24 @@ class _CalendarPageState extends State<CalendarPage> {
           children: [
             Column(
               children: [
-                const SizedBox(height: 8),
+                SizedBox(height: Responsive.responsiveHeight(context, 8)),
                 Container(
                   key: _calendarCardKey,
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  margin: Responsive.responsiveMargin(context, 12, 0),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(
+                      Responsive.responsiveValue(context, 20),
+                    ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
+                    padding: Responsive.responsivePaddingLTRB(
+                      context,
+                      8,
+                      8,
+                      8,
+                      20,
+                    ),
                     child: Column(
                       children: [
                         CalendarMonthHeader(
@@ -271,7 +280,7 @@ class _CalendarPageState extends State<CalendarPage> {
                           calendarStyle: const CalendarStyle(
                             outsideDaysVisible: false,
                           ),
-                          daysOfWeekHeight: 28,
+                          daysOfWeekHeight: 30,
                           calendarBuilders: CalendarBuilders(
                             dowBuilder: (context, day) {
                               const labels = [
@@ -335,75 +344,133 @@ class _CalendarPageState extends State<CalendarPage> {
                 controller: _dragController,
                 expand: false,
                 snap: true,
-                snapSizes: [(_minInitialSheetFraction ?? 0.38), 1.0],
-                minChildSize: (_minInitialSheetFraction ?? 0.38),
-                initialChildSize: (_minInitialSheetFraction ?? 0.38),
+                snapSizes: [(_minInitialSheetFraction ?? 0.43), 1.0],
+                minChildSize: (_minInitialSheetFraction ?? 0.43),
+                initialChildSize: (_minInitialSheetFraction ?? 0.43),
                 maxChildSize: 1.0,
                 builder: (context, scrollController) {
                   return Container(
-                    decoration: const BoxDecoration(color: Colors.white),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                    ),
                     child: CustomScrollView(
                       controller: scrollController,
                       slivers: [
-                        SliverToBoxAdapter(
-                          child: Column(
-                            children: [
-                              const SizedBox(height: 8),
-                              // handle bar
-                              Container(
-                                width: 64,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFCBD5E1),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              MedicationSheetHeader(
-                                selectedDay: _selectedDay,
-                                total: _selectedDay != null
-                                    ? (_totalByDay[dateKey(_selectedDay!)] ?? 0)
-                                    : 0,
-                                done: _selectedDay != null
-                                    ? (_doneByDay[dateKey(_selectedDay!)] ?? 0)
-                                    : 0,
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                          ),
-                        ),
+                        // 핸들바와 날짜 헤더 고정
                         SliverPersistentHeader(
                           pinned: true,
                           delegate: PinnedHeaderDelegate(
-                            height: 64,
-                            child: Container(
-                              color: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                            height: Responsive.responsiveValue(context, 70),
+                            child: SizedBox(
+                              height: Responsive.responsiveValue(context, 70),
+                              child: Container(
+                                color: Colors.white,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.max,
+                                  children: [
+                                    SizedBox(
+                                      height: Responsive.responsiveHeight(
+                                        context,
+                                        8,
+                                      ),
+                                    ),
+                                    // handle bar
+                                    Container(
+                                      width: Responsive.responsiveValue(
+                                        context,
+                                        64,
+                                      ),
+                                      height: Responsive.responsiveValue(
+                                        context,
+                                        5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFCBD5E1),
+                                        borderRadius: BorderRadius.circular(
+                                          Responsive.responsiveValue(
+                                            context,
+                                            3,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      height: Responsive.responsiveHeight(
+                                        context,
+                                        12,
+                                      ),
+                                    ),
+                                    MedicationSheetHeader(
+                                      selectedDay: _selectedDay,
+                                      total: _selectedDay != null
+                                          ? (_totalByDay[dateKey(
+                                                  _selectedDay!,
+                                                )] ??
+                                                0)
+                                          : 0,
+                                      done: _selectedDay != null
+                                          ? (_doneByDay[dateKey(
+                                                  _selectedDay!,
+                                                )] ??
+                                                0)
+                                          : 0,
+                                    ),
+                                    SizedBox(
+                                      height: Responsive.responsiveHeight(
+                                        context,
+                                        12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              alignment: Alignment.centerLeft,
-                              child: WeekStrip(
-                                selectedDay: _selectedDay,
-                                onDaySelected: (d) {
-                                  setState(() {
-                                    _selectedDay = dateKey(d);
-                                    _focusedDay = d;
-                                  });
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (_sheetVisible)
-                                      _recalculateSheetFractions();
-                                  });
-                                },
-                                totalByDay: _totalByDay,
-                                doneByDay: _doneByDay,
+                            ),
+                          ),
+                        ),
+                        // 주간 달력 고정
+                        SliverPersistentHeader(
+                          pinned: true,
+                          delegate: PinnedHeaderDelegate(
+                            height: Responsive.responsiveValue(context, 64),
+                            child: SizedBox(
+                              height: Responsive.responsiveValue(context, 64),
+                              child: Container(
+                                color: Colors.white,
+                                padding: Responsive.responsivePadding(
+                                  context,
+                                  16,
+                                  0,
+                                ),
+                                alignment: Alignment.centerLeft,
+                                child: WeekStrip(
+                                  selectedDay: _selectedDay,
+                                  onDaySelected: (d) {
+                                    setState(() {
+                                      _selectedDay = dateKey(d);
+                                      _focusedDay = d;
+                                    });
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (_sheetVisible)
+                                            _recalculateSheetFractions();
+                                        });
+                                  },
+                                  totalByDay: _totalByDay,
+                                  doneByDay: _doneByDay,
+                                ),
                               ),
                             ),
                           ),
                         ),
                         //주간, 약 목록 간격
-                        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: Responsive.responsiveHeight(context, 12),
+                          ),
+                        ),
                         Builder(
                           builder: (_) {
                             final list = medsForSelected();
@@ -415,14 +482,20 @@ class _CalendarPageState extends State<CalendarPage> {
                                     '선택한 날짜에 기록이 없습니다',
                                     style: TextStyle(
                                       color: Colors.black.withOpacity(0.6),
+                                      fontSize: Responsive.responsiveFontSize(
+                                        context,
+                                        14,
+                                      ),
                                     ),
                                   ),
                                 ),
                               );
                             }
                             return SliverPadding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                              padding: Responsive.responsivePadding(
+                                context,
+                                16,
+                                0,
                               ),
                               sliver: SliverList(
                                 delegate: SliverChildBuilderDelegate((
@@ -438,7 +511,11 @@ class _CalendarPageState extends State<CalendarPage> {
                             );
                           },
                         ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: Responsive.responsiveHeight(context, 20),
+                          ),
+                        ),
                       ],
                     ),
                   );

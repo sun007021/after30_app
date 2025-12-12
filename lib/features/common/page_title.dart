@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/utils/responsive.dart';
 
 class PageTitle extends StatelessWidget {
   final String title;
@@ -9,10 +10,14 @@ class PageTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: margin ?? const EdgeInsets.fromLTRB(20, 24, 20, 8),
+      padding:
+          margin ?? Responsive.responsivePaddingLTRB(context, 20, 24, 20, 8),
       child: Text(
         title,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          fontSize: Responsive.responsiveFontSize(context, 20),
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

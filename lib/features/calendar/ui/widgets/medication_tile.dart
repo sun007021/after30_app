@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/calendar/ui/widgets/chip_widget.dart';
 import 'package:after30/features/calendar/ui/widgets/calendar_utils.dart';
+import 'package:after30/utils/responsive.dart';
 
 /// 약물 타일 위젯
 class MedicationTile extends StatelessWidget {
@@ -63,10 +64,10 @@ class MedicationTile extends StatelessWidget {
     );
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: Responsive.responsiveValue(context, 12)),
       decoration: deco,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(Responsive.responsiveValue(context, 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -118,41 +119,53 @@ class MedicationTile extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: Responsive.responsiveHeight(context, 12)),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: 45,
-                  height: 45,
+                  width: Responsive.responsiveIconSize(context, 45),
+                  height: Responsive.responsiveIconSize(context, 45),
                   alignment: Alignment.center,
                   child: isTaken
                       ? SvgPicture.asset(
                           'assets/images/alarmList_active.svg',
-                          width: 45,
-                          height: 45,
+                          width: Responsive.responsiveIconSize(context, 45),
+                          height: Responsive.responsiveIconSize(context, 45),
                         )
                       : (isMissed
                             ? SvgPicture.asset(
                                 'assets/images/alarmList_late.svg',
-                                width: 45,
-                                height: 45,
+                                width: Responsive.responsiveIconSize(
+                                  context,
+                                  45,
+                                ),
+                                height: Responsive.responsiveIconSize(
+                                  context,
+                                  45,
+                                ),
                               )
                             : SvgPicture.asset(
                                 'assets/images/alarmList_deactive.svg',
-                                width: 45,
-                                height: 45,
+                                width: Responsive.responsiveIconSize(
+                                  context,
+                                  45,
+                                ),
+                                height: Responsive.responsiveIconSize(
+                                  context,
+                                  45,
+                                ),
                               )),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: Responsive.responsiveWidth(context, 10)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         medication.name,
-                        style: const TextStyle(
-                          fontSize: 17,
+                        style: TextStyle(
+                          fontSize: Responsive.responsiveFontSize(context, 17),
                           fontWeight: FontWeight.w700,
                           color: Colors.black87,
                         ),

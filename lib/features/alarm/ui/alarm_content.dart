@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/ui/widgets/alarm_card.dart';
 import 'package:after30/features/alarm/ui/widgets/empty_alarm_section.dart';
+import 'package:after30/utils/responsive.dart';
 
 class AlarmContent extends StatefulWidget {
   const AlarmContent({super.key});
@@ -217,11 +218,11 @@ class _AlarmContentState extends State<AlarmContent> {
 
     return Expanded(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+        padding: Responsive.responsivePadding(context, 16, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 8),
+            SizedBox(height: Responsive.responsiveHeight(context, 8)),
             ..._alarms.asMap().entries.map((entry) {
               final idx = entry.key;
               final alarm = entry.value;
@@ -243,28 +244,40 @@ class _AlarmContentState extends State<AlarmContent> {
                 onDelete: () => _deleteAlarm(idx),
               );
             }),
-            const SizedBox(height: 40),
+            SizedBox(height: Responsive.responsiveHeight(context, 40)),
             Center(
               child: Material(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(
+                  Responsive.responsiveValue(context, 4),
+                ),
                 color: Colors.transparent,
                 child: ElevatedButton(
                   onPressed: _goToRegister,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF235DFF),
                     foregroundColor: Colors.white,
-                    minimumSize: const Size(180, 32),
+                    minimumSize: Size(
+                      Responsive.responsiveValue(context, 180),
+                      Responsive.responsiveValue(context, 32),
+                    ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(
+                        Responsive.responsiveValue(context, 4),
+                      ),
                     ),
                     elevation: 0,
                     shadowColor: Colors.transparent,
                   ),
-                  child: const Text('약 등록하기  +'),
+                  child: Text(
+                    '약 등록하기  +',
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveFontSize(context, 14),
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 30),
+            SizedBox(height: Responsive.responsiveHeight(context, 30)),
           ],
         ),
       ),

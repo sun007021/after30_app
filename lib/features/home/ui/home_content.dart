@@ -11,6 +11,7 @@ import 'package:after30/features/home/ui/widgets/home_date_header.dart';
 import 'package:after30/features/home/ui/widgets/empty_medicine_section.dart';
 import 'package:after30/features/home/ui/widgets/add_medicine_tile.dart';
 import 'package:after30/features/home/ui/widgets/medication_dose_tile.dart';
+import 'package:after30/utils/responsive.dart';
 
 class HomeContent extends StatefulWidget {
   final User? user;
@@ -215,7 +216,10 @@ class _HomeContentState extends State<HomeContent> {
       body: Stack(
         children: [
           // 상단 영역 하늘색 배경
-          Container(height: 220, color: const Color(0xFFEBF0FF)),
+          Container(
+            height: Responsive.responsiveValue(context, 220),
+            color: const Color(0xFFEBF0FF),
+          ),
           // 본문 레이어
           SafeArea(
             child: Column(
@@ -233,21 +237,25 @@ class _HomeContentState extends State<HomeContent> {
                         // 상단 파란 배경 스트립 + 타이틀
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.only(
-                            left: 22,
-                            right: 16,
-                            bottom: 5,
+                          padding: EdgeInsets.only(
+                            left: Responsive.responsiveValue(context, 22),
+                            right: Responsive.responsiveValue(context, 16),
+                            bottom: Responsive.responsiveValue(context, 5),
                           ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEAF2FF),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(
+                              Responsive.responsiveValue(context, 12),
+                            ),
                           ),
                           child: const PageTitle(
                             title: '나의 복약 체크 리스트',
                             margin: EdgeInsets.zero,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: Responsive.responsiveHeight(context, 12),
+                        ),
                         Container(
                           decoration: const BoxDecoration(
                             color: Colors.white,
@@ -258,10 +266,11 @@ class _HomeContentState extends State<HomeContent> {
                           ),
                           child: Padding(
                             padding: EdgeInsets.fromLTRB(
-                              24,
-                              24,
-                              24,
-                              24 + bottomSafe,
+                              Responsive.responsiveValue(context, 16),
+                              Responsive.responsiveValue(context, 24),
+                              Responsive.responsiveValue(context, 16),
+                              Responsive.responsiveValue(context, 24) +
+                                  bottomSafe,
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
@@ -271,11 +280,18 @@ class _HomeContentState extends State<HomeContent> {
                                   onPreviousDay: () => _changeDate(-1),
                                   onNextDay: () => _changeDate(1),
                                 ),
-                                const SizedBox(height: 8),
+                                SizedBox(
+                                  height: Responsive.responsiveHeight(
+                                    context,
+                                    8,
+                                  ),
+                                ),
                                 if (_isLoading)
-                                  const Padding(
-                                    padding: EdgeInsets.all(24),
-                                    child: Center(
+                                  Padding(
+                                    padding: EdgeInsets.all(
+                                      Responsive.responsiveValue(context, 24),
+                                    ),
+                                    child: const Center(
                                       child: CircularProgressIndicator(),
                                     ),
                                   )
@@ -293,9 +309,19 @@ class _HomeContentState extends State<HomeContent> {
                                       onMarkUncompleted: _markUncompleted,
                                     );
                                   }),
-                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    height: Responsive.responsiveHeight(
+                                      context,
+                                      8,
+                                    ),
+                                  ),
                                   AddMedicineTile(onAdd: _goToRegister),
-                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    height: Responsive.responsiveHeight(
+                                      context,
+                                      10,
+                                    ),
+                                  ),
                                 ],
                               ],
                             ),

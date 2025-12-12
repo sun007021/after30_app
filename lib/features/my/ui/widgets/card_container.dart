@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/utils/responsive.dart';
 
 /// 재사용 가능한 카드 컨테이너 위젯
 class CardContainer extends StatelessWidget {
@@ -11,7 +12,9 @@ class CardContainer extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          Responsive.responsiveValue(context, 12),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x11000000),
@@ -21,7 +24,7 @@ class CardContainer extends StatelessWidget {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: Responsive.responsivePadding(context, 16, 0),
         child: child,
       ),
     );

@@ -7,6 +7,7 @@ import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
+import 'package:after30/utils/responsive.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -103,15 +104,23 @@ class _LoginPageState extends State<LoginPage> {
       builder: (ctx) {
         final bottomSafe = MediaQuery.of(ctx).viewPadding.bottom;
         return Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, bottomSafe + 72),
+          padding: Responsive.responsivePaddingLTRB(
+            ctx,
+            20,
+            20,
+            20,
+            0,
+          ).copyWith(bottom: bottomSafe + Responsive.responsiveValue(ctx, 72)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                height: 48,
+                height: Responsive.responsiveValue(ctx, 48),
                 width: double.infinity,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(
+                    Responsive.responsiveValue(ctx, 12),
+                  ),
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -129,9 +138,9 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: Responsive.responsiveHeight(ctx, 12)),
               SizedBox(
-                height: 48,
+                height: Responsive.responsiveValue(ctx, 48),
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () {
@@ -142,12 +151,17 @@ class _LoginPageState extends State<LoginPage> {
                     foregroundColor: const Color(0xFF111111),
                     side: const BorderSide(color: Colors.transparent),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(
+                        Responsive.responsiveValue(ctx, 12),
+                      ),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     '이메일로 로그인',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveFontSize(ctx, 16),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
@@ -181,8 +195,8 @@ class _LoginPageState extends State<LoginPage> {
                         // 중앙 로고 (고정)
                         SvgPicture.asset(
                           'assets/images/logowithname.svg',
-                          width: 140,
-                          height: 140,
+                          width: Responsive.responsiveValue(context, 140),
+                          height: Responsive.responsiveValue(context, 140),
                         ),
                       ],
                     ),
@@ -192,17 +206,19 @@ class _LoginPageState extends State<LoginPage> {
                   alignment: Alignment.bottomCenter,
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(
-                      39,
+                      Responsive.responsiveValue(context, 39),
                       0,
-                      39,
-                      bottomSafe + 39 + buttonsLift,
+                      Responsive.responsiveValue(context, 39),
+                      bottomSafe +
+                          Responsive.responsiveValue(context, 39) +
+                          buttonsLift,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SizedBox(
-                          height: 45,
+                          height: Responsive.responsiveValue(context, 45),
                           child: ElevatedButton(
                             onPressed: () {
                               Navigator.of(context).pushNamed('/signup-intro');
@@ -212,21 +228,28 @@ class _LoginPageState extends State<LoginPage> {
                               foregroundColor: Colors.white,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(
+                                  Responsive.responsiveValue(context, 12),
+                                ),
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               '회원가입',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: Responsive.responsiveFontSize(
+                                  context,
+                                  16,
+                                ),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
                         SizedBox(
-                          height: 45,
+                          height: Responsive.responsiveHeight(context, 12),
+                        ),
+                        SizedBox(
+                          height: Responsive.responsiveValue(context, 45),
                           child: OutlinedButton(
                             onPressed: _showLoginOptionsSheet,
                             style: OutlinedButton.styleFrom(
@@ -236,19 +259,26 @@ class _LoginPageState extends State<LoginPage> {
                                 width: 1,
                               ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(
+                                  Responsive.responsiveValue(context, 12),
+                                ),
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               '로그인',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: Responsive.responsiveFontSize(
+                                  context,
+                                  16,
+                                ),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        SizedBox(
+                          height: Responsive.responsiveHeight(context, 20),
+                        ),
                       ],
                     ),
                   ),

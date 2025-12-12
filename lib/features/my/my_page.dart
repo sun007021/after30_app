@@ -13,6 +13,7 @@ import 'package:after30/features/my/ui/widgets/card_container.dart';
 import 'package:after30/features/my/ui/widgets/switch_row.dart';
 import 'package:after30/features/my/ui/widgets/link_list.dart';
 import 'package:after30/features/my/ui/widgets/delete_account_dialog.dart';
+import 'package:after30/utils/responsive.dart';
 
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
@@ -97,15 +98,21 @@ class _MyPageState extends State<MyPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            padding: Responsive.responsivePaddingLTRB(context, 20, 24, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const PageTitle(
+                PageTitle(
                   title: '마이페이지',
-                  margin: EdgeInsets.only(left: 16, top: 20),
+                  margin: Responsive.responsiveMarginLTRB(
+                    context,
+                    16,
+                    20,
+                    0,
+                    0,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: Responsive.responsiveHeight(context, 8)),
                 ProfileTile(
                   nickname: _nickname ?? '사용자',
                   imageUrl: _profileImageUrl,
@@ -120,15 +127,20 @@ class _MyPageState extends State<MyPage> {
                     );
                   },
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: Responsive.responsiveHeight(context, 24)),
                 Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: const Text(
+                  padding: EdgeInsets.only(
+                    left: Responsive.responsiveValue(context, 16),
+                  ),
+                  child: Text(
                     '알람설정',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveFontSize(context, 16),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: Responsive.responsiveHeight(context, 12)),
                 CardContainer(
                   child: Column(
                     children: [
@@ -155,9 +167,11 @@ class _MyPageState extends State<MyPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 36),
+                SizedBox(height: Responsive.responsiveHeight(context, 36)),
                 Padding(
-                  padding: const EdgeInsets.only(left: 16),
+                  padding: EdgeInsets.only(
+                    left: Responsive.responsiveValue(context, 16),
+                  ),
                   child: LinkList(
                     items: const [
                       '앱 정보',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/features/alarm/ui/alarm_content.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/common/page_title.dart';
+import 'package:after30/utils/responsive.dart';
 
 class AlarmPage extends StatelessWidget {
   const AlarmPage({super.key});
@@ -15,14 +16,17 @@ class AlarmPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 32),
+            SizedBox(height: Responsive.responsiveHeight(context, 32)),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: Responsive.responsivePadding(context, 24, 0),
               child: Row(
                 children: [
-                  const Text(
+                  Text(
                     '등록된 약',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveFontSize(context, 20),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const Spacer(),
                   GestureDetector(
@@ -33,9 +37,11 @@ class AlarmPage extends StatelessWidget {
                         useSafeArea: true,
                         isScrollControlled: true,
                         backgroundColor: const Color(0xFFEBF0FF),
-                        shape: const RoundedRectangleBorder(
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(16),
+                            top: Radius.circular(
+                              Responsive.responsiveValue(context, 16),
+                            ),
                           ),
                         ),
                         builder: (ctx) {
@@ -48,27 +54,39 @@ class AlarmPage extends StatelessWidget {
                             right: false,
                             bottom: true,
                             child: Padding(
-                              padding: EdgeInsets.fromLTRB(
+                              padding: Responsive.responsivePaddingLTRB(
+                                ctx,
                                 20,
                                 20,
                                 20,
-                                bottomSafe,
-                              ),
+                                0,
+                              ).copyWith(bottom: bottomSafe),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
+                                children: [
                                   Text(
                                     '곧 출시될 기능입니다',
                                     style: TextStyle(
-                                      fontSize: 18,
+                                      fontSize: Responsive.responsiveFontSize(
+                                        ctx,
+                                        18,
+                                      ),
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  SizedBox(height: 8),
+                                  SizedBox(
+                                    height: Responsive.responsiveHeight(ctx, 8),
+                                  ),
                                   Text(
                                     '더 빠른 약 등록을 위한 NFC 관리 기능을 만들고 있어요.',
-                                    style: TextStyle(color: Colors.black54),
+                                    style: TextStyle(
+                                      color: Colors.black54,
+                                      fontSize: Responsive.responsiveFontSize(
+                                        ctx,
+                                        14,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -77,13 +95,17 @@ class AlarmPage extends StatelessWidget {
                         },
                       );
                     },
-                    child: const Padding(
-                      padding: EdgeInsets.only(right: 0, top: 52, bottom: 8),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: 0,
+                        top: Responsive.responsiveValue(context, 52),
+                        bottom: Responsive.responsiveValue(context, 8),
+                      ),
                       child: Text(
                         'NFC 관리하기',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: Responsive.responsiveFontSize(context, 16),
                         ),
                       ),
                     ),
