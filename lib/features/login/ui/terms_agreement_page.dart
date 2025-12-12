@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:after30/utils/responsive.dart';
 
 class TermsAgreementPage extends StatefulWidget {
   const TermsAgreementPage({super.key});
@@ -11,7 +12,8 @@ class TermsAgreementPage extends StatefulWidget {
 
 class _TermsAgreementPageState extends State<TermsAgreementPage> {
   static const Color _primaryBlue = Color(0xFF235DFF);
-  static const double _horizontalPadding = 28;
+  double _horizontalPadding(BuildContext context) =>
+      Responsive.responsiveValue(context, 28);
 
   bool _agreePersonalInfo = false; // (필수) 개인정보 수집 및 이용 동의
   bool _agreeServiceTerms = false; // (필수) 서비스 이용약관
@@ -58,19 +60,20 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
               child: Container(
                 color: Colors.white,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(
-                    _horizontalPadding,
-                    300,
-                    _horizontalPadding,
-                    24,
+                  padding: EdgeInsets.fromLTRB(
+                    _horizontalPadding(context),
+                    Responsive.responsiveValue(context, 300),
+                    _horizontalPadding(context),
+                    Responsive.responsiveValue(context, 24),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildSelectAllTile(),
-                      const SizedBox(height: 1),
-                      const Divider(color: Color(0xFF111111)),
+                      _buildSelectAllTile(context),
+                      SizedBox(height: Responsive.responsiveHeight(context, 1)),
+                      Divider(color: const Color(0xFF111111)),
                       _buildTermRow(
+                        context,
                         title: '(필수)개인정보 수집 및 이용 동의',
                         value: _agreePersonalInfo,
                         onChanged: (v) =>
@@ -79,6 +82,7 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
                             'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link',
                       ),
                       _buildTermRow(
+                        context,
                         title: '(필수)서비스 이용약관',
                         value: _agreeServiceTerms,
                         onChanged: (v) =>
@@ -86,7 +90,9 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
                         linkUrl:
                             'https://www.notion.so/30-2b2ac07ca4e98040a729c7433c26a896?source=copy_link',
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 24),
+                      ),
                       _buildAgreeButton(context),
                     ],
                   ),
@@ -102,11 +108,11 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(
-        _horizontalPadding,
-        5,
-        _horizontalPadding,
-        50,
+      padding: EdgeInsets.fromLTRB(
+        _horizontalPadding(context),
+        Responsive.responsiveValue(context, 5),
+        _horizontalPadding(context),
+        Responsive.responsiveValue(context, 50),
       ),
       decoration: const BoxDecoration(color: _primaryBlue),
       child: Column(
@@ -118,26 +124,29 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
                 onPressed: () => Navigator.of(context).pop(),
                 icon: SvgPicture.asset(
                   'assets/images/signupicon/backicon.svg',
-                  width: 18,
-                  height: 16,
+                  width: Responsive.responsiveValue(context, 18),
+                  height: Responsive.responsiveValue(context, 16),
                 ),
-                padding: EdgeInsets.only(left: 12),
+                padding: EdgeInsets.only(
+                  left: Responsive.responsiveValue(context, 12),
+                ),
                 constraints: const BoxConstraints(),
               ),
             ],
           ),
-          const SizedBox(height: 28),
+          SizedBox(height: Responsive.responsiveHeight(context, 28)),
           Padding(
-            padding: const EdgeInsets.only(left: 12),
-
+            padding: EdgeInsets.only(
+              left: Responsive.responsiveValue(context, 12),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text(
+                Text(
                   '약관동의',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 30,
+                    fontSize: Responsive.responsiveFontSize(context, 30),
                     fontWeight: FontWeight.w700,
                     height: 1.2,
                   ),
@@ -145,16 +154,18 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
               ],
             ),
           ),
-          const SizedBox(height: 9),
+          SizedBox(height: Responsive.responsiveHeight(context, 9)),
           Padding(
-            padding: const EdgeInsets.only(left: 12),
+            padding: EdgeInsets.only(
+              left: Responsive.responsiveValue(context, 12),
+            ),
             child: Row(
               children: [
-                const Text(
+                Text(
                   '필수 및 선택약관에 동의해 주세요',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: Responsive.responsiveFontSize(context, 15),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -166,34 +177,36 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     );
   }
 
-  Widget _buildSelectAllTile() {
+  Widget _buildSelectAllTile(BuildContext context) {
     final bool allCurrentlyAgreed = _allAgreed;
     return GestureDetector(
       onTap: () => _toggleAll(!allCurrentlyAgreed),
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: EdgeInsets.symmetric(
+          vertical: Responsive.responsiveValue(context, 6),
+        ),
         child: Row(
           children: [
             // 전체 동의 상태 아이콘
             allCurrentlyAgreed
                 ? SvgPicture.asset(
                     'assets/images/term/allagree.svg',
-                    width: 24,
-                    height: 24,
+                    width: Responsive.responsiveIconSize(context, 24),
+                    height: Responsive.responsiveIconSize(context, 24),
                   )
                 : SvgPicture.asset(
                     'assets/images/term/notall.svg',
-                    width: 24,
-                    height: 24,
+                    width: Responsive.responsiveIconSize(context, 24),
+                    height: Responsive.responsiveIconSize(context, 24),
                   ),
-            const SizedBox(width: 8),
-            const Text(
+            SizedBox(width: Responsive.responsiveWidth(context, 8)),
+            Text(
               '전체 약관동의',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: Responsive.responsiveFontSize(context, 12),
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF111111),
+                color: const Color(0xFF111111),
               ),
             ),
           ],
@@ -202,7 +215,8 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     );
   }
 
-  Widget _buildTermRow({
+  Widget _buildTermRow(
+    BuildContext context, {
     required String title,
     required bool value,
     required ValueChanged<bool> onChanged,
@@ -211,34 +225,40 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     return InkWell(
       onTap: () => onChanged(!value),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: EdgeInsets.symmetric(
+          vertical: Responsive.responsiveValue(context, 8),
+        ),
         child: Row(
           children: [
             value
                 ? Image.asset(
                     'assets/images/term/agree.png',
-                    width: 24,
-                    height: 24,
+                    width: Responsive.responsiveIconSize(context, 24),
+                    height: Responsive.responsiveIconSize(context, 24),
                   )
                 : SvgPicture.asset(
                     'assets/images/term/disagree.svg',
-                    width: 24,
-                    height: 24,
+                    width: Responsive.responsiveIconSize(context, 24),
+                    height: Responsive.responsiveIconSize(context, 24),
                   ),
-            const SizedBox(width: 8),
+            SizedBox(width: Responsive.responsiveWidth(context, 8)),
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 12,
+                style: TextStyle(
+                  fontSize: Responsive.responsiveFontSize(context, 12),
                   fontWeight: FontWeight.w400,
-                  color: Color(0xFF111111),
+                  color: const Color(0xFF111111),
                 ),
               ),
             ),
             InkWell(
               onTap: linkUrl != null ? () => _openExternalLink(linkUrl) : null,
-              child: const Icon(Icons.chevron_right, color: Color(0xFF111111)),
+              child: Icon(
+                Icons.chevron_right,
+                color: const Color(0xFF111111),
+                size: Responsive.responsiveIconSize(context, 24),
+              ),
             ),
           ],
         ),
@@ -252,8 +272,8 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     return Align(
       alignment: Alignment.center,
       child: SizedBox(
-        height: 30,
-        width: 120,
+        height: Responsive.responsiveHeight(context, 30),
+        width: Responsive.responsiveValue(context, 120),
         child: ElevatedButton(
           onPressed: _allRequiredAgreed
               ? () {
@@ -267,12 +287,17 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
             disabledForegroundColor: Colors.white,
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.circular(
+                Responsive.responsiveValue(context, 5),
+              ),
             ),
           ),
-          child: const Text(
+          child: Text(
             '동의하기',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: Responsive.responsiveFontSize(context, 14),
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),

@@ -4,6 +4,7 @@ import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
+import 'package:after30/utils/responsive.dart';
 
 class MedicineRegisterPage extends StatefulWidget {
   final MedicineAlarm? initialAlarm;
@@ -143,7 +144,7 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
         children: [
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: Responsive.responsivePadding(context, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -205,17 +206,18 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                       ),
                     ],
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    spacing: Responsive.responsiveValue(context, 4),
+                    runSpacing: Responsive.responsiveValue(context, 8),
+                    alignment: WrapAlignment.start,
                     children: _allDays.map((day) {
                       final selected = _selectedDays.contains(day);
                       return GestureDetector(
                         onTap: () => _toggleDay(day),
                         child: Container(
-                          width: 44,
-                          height: 44,
+                          width: Responsive.responsiveValue(context, 44),
+                          height: Responsive.responsiveValue(context, 44),
                           alignment: Alignment.center,
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
                           decoration: BoxDecoration(
                             color: selected
                                 ? const Color(0xFF235DFF)
@@ -235,7 +237,10 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                               fontWeight: selected
                                   ? FontWeight.w700
                                   : FontWeight.w500,
-                              fontSize: 16,
+                              fontSize: Responsive.responsiveFontSize(
+                                context,
+                                16,
+                              ),
                             ),
                           ),
                         ),

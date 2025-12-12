@@ -23,19 +23,19 @@ class AlarmBottomNavigation extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
 
     // 화면 크기에 따라 아이콘 크기와 간격을 동적으로 조정
-    // 작은 화면(360px 이하): 아이콘 38px, 간격 24px
-    // 중간 화면(360-400px): 아이콘 42px, 간격 32px
-    // 큰 화면(400px 이상): 아이콘 45px, 간격 40px
+    // 작은 화면(360px 이하): 아이콘 38px, 간격 32px
+    // 중간 화면(360-400px): 아이콘 42px, 간격 40px
+    // 큰 화면(400px 이상): 아이콘 45px, 간격 48px
     final iconSize = screenWidth <= 360
         ? 38.0
         : screenWidth <= 400
         ? 42.0
         : 45.0;
     final iconSpacing = screenWidth <= 360
-        ? 24.0
-        : screenWidth <= 400
         ? 32.0
-        : 40.0;
+        : screenWidth <= 400
+        ? 40.0
+        : 48.0;
 
     return Container(
       padding: EdgeInsets.only(top: 16, bottom: 16 + bottomPadding - 8),

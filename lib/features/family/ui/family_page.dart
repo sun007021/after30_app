@@ -5,6 +5,7 @@ import 'package:after30/features/family/data/contacts_provider.dart';
 import 'package:after30/features/family/data/phone_util.dart';
 import 'package:after30/features/family/models/invite.dart';
 import 'package:after30/features/common/navigationBar.dart';
+import 'package:after30/utils/responsive.dart';
 
 class FamilyPage extends StatefulWidget {
   const FamilyPage({super.key});
@@ -32,21 +33,21 @@ class _FamilyPageState extends State<FamilyPage> {
       body: Consumer<InviteViewModel>(
         builder: (context, viewModel, child) {
           return Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: Responsive.responsivePadding(context, 16, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildInviteButton(context, viewModel),
-                const SizedBox(height: 24),
-                _buildRecentInvitesList(viewModel),
+                SizedBox(height: Responsive.responsiveHeight(context, 24)),
+                _buildRecentInvitesList(context, viewModel),
                 if (viewModel.state == InviteState.loading)
                   const Center(child: CircularProgressIndicator()),
                 if (viewModel.state == InviteState.error &&
                     viewModel.errorMessage != null)
-                  _buildErrorMessage(viewModel.errorMessage!),
+                  _buildErrorMessage(context, viewModel.errorMessage!),
                 if (viewModel.state == InviteState.success &&
                     viewModel.lastInviteResult != null)
-                  _buildSuccessMessage(viewModel.lastInviteResult!),
+                  _buildSuccessMessage(context, viewModel.lastInviteResult!),
               ],
             ),
           );
@@ -61,26 +62,44 @@ class _FamilyPageState extends State<FamilyPage> {
       onPressed: viewModel.state == InviteState.loading
           ? null
           : () => _showInviteDialog(context, viewModel),
-      icon: const Icon(Icons.person_add),
-      label: const Text('초대하기'),
+      icon: Icon(
+        Icons.person_add,
+        size: Responsive.responsiveIconSize(context, 24),
+      ),
+      label: Text(
+        '초대하기',
+        style: TextStyle(fontSize: Responsive.responsiveFontSize(context, 16)),
+      ),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.yellow[600],
         foregroundColor: Colors.black87,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: EdgeInsets.symmetric(
+          vertical: Responsive.responsiveValue(context, 16),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(
+            Responsive.responsiveValue(context, 12),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildRecentInvitesList(InviteViewModel viewModel) {
+  Widget _buildRecentInvitesList(
+    BuildContext context,
+    InviteViewModel viewModel,
+  ) {
     if (viewModel.recentInvites.isEmpty) {
-      return const Card(
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(16.0),
+          padding: Responsive.responsivePadding(context, 16, 0),
           child: Text(
             '아직 보낸 초대가 없습니다.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: Responsive.responsiveFontSize(context, 14),
+            ),
           ),
         ),
       );
@@ -89,27 +108,34 @@ class _FamilyPageState extends State<FamilyPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '최근 전송한 초대',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: Responsive.responsiveFontSize(context, 18),
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: Responsive.responsiveHeight(context, 12)),
         ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: viewModel.recentInvites.length,
           itemBuilder: (context, index) {
             final invite = viewModel.recentInvites[index];
-            return _buildInviteItem(invite, viewModel);
+            return _buildInviteItem(context, invite, viewModel);
           },
         ),
       ],
     );
   }
 
-  Widget _buildInviteItem(Invite invite, InviteViewModel viewModel) {
+  Widget _buildInviteItem(
+    BuildContext context,
+    Invite invite,
+    InviteViewModel viewModel,
+  ) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: Responsive.responsiveValue(context, 8)),
       child: ListTile(
         leading: Icon(
           invite.channel == InviteChannel.PUSH
@@ -118,14 +144,35 @@ class _FamilyPageState extends State<FamilyPage> {
           color: invite.channel == InviteChannel.PUSH
               ? Colors.blue
               : Colors.green,
+          size: Responsive.responsiveIconSize(context, 24),
         ),
-        title: Text(PhoneUtil.maskPhoneNumber(invite.phone)),
+        title: Text(
+          PhoneUtil.maskPhoneNumber(invite.phone),
+          style: TextStyle(
+            fontSize: Responsive.responsiveFontSize(context, 16),
+          ),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('채널: ${invite.channel == InviteChannel.PUSH ? "푸시" : "SMS"}'),
-            Text('상태: ${_getStatusText(invite.status)}'),
-            Text('전송시간: ${_formatDateTime(invite.createdAt)}'),
+            Text(
+              '채널: ${invite.channel == InviteChannel.PUSH ? "푸시" : "SMS"}',
+              style: TextStyle(
+                fontSize: Responsive.responsiveFontSize(context, 14),
+              ),
+            ),
+            Text(
+              '상태: ${_getStatusText(invite.status)}',
+              style: TextStyle(
+                fontSize: Responsive.responsiveFontSize(context, 14),
+              ),
+            ),
+            Text(
+              '전송시간: ${_formatDateTime(invite.createdAt)}',
+              style: TextStyle(
+                fontSize: Responsive.responsiveFontSize(context, 14),
+              ),
+            ),
           ],
         ),
         trailing: PopupMenuButton<String>(
@@ -142,44 +189,65 @@ class _FamilyPageState extends State<FamilyPage> {
     );
   }
 
-  Widget _buildErrorMessage(String message) {
+  Widget _buildErrorMessage(BuildContext context, String message) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(top: 16),
+      padding: Responsive.responsivePadding(context, 16, 0),
+      margin: EdgeInsets.only(top: Responsive.responsiveValue(context, 16)),
       decoration: BoxDecoration(
         color: Colors.red[50]!,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(
+          Responsive.responsiveValue(context, 8),
+        ),
         border: Border.all(color: Colors.red[200]!),
       ),
       child: Row(
         children: [
-          Icon(Icons.error, color: Colors.red[600]!),
-          const SizedBox(width: 12),
+          Icon(
+            Icons.error,
+            color: Colors.red[600]!,
+            size: Responsive.responsiveIconSize(context, 24),
+          ),
+          SizedBox(width: Responsive.responsiveWidth(context, 12)),
           Expanded(
-            child: Text(message, style: TextStyle(color: Colors.red[700])),
+            child: Text(
+              message,
+              style: TextStyle(
+                color: Colors.red[700],
+                fontSize: Responsive.responsiveFontSize(context, 14),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSuccessMessage(InviteResult result) {
+  Widget _buildSuccessMessage(BuildContext context, InviteResult result) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(top: 16),
+      padding: Responsive.responsivePadding(context, 16, 0),
+      margin: EdgeInsets.only(top: Responsive.responsiveValue(context, 16)),
       decoration: BoxDecoration(
         color: Colors.green[50]!,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(
+          Responsive.responsiveValue(context, 8),
+        ),
         border: Border.all(color: Colors.green[200]!),
       ),
       child: Row(
         children: [
-          Icon(Icons.check_circle, color: Colors.green[600]!),
-          const SizedBox(width: 12),
+          Icon(
+            Icons.check_circle,
+            color: Colors.green[600]!,
+            size: Responsive.responsiveIconSize(context, 24),
+          ),
+          SizedBox(width: Responsive.responsiveWidth(context, 12)),
           Expanded(
             child: Text(
               result.message,
-              style: TextStyle(color: Colors.green[700]),
+              style: TextStyle(
+                color: Colors.green[700],
+                fontSize: Responsive.responsiveFontSize(context, 14),
+              ),
             ),
           ),
         ],

@@ -364,111 +364,111 @@ class _CalendarPageState extends State<CalendarPage> {
                           pinned: true,
                           delegate: PinnedHeaderDelegate(
                             height: Responsive.responsiveValue(context, 70),
-                            child: SizedBox(
+                            child: Container(
                               height: Responsive.responsiveValue(context, 70),
-                              child: Container(
-                                color: Colors.white,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.max,
-                                  children: [
-                                    SizedBox(
-                                      height: Responsive.responsiveHeight(
-                                        context,
-                                        8,
+                              color: Colors.white,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    height: Responsive.responsiveHeight(
+                                      context,
+                                      8,
+                                    ),
+                                  ),
+                                  // handle bar
+                                  Container(
+                                    width: Responsive.responsiveValue(
+                                      context,
+                                      64,
+                                    ),
+                                    height: Responsive.responsiveValue(
+                                      context,
+                                      5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFCBD5E1),
+                                      borderRadius: BorderRadius.circular(
+                                        Responsive.responsiveValue(context, 3),
                                       ),
                                     ),
-                                    // handle bar
-                                    Container(
-                                      width: Responsive.responsiveValue(
-                                        context,
-                                        64,
-                                      ),
-                                      height: Responsive.responsiveValue(
-                                        context,
-                                        5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFCBD5E1),
-                                        borderRadius: BorderRadius.circular(
-                                          Responsive.responsiveValue(
-                                            context,
-                                            3,
-                                          ),
-                                        ),
-                                      ),
+                                  ),
+                                  SizedBox(
+                                    height: Responsive.responsiveHeight(
+                                      context,
+                                      12,
                                     ),
-                                    SizedBox(
-                                      height: Responsive.responsiveHeight(
-                                        context,
-                                        12,
-                                      ),
+                                  ),
+                                  MedicationSheetHeader(
+                                    selectedDay: _selectedDay,
+                                    total: _selectedDay != null
+                                        ? (_totalByDay[dateKey(
+                                                _selectedDay!,
+                                              )] ??
+                                              0)
+                                        : 0,
+                                    done: _selectedDay != null
+                                        ? (_doneByDay[dateKey(_selectedDay!)] ??
+                                              0)
+                                        : 0,
+                                  ),
+                                  SizedBox(
+                                    height: Responsive.responsiveHeight(
+                                      context,
+                                      12,
                                     ),
-                                    MedicationSheetHeader(
-                                      selectedDay: _selectedDay,
-                                      total: _selectedDay != null
-                                          ? (_totalByDay[dateKey(
-                                                  _selectedDay!,
-                                                )] ??
-                                                0)
-                                          : 0,
-                                      done: _selectedDay != null
-                                          ? (_doneByDay[dateKey(
-                                                  _selectedDay!,
-                                                )] ??
-                                                0)
-                                          : 0,
-                                    ),
-                                    SizedBox(
-                                      height: Responsive.responsiveHeight(
-                                        context,
-                                        12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
-                        // 주간 달력 고정
+                        // 주간 달력 고정 (패딩 포함)
                         SliverPersistentHeader(
                           pinned: true,
                           delegate: PinnedHeaderDelegate(
-                            height: Responsive.responsiveValue(context, 64),
-                            child: SizedBox(
-                              height: Responsive.responsiveValue(context, 64),
-                              child: Container(
-                                color: Colors.white,
-                                padding: Responsive.responsivePadding(
-                                  context,
-                                  16,
-                                  0,
-                                ),
-                                alignment: Alignment.centerLeft,
-                                child: WeekStrip(
-                                  selectedDay: _selectedDay,
-                                  onDaySelected: (d) {
-                                    setState(() {
-                                      _selectedDay = dateKey(d);
-                                      _focusedDay = d;
-                                    });
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                          if (_sheetVisible)
-                                            _recalculateSheetFractions();
-                                        });
-                                  },
-                                  totalByDay: _totalByDay,
-                                  doneByDay: _doneByDay,
-                                ),
+                            height: Responsive.responsiveValue(context, 85),
+                            child: Container(
+                              height: Responsive.responsiveValue(context, 85),
+                              color: Colors.white,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.max,
+                                children: [
+                                  Padding(
+                                    padding: Responsive.responsivePadding(
+                                      context,
+                                      16,
+                                      0,
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: WeekStrip(
+                                        selectedDay: _selectedDay,
+                                        onDaySelected: (d) {
+                                          setState(() {
+                                            _selectedDay = dateKey(d);
+                                            _focusedDay = d;
+                                          });
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) {
+                                                if (_sheetVisible)
+                                                  _recalculateSheetFractions();
+                                              });
+                                        },
+                                        totalByDay: _totalByDay,
+                                        doneByDay: _doneByDay,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    height: Responsive.responsiveHeight(
+                                      context,
+                                      20,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        ),
-                        //주간, 약 목록 간격
-                        SliverToBoxAdapter(
-                          child: SizedBox(
-                            height: Responsive.responsiveHeight(context, 12),
                           ),
                         ),
                         Builder(

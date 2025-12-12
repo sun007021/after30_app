@@ -4,6 +4,7 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/common/page_title.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
+import 'package:after30/utils/responsive.dart';
 
 class MyInfoPage extends StatefulWidget {
   const MyInfoPage({super.key});
@@ -81,19 +82,24 @@ class _MyInfoPageState extends State<MyInfoPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            padding: Responsive.responsivePaddingLTRB(context, 20, 24, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 18),
+                  padding: EdgeInsets.only(
+                    top: Responsive.responsiveHeight(context, 18),
+                  ),
                   child: Row(
                     children: [
                       InkWell(
                         onTap: () => Navigator.of(context).pop(),
-                        child: const Icon(Icons.arrow_back_ios_new, size: 22),
+                        child: Icon(
+                          Icons.arrow_back_ios_new,
+                          size: Responsive.responsiveIconSize(context, 22),
+                        ),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: Responsive.responsiveWidth(context, 8)),
                       const PageTitle(
                         title: '내 정보 조회',
                         margin: EdgeInsets.zero,
@@ -101,46 +107,58 @@ class _MyInfoPageState extends State<MyInfoPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: Responsive.responsiveHeight(context, 8)),
 
                 // 기본 정보 카드
                 _Card(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _SectionTitle('기본 정보'),
-                      const Divider(height: 24),
+                      _SectionTitle('기본 정보'),
+                      Divider(height: Responsive.responsiveHeight(context, 24)),
                       _InfoRow(label: '성명', value: _nickname ?? '-'),
-                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 16),
+                      ),
                       _InfoRow(label: '이메일 주소', value: _email ?? '-'),
-                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 16),
+                      ),
                       if (_isKakaoLoggedIn)
                         const _InfoRow(label: '연동된 SSO', value: '카카오톡'),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                SizedBox(height: Responsive.responsiveHeight(context, 20)),
 
                 // 기타 정보 카드
                 _Card(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _SectionTitle('기타 정보'),
-                      const Divider(height: 24),
-                      const SizedBox(height: 4),
+                      _SectionTitle('기타 정보'),
+                      Divider(height: Responsive.responsiveHeight(context, 24)),
+                      SizedBox(height: Responsive.responsiveHeight(context, 4)),
                       _InfoRow(
                         label: '개인정보 수집 및 이용 동의',
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Icon(
+                          Icons.chevron_right,
+                          size: Responsive.responsiveIconSize(context, 24),
+                        ),
                         onTap: () => _openExternalLink(
                           'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link',
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 12),
+                      ),
                       _InfoRow(
                         label: '서비스 이용약관',
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Icon(
+                          Icons.chevron_right,
+                          size: Responsive.responsiveIconSize(context, 24),
+                        ),
                         onTap: () => _openExternalLink(
                           'https://www.notion.so/30-2b2ac07ca4e98040a729c7433c26a896?source=copy_link',
                         ),
@@ -167,7 +185,9 @@ class _Card extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          Responsive.responsiveValue(context, 12),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x11000000),
@@ -177,7 +197,7 @@ class _Card extends StatelessWidget {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: Responsive.responsivePadding(context, 16, 14),
         child: child,
       ),
     );
@@ -192,7 +212,10 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      style: TextStyle(
+        fontSize: Responsive.responsiveFontSize(context, 16),
+        fontWeight: FontWeight.w700,
+      ),
     );
   }
 }
@@ -212,10 +235,13 @@ class _InfoRow extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
+            style: TextStyle(
+              fontSize: Responsive.responsiveFontSize(context, 14),
+              color: Colors.black87,
+            ),
           ),
         ),
-        const SizedBox(width: 1),
+        SizedBox(width: Responsive.responsiveWidth(context, 1)),
         Expanded(
           child: Align(
             alignment: Alignment.centerRight,
@@ -227,8 +253,11 @@ class _InfoRow extends StatelessWidget {
                         Text(
                           value ?? '-',
                           textAlign: TextAlign.right,
-                          style: const TextStyle(
-                            fontSize: 14,
+                          style: TextStyle(
+                            fontSize: Responsive.responsiveFontSize(
+                              context,
+                              14,
+                            ),
                             color: Colors.black87,
                           ),
                         ),
@@ -237,8 +266,8 @@ class _InfoRow extends StatelessWidget {
                       Text(
                         value ?? '-',
                         textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          fontSize: 14,
+                        style: TextStyle(
+                          fontSize: Responsive.responsiveFontSize(context, 14),
                           color: Colors.black87,
                         ),
                       )),

@@ -7,6 +7,7 @@ import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
+import 'package:after30/utils/responsive.dart';
 
 class SignupIntroPage extends StatefulWidget {
   const SignupIntroPage({super.key});
@@ -81,26 +82,39 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
               child: Container(
                 color: Colors.white,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                  padding: Responsive.responsivePaddingLTRB(
+                    context,
+                    24,
+                    32,
+                    24,
+                    24,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: 8),
-                      const Center(
+                      SizedBox(height: Responsive.responsiveHeight(context, 8)),
+                      Center(
                         child: Text(
                           '간편하게 SNS로 가입하세요',
                           style: TextStyle(
-                            color: Color(0xFF111111),
-                            fontSize: 13,
+                            color: const Color(0xFF111111),
+                            fontSize: Responsive.responsiveFontSize(
+                              context,
+                              13,
+                            ),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
                       SizedBox(
-                        height: 48,
+                        height: Responsive.responsiveHeight(context, 20),
+                      ),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 48),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(
+                            Responsive.responsiveValue(context, 12),
+                          ),
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
@@ -115,27 +129,42 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 44),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 44),
+                      ),
                       Row(
                         children: [
-                          const Expanded(
-                            child: Divider(color: Color(0xFFBBBBBB)),
+                          Expanded(
+                            child: Divider(color: const Color(0xFFBBBBBB)),
                           ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: Responsive.responsiveValue(
+                                context,
+                                8,
+                              ),
+                            ),
                             child: Text(
                               '또는',
-                              style: TextStyle(color: Color(0xFF999999)),
+                              style: TextStyle(
+                                color: const Color(0xFF999999),
+                                fontSize: Responsive.responsiveFontSize(
+                                  context,
+                                  14,
+                                ),
+                              ),
                             ),
                           ),
-                          const Expanded(
-                            child: Divider(color: Color(0xFFBBBBBB)),
+                          Expanded(
+                            child: Divider(color: const Color(0xFFBBBBBB)),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
                       SizedBox(
-                        height: 48,
+                        height: Responsive.responsiveHeight(context, 16),
+                      ),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 48),
                         child: OutlinedButton(
                           onPressed: () {
                             Navigator.of(context).pushNamed('/signup-terms');
@@ -147,13 +176,18 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
                               width: 1,
                             ),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(
+                                Responsive.responsiveValue(context, 12),
+                              ),
                             ),
                           ),
-                          child: const Text(
+                          child: Text(
                             '이메일로 가입하기',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: Responsive.responsiveFontSize(
+                                context,
+                                16,
+                              ),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -173,7 +207,7 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 5, 24, 50),
+      padding: Responsive.responsivePaddingLTRB(context, 24, 5, 24, 50),
       decoration: const BoxDecoration(color: _primaryBlue),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,50 +218,55 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
                 onPressed: () => Navigator.of(context).pop(),
                 icon: SvgPicture.asset(
                   'assets/images/signupicon/backicon.svg',
-                  width: 18,
-                  height: 16,
+                  width: Responsive.responsiveValue(context, 18),
+                  height: Responsive.responsiveValue(context, 16),
                 ),
-                padding: EdgeInsets.only(left: 12),
+                padding: EdgeInsets.only(
+                  left: Responsive.responsiveValue(context, 12),
+                ),
                 constraints: const BoxConstraints(),
               ),
             ],
           ),
-          const SizedBox(height: 28),
+          SizedBox(height: Responsive.responsiveHeight(context, 28)),
           Padding(
-            padding: const EdgeInsets.only(left: 12),
-
+            padding: EdgeInsets.only(
+              left: Responsive.responsiveValue(context, 12),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text(
+                Text(
                   '식후 30분',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 30,
+                    fontSize: Responsive.responsiveFontSize(context, 30),
                     fontWeight: FontWeight.w700,
                     height: 1.2,
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: Responsive.responsiveValue(context, 10)),
                 // 제목 오른쪽 로고
                 SvgPicture.asset(
                   'assets/images/signupicon/namelogo.svg',
-                  width: 24,
-                  height: 24,
+                  width: Responsive.responsiveIconSize(context, 24),
+                  height: Responsive.responsiveIconSize(context, 24),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 9),
+          SizedBox(height: Responsive.responsiveHeight(context, 9)),
           Padding(
-            padding: const EdgeInsets.only(left: 12),
+            padding: EdgeInsets.only(
+              left: Responsive.responsiveValue(context, 12),
+            ),
             child: Row(
               children: [
-                const Text(
+                Text(
                   '회원가입',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: Responsive.responsiveFontSize(context, 15),
                     fontWeight: FontWeight.w500,
                   ),
                 ),

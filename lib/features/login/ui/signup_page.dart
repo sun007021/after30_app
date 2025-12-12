@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/core/storage/token_store.dart';
+import 'package:after30/utils/responsive.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -23,14 +24,19 @@ class _SignupPageState extends State<SignupPage> {
   bool _submitting = false;
 
   static const Color _primaryBlue = Color(0xFF235DFF);
-  static const BorderRadius _fieldRadius = BorderRadius.all(
-    Radius.circular(12),
+  BorderRadius _fieldRadius(BuildContext context) => BorderRadius.all(
+    Radius.circular(Responsive.responsiveValue(context, 12)),
   );
-  static const double _fieldIconSize = 12;
-  static const double _placeholderFontSize = 14;
-  static const double _trailingIconSize = 16;
-  static const double _fieldHeight = 46;
-  static const double _fieldWidth = 290;
+  double _fieldIconSize(BuildContext context) =>
+      Responsive.responsiveIconSize(context, 12);
+  double _placeholderFontSize(BuildContext context) =>
+      Responsive.responsiveFontSize(context, 14);
+  double _trailingIconSize(BuildContext context) =>
+      Responsive.responsiveIconSize(context, 16);
+  double _fieldHeight(BuildContext context) =>
+      Responsive.responsiveHeight(context, 46);
+  double _fieldWidth(BuildContext context) =>
+      Responsive.responsiveValue(context, 290);
 
   bool get _isFormValid {
     final nameOk = _nameController.text.trim().isNotEmpty;
@@ -77,49 +83,69 @@ class _SignupPageState extends State<SignupPage> {
               child: Container(
                 color: Colors.white,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                  padding: Responsive.responsivePaddingLTRB(
+                    context,
+                    24,
+                    24,
+                    24,
+                    32,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _labeled(
+                        context,
                         '이름',
                         _iconField(
+                          context,
                           asset: 'assets/images/signupicon/infoicon.svg',
                           child: TextField(
                             controller: _nameController,
-                            decoration: _innerDecoration('이름을 입력하세요'),
+                            decoration: _innerDecoration(context, '이름을 입력하세요'),
                             textInputAction: TextInputAction.next,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 16),
+                      ),
                       _labeled(
+                        context,
                         '성별',
                         _iconField(
+                          context,
                           asset: 'assets/images/signupicon/infoicon.svg',
-                          child: _genderField(),
+                          child: _genderField(context),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 16),
+                      ),
                       _labeled(
+                        context,
                         '이메일',
                         _iconField(
+                          context,
                           asset: 'assets/images/signupicon/emailicon.svg',
                           child: TextField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
-                            decoration: _innerDecoration('이메일을 입력하세요'),
+                            decoration: _innerDecoration(context, '이메일을 입력하세요'),
                             textInputAction: TextInputAction.next,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 16),
+                      ),
                       _labeled(
+                        context,
                         '비밀번호',
                         _iconField(
+                          context,
                           asset: 'assets/images/signupicon/pwicon.svg',
                           trailing: IconButton(
-                            iconSize: _trailingIconSize,
+                            iconSize: _trailingIconSize(context),
                             icon: Icon(
                               _obscurePw
                                   ? Icons.visibility_off
@@ -133,19 +159,26 @@ class _SignupPageState extends State<SignupPage> {
                           ),
                           child: TextField(
                             controller: _passwordController,
-                            decoration: _innerDecoration('비밀번호를 8자 이상 입력하세요'),
+                            decoration: _innerDecoration(
+                              context,
+                              '비밀번호를 8자 이상 입력하세요',
+                            ),
                             obscureText: _obscurePw,
                             textInputAction: TextInputAction.next,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 16),
+                      ),
                       _labeled(
+                        context,
                         '비밀번호 재입력',
                         _iconField(
+                          context,
                           asset: 'assets/images/signupicon/pwicon.svg',
                           trailing: IconButton(
-                            iconSize: _trailingIconSize,
+                            iconSize: _trailingIconSize(context),
                             icon: Icon(
                               _obscurePwConfirm
                                   ? Icons.visibility_off
@@ -159,18 +192,23 @@ class _SignupPageState extends State<SignupPage> {
                           ),
                           child: TextField(
                             controller: _confirmPasswordController,
-                            decoration: _innerDecoration('비밀번호를 다시 입력해주세요'),
+                            decoration: _innerDecoration(
+                              context,
+                              '비밀번호를 다시 입력해주세요',
+                            ),
                             obscureText: _obscurePwConfirm,
                             textInputAction: TextInputAction.done,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 32),
+                      ),
                       Align(
                         alignment: Alignment.center,
                         child: SizedBox(
-                          height: 30,
-                          width: 120,
+                          height: Responsive.responsiveHeight(context, 30),
+                          width: Responsive.responsiveValue(context, 120),
                           child: ElevatedButton(
                             onPressed: _isFormValid && !_submitting
                                 ? _onSubmit
@@ -182,24 +220,35 @@ class _SignupPageState extends State<SignupPage> {
                               disabledForegroundColor: Colors.white,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(5),
+                                borderRadius: BorderRadius.circular(
+                                  Responsive.responsiveValue(context, 5),
+                                ),
                               ),
                             ),
                             child: _submitting
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
+                                ? SizedBox(
+                                    width: Responsive.responsiveValue(
+                                      context,
+                                      16,
+                                    ),
+                                    height: Responsive.responsiveValue(
+                                      context,
+                                      16,
+                                    ),
+                                    child: const CircularProgressIndicator(
                                       strokeWidth: 2,
                                       valueColor: AlwaysStoppedAnimation<Color>(
                                         Colors.white,
                                       ),
                                     ),
                                   )
-                                : const Text(
+                                : Text(
                                     '등록',
                                     style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: Responsive.responsiveFontSize(
+                                        context,
+                                        14,
+                                      ),
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -220,7 +269,7 @@ class _SignupPageState extends State<SignupPage> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 5, 24, 50),
+      padding: Responsive.responsivePaddingLTRB(context, 24, 5, 24, 50),
       decoration: const BoxDecoration(color: _primaryBlue),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,50 +280,55 @@ class _SignupPageState extends State<SignupPage> {
                 onPressed: () => Navigator.of(context).pop(),
                 icon: SvgPicture.asset(
                   'assets/images/signupicon/backicon.svg',
-                  width: 18,
-                  height: 16,
+                  width: Responsive.responsiveValue(context, 18),
+                  height: Responsive.responsiveValue(context, 16),
                 ),
-                padding: EdgeInsets.only(left: 12),
+                padding: EdgeInsets.only(
+                  left: Responsive.responsiveValue(context, 12),
+                ),
                 constraints: const BoxConstraints(),
               ),
             ],
           ),
-          const SizedBox(height: 28),
+          SizedBox(height: Responsive.responsiveHeight(context, 28)),
           Padding(
-            padding: const EdgeInsets.only(left: 12),
-
+            padding: EdgeInsets.only(
+              left: Responsive.responsiveValue(context, 12),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text(
+                Text(
                   '식후 30분',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 30,
+                    fontSize: Responsive.responsiveFontSize(context, 30),
                     fontWeight: FontWeight.w700,
                     height: 1.2,
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: Responsive.responsiveValue(context, 10)),
                 // 제목 오른쪽 로고
                 SvgPicture.asset(
                   'assets/images/signupicon/namelogo.svg',
-                  width: 24,
-                  height: 24,
+                  width: Responsive.responsiveIconSize(context, 24),
+                  height: Responsive.responsiveIconSize(context, 24),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 9),
+          SizedBox(height: Responsive.responsiveHeight(context, 9)),
           Padding(
-            padding: const EdgeInsets.only(left: 12),
+            padding: EdgeInsets.only(
+              left: Responsive.responsiveValue(context, 12),
+            ),
             child: Row(
               children: [
-                const Text(
+                Text(
                   '회원가입',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: Responsive.responsiveFontSize(context, 15),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -286,17 +340,17 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  Widget _genderField() {
+  Widget _genderField(BuildContext context) {
     return DropdownButtonHideUnderline(
       child: DropdownButton<String>(
         dropdownColor: Colors.white,
         value: _selectedGender,
         isExpanded: true,
-        hint: const Text(
+        hint: Text(
           '성별을 선택하세요',
           style: TextStyle(
-            fontSize: _placeholderFontSize,
-            color: Color(0xFF9CA3AF),
+            fontSize: _placeholderFontSize(context),
+            color: const Color(0xFF9CA3AF),
             fontWeight: FontWeight.w400,
           ),
         ),
@@ -313,29 +367,32 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  Widget _iconField({
+  Widget _iconField(
+    BuildContext context, {
     required String asset,
     required Widget child,
     Widget? trailing,
     double? width,
   }) {
     return Container(
-      height: _fieldHeight,
-      width: width ?? _fieldWidth,
+      height: _fieldHeight(context),
+      width: width ?? _fieldWidth(context),
       decoration: BoxDecoration(
         color: const Color(0xFFF9F9F9),
-        borderRadius: _fieldRadius,
+        borderRadius: _fieldRadius(context),
         border: Border.all(color: const Color(0xFF111111), width: 1),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: Responsive.responsiveValue(context, 12),
+      ),
       child: Row(
         children: [
           SvgPicture.asset(
             asset,
-            width: _fieldIconSize,
-            height: _fieldIconSize,
+            width: _fieldIconSize(context),
+            height: _fieldIconSize(context),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: Responsive.responsiveValue(context, 12)),
           Expanded(child: child),
           if (trailing != null) trailing,
         ],
@@ -343,43 +400,45 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  InputDecoration _innerDecoration(String hint) {
+  InputDecoration _innerDecoration(BuildContext context, String hint) {
     return InputDecoration(
       isDense: true,
       hintText: hint,
-      hintStyle: const TextStyle(
-        color: Color(0xFF9CA3AF),
-        fontSize: _placeholderFontSize,
+      hintStyle: TextStyle(
+        color: const Color(0xFF9CA3AF),
+        fontSize: _placeholderFontSize(context),
       ),
       border: InputBorder.none,
       enabledBorder: InputBorder.none,
       focusedBorder: InputBorder.none,
-      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+      contentPadding: EdgeInsets.symmetric(
+        vertical: Responsive.responsiveValue(context, 10),
+      ),
     );
   }
 
-  Widget _labeled(String label, Widget field) {
+  Widget _labeled(BuildContext context, String label, Widget field) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Align(
           alignment: Alignment.center,
           child: SizedBox(
-            width: _fieldWidth,
+            width: _fieldWidth(context),
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 14,
+              style: TextStyle(
+                fontSize: Responsive.responsiveFontSize(context, 14),
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF111111),
+                color: const Color(0xFF111111),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: Responsive.responsiveHeight(context, 8)),
         Align(
           alignment: Alignment.center,
-          child: SizedBox(width: _fieldWidth, child: field),
+          child: SizedBox(width: _fieldWidth(context), child: field),
         ),
       ],
     );
