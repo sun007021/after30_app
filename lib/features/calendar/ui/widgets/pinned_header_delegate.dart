@@ -27,3 +27,5 @@ class PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     return oldDelegate.height != height || oldDelegate.child != child;
   }
 }
+
+
