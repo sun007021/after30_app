@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:608048776627:android:07ea7cb385f434de87b7c6",
+        "android_client_info": {
+          "package_name": "com.after30.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzRlQdfiymQEiShuxuShH-99a8tYY4kYM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:608048776627:android:b7b093b6780c4eef87b7c6",
         "android_client_info": {
           "package_name": "com.example.after30"
