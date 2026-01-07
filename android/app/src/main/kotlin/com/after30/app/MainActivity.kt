@@ -1,4 +1,4 @@
-package com.example.after30
+package com.after30.app
 
 import android.app.KeyguardManager
 import android.content.Context
