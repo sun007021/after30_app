@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/home/ui/widgets/home_utils.dart';
+import 'package:after30/features/common/widgets/double_check_dialog.dart';
 import 'package:after30/utils/responsive.dart';
 
 /// 홈 화면의 약물 복용 타일 위젯
@@ -59,6 +60,17 @@ class MedicationDoseTile extends StatelessWidget {
     );
     final isPastDay = selectedOnly.isBefore(todayOnly);
     return isPastDay || isOverdue;
+  }
+
+  Future<void> _handleMarkCompleted(BuildContext context) async {
+    final confirmed = await DoubleCheckDialog.show(
+      context: context,
+      title: '복용 완료 확인',
+      message: '복용 완료로 기록됩니다.\n지금 복용 완료 처리할까요?',
+      confirmLabel: '복용 완료',
+    );
+    if (!confirmed) return;
+    await onMarkCompleted(doseKey);
   }
 
   @override
@@ -213,7 +225,7 @@ class MedicationDoseTile extends StatelessWidget {
                             items: items,
                           );
                           if (selected == 'complete') {
-                            await onMarkCompleted(doseKey);
+                            await _handleMarkCompleted(buttonCtx);
                           } else if (selected == 'undo') {
                             await onMarkUncompleted(doseKey);
                           }
@@ -274,7 +286,7 @@ class MedicationDoseTile extends StatelessWidget {
                       top: Responsive.responsiveValue(context, 8),
                     ),
                     child: ElevatedButton(
-                      onPressed: () => onMarkCompleted(doseKey),
+                      onPressed: () => _handleMarkCompleted(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,

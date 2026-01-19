@@ -352,6 +352,9 @@ class _CalendarPageState extends State<CalendarPage> {
                   return Container(
                     decoration: const BoxDecoration(
                       color: Colors.white,
+                      border: Border(
+                        top: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+                      ),
                       borderRadius: BorderRadius.vertical(
                         top: Radius.circular(20),
                       ),
