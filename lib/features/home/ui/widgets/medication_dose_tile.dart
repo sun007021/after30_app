@@ -65,9 +65,10 @@ class MedicationDoseTile extends StatelessWidget {
   Future<void> _handleMarkCompleted(BuildContext context) async {
     final confirmed = await DoubleCheckDialog.show(
       context: context,
-      title: '복용 완료 확인',
-      message: '복용 완료로 기록됩니다.\n지금 복용 완료 처리할까요?',
-      confirmLabel: '복용 완료',
+      title: '오늘도 해내셨네요!',
+      message: '꾸준히 약을 챙겨 먹는 모습이 멋져요. 오늘의 복약 완료 도장을 찍어 드릴게요.',
+      cancelLabel: '닫기',
+      confirmLabel: '확인',
     );
     if (!confirmed) return;
     await onMarkCompleted(doseKey);

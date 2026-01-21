@@ -5,6 +5,7 @@ import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/utils/responsive.dart';
+import 'package:after30/features/common/widgets/double_check_dialog.dart';
 
 class MedicineRegisterPage extends StatefulWidget {
   final MedicineAlarm? initialAlarm;
@@ -87,19 +88,10 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   void _removeTime() {
     setState(() {
       if (_times.length == 1) {
-        showDialog(
+        DoubleCheckDialog.showSingle(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('안내'),
-            content: const Text('복용 시간은 최소 1개 이상 입력해야 합니다.'),
-            backgroundColor: Colors.white,
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('확인'),
-              ),
-            ],
-          ),
+          title: '안내',
+          message: '복용 시간은 최소 1개 이상 입력해야 합니다.',
         );
       } else {
         _times.removeLast();
@@ -314,73 +306,37 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                     onPressed: () async {
                       final name = _medicineController.text.trim();
                       final times = List<TimeOfDay>.from(_times);
-                      if (name.length < 1 || name.length > 255) {
-                        await showDialog(
+                      final hasMissing =
+                          name.isEmpty ||
+                          _selectedDays.isEmpty ||
+                          times.isEmpty;
+                      if (hasMissing) {
+                        await DoubleCheckDialog.showSingle(
                           context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('안내'),
-                            content: const Text('약 이름은 1~255자 사이여야 합니다.'),
-                            backgroundColor: Colors.white,
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('확인'),
-                              ),
-                            ],
-                          ),
+                          title: '아직 입력되지 않은 정보가 있어요.',
+                          message: '복약 시간이나 약 이름을 입력해야 정확한 알림을 드릴 수 있어요.',
                         );
                         return;
                       }
-                      if (name.isEmpty) {
-                        showDialog(
+                      if (name.length > 255) {
+                        await DoubleCheckDialog.showSingle(
                           context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('안내'),
-                            content: const Text('약 이름을 입력해 주세요.'),
-                            backgroundColor: Colors.white,
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('확인'),
-                              ),
-                            ],
-                          ),
+                          title: '안내',
+                          message: '약 이름은 1~255자 사이여야 합니다.',
                         );
                         return;
                       }
-                      if (_selectedDays.isEmpty) {
-                        await showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('안내'),
-                            content: const Text('복용 요일을 1개 이상 선택해 주세요.'),
-                            backgroundColor: Colors.white,
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('확인'),
-                              ),
-                            ],
-                          ),
-                        );
-                        return;
-                      }
-                      if (times.isEmpty) {
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('안내'),
-                            content: const Text('복용 시간을 1개 이상 입력해 주세요.'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('확인'),
-                              ),
-                            ],
-                          ),
-                        );
-                        return;
-                      }
+                      final isEdit = widget.initialAlarm != null;
+                      final confirmed = await DoubleCheckDialog.show(
+                        context: context,
+                        title: isEdit ? '수정한 내용을 저장할까요?' : '약을 등록하시겠습니까?',
+                        message: isEdit
+                            ? '변경된 복약 시간은 다음 알림부터 바로 적용됩니다.'
+                            : '입력하신 시간에 맞춰 잊지 않도록 알림을 보내드릴게요.',
+                        confirmLabel: isEdit ? '저장' : '등록',
+                        cancelLabel: '취소',
+                      );
+                      if (!confirmed) return;
                       late final MedicineAlarm alarm;
                       setState(() {
                         _isLoading = true;

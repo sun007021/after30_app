@@ -14,6 +14,7 @@ import 'package:after30/features/my/ui/widgets/switch_row.dart';
 import 'package:after30/features/my/ui/widgets/link_list.dart';
 import 'package:after30/features/my/ui/widgets/delete_account_dialog.dart';
 import 'package:after30/utils/responsive.dart';
+import 'package:after30/features/common/widgets/double_check_dialog.dart';
 
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
@@ -182,7 +183,14 @@ class _MyPageState extends State<MyPage> {
                     ],
                     onTapIndex: (i) async {
                       if (i == 2) {
-                        // 로그아웃: 토큰 삭제 후 로그인으로 이동
+                        final confirmed = await DoubleCheckDialog.show(
+                          context: context,
+                          title: '로그아웃 하시겠습니까?',
+                          message: '로그아웃 시 복약 알람이 안와요.',
+                          cancelLabel: '취소',
+                          confirmLabel: '로그아웃',
+                        );
+                        if (!confirmed) return;
                         await AuthService.logout(context);
                       } else if (i == 1) {
                         final uri = Uri.parse(

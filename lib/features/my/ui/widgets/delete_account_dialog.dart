@@ -2,11 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
 import 'package:after30/features/login/data/auth_service.dart';
+import 'package:after30/features/common/widgets/double_check_dialog.dart';
 import 'package:dio/dio.dart';
 
 /// 계정 탈퇴 다이얼로그 관련 함수들
 class DeleteAccountDialog {
   static Future<void> show(BuildContext context) async {
+    final confirmed = await DoubleCheckDialog.show(
+      context: context,
+      title: "정말 '식후30분'을 떠나시나요?",
+      message: '그동안의 모든 기록과 가족 연결 정보가 사라집니다. 정말 탈퇴하시겠습니까?',
+      cancelLabel: '유지하기',
+      confirmLabel: '탈퇴하기',
+    );
+    if (!confirmed) return;
+
     // 현재 카카오 세션이 있는지 확인
     bool hasKakaoSession = false;
     try {
@@ -24,62 +34,6 @@ class DeleteAccountDialog {
   }
 
   static Future<void> _showKakaoDeleteDialog(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Text(
-            '계정 탈퇴',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-          ),
-          content: const Text('계정 탈퇴를 위해 카카오 인증이 필요합니다. 계속하시겠습니까?'),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          actions: [
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(ctx).pop(false),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF1F5F9),
-                      foregroundColor: const Color(0xFF111111),
-                      side: const BorderSide(color: Colors.transparent),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      minimumSize: const Size.fromHeight(44),
-                    ),
-                    child: const Text('취소'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1963FF),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      minimumSize: const Size.fromHeight(44),
-                    ),
-                    child: const Text('완료'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true) return;
-
     try {
       bool kakaoTalkInstalled = await isKakaoTalkInstalled();
       OAuthToken? token;
@@ -180,7 +134,7 @@ class DeleteAccountDialog {
                           ),
                           minimumSize: const Size.fromHeight(44),
                         ),
-                        child: const Text('취소'),
+                        child: const Text('유지하기'),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -200,7 +154,7 @@ class DeleteAccountDialog {
                           ),
                           minimumSize: const Size.fromHeight(44),
                         ),
-                        child: const Text('탈퇴'),
+                        child: const Text('탈퇴하기'),
                       ),
                     ),
                   ],

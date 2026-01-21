@@ -8,6 +8,7 @@ import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/ui/widgets/alarm_card.dart';
 import 'package:after30/features/alarm/ui/widgets/empty_alarm_section.dart';
 import 'package:after30/utils/responsive.dart';
+import 'package:after30/features/common/widgets/double_check_dialog.dart';
 
 class AlarmContent extends StatefulWidget {
   const AlarmContent({super.key});
@@ -103,26 +104,12 @@ class _AlarmContentState extends State<AlarmContent> {
   Future<void> _deleteAlarm(int index) async {
     final alarm = _alarms[index];
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await DoubleCheckDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('알람 삭제'),
-        content: Text('${alarm.name} 알람을 삭제하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('삭제'),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-          ),
-        ],
-      ),
+      title: '약 정보를 삭제하시겠습니까?',
+      message: '삭제하면, 그동안 쌓인 복약 기록과 설정된 알림이 모두 사라져요.',
+      cancelLabel: '취소',
+      confirmLabel: '삭제',
     );
 
     if (confirmed == true) {
@@ -150,6 +137,17 @@ class _AlarmContentState extends State<AlarmContent> {
   Future<void> _toggleAlarm(int index) async {
     final alarm = _alarms[index];
     final newState = !alarm.isActive;
+
+    if (!newState) {
+      final confirmed = await DoubleCheckDialog.show(
+        context: context,
+        title: '복용을 중단하시겠습니까?',
+        message: '증상이 완화되어 복용을 멈추시는 건가요? 기록은 남기고 알림만 끌 수 있습니다.',
+        cancelLabel: '아니요',
+        confirmLabel: '중단하기',
+      );
+      if (!confirmed) return;
+    }
 
     setState(() {
       _alarms[index] = alarm.copyWith(isActive: newState);
