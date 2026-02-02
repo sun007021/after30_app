@@ -22,7 +22,7 @@ class KakaoLoginButton extends StatelessWidget {
           backgroundColor: const Color(0xFFFEE500),
           foregroundColor: const Color(0xFF191919),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(6),
           ),
           elevation: 0,
           disabledBackgroundColor: Colors.grey[300],
@@ -39,19 +39,19 @@ class KakaoLoginButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      'assets/images/kakaologo.png',
-                      width: 20,
-                      height: 20,
-                    ),
+                  const Icon(
+                    Icons.chat_bubble,
+                    size: 20,
+                    color: Color(0xE6000000),
                   ),
                   const SizedBox(width: 12),
                   const Text(
                     '카카오로 시작하기',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(
+                      color: Color(0xFF191919),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),

@@ -349,15 +349,14 @@ class _CalendarPageState extends State<CalendarPage> {
                 initialChildSize: (_minInitialSheetFraction ?? 0.43),
                 maxChildSize: 1.0,
                 builder: (context, scrollController) {
-                  return Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(
-                        top: BorderSide(color: Color(0xFFE5E7EB), width: 1),
-                      ),
+                  return Material(
+                    color: Colors.white,
+                    clipBehavior: Clip.antiAlias,
+                    shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.vertical(
                         top: Radius.circular(20),
                       ),
+                      side: BorderSide(color: Color(0xFFE5E7EB), width: 1),
                     ),
                     child: CustomScrollView(
                       controller: scrollController,

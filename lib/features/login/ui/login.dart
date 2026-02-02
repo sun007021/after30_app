@@ -128,11 +128,28 @@ class _LoginPageState extends State<LoginPage> {
                         Navigator.of(ctx).pop();
                         await _handleKakaoLogin();
                       },
-                      child: Ink.image(
-                        image: const AssetImage(
-                          'assets/images/kakao_login_medium_wide.png',
+                      child: Container(
+                        color: const Color(0xFFFEE500),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.chat_bubble,
+                              size: 18,
+                              color: Color(0xE6000000),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              '카카오로 시작하기',
+                              style: TextStyle(
+                                color: Color(0xFF191919),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
                         ),
-                        fit: BoxFit.cover,
                       ),
                     ),
                   ),

@@ -35,8 +35,6 @@ class _SignupPageState extends State<SignupPage> {
       Responsive.responsiveIconSize(context, 16);
   double _fieldHeight(BuildContext context) =>
       Responsive.responsiveHeight(context, 46);
-  double _fieldWidth(BuildContext context) =>
-      Responsive.responsiveValue(context, 290);
 
   bool get _isFormValid {
     final nameOk = _nameController.text.trim().isNotEmpty;
@@ -85,13 +83,13 @@ class _SignupPageState extends State<SignupPage> {
                 child: SingleChildScrollView(
                   padding: Responsive.responsivePaddingLTRB(
                     context,
+                    36,
                     24,
-                    24,
-                    24,
+                    36,
                     32,
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _labeled(
                         context,
@@ -276,17 +274,18 @@ class _SignupPageState extends State<SignupPage> {
         children: [
           Row(
             children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: SvgPicture.asset(
-                  'assets/images/signupicon/backicon.svg',
-                  width: Responsive.responsiveValue(context, 18),
-                  height: Responsive.responsiveValue(context, 16),
+              Padding(
+                padding: EdgeInsets.zero,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: SvgPicture.asset(
+                    'assets/images/signupicon/backicon.svg',
+                    width: Responsive.responsiveValue(context, 18),
+                    height: Responsive.responsiveValue(context, 16),
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
-                padding: EdgeInsets.only(
-                  left: Responsive.responsiveValue(context, 12),
-                ),
-                constraints: const BoxConstraints(),
               ),
             ],
           ),
@@ -376,7 +375,7 @@ class _SignupPageState extends State<SignupPage> {
   }) {
     return Container(
       height: _fieldHeight(context),
-      width: width ?? _fieldWidth(context),
+      width: width ?? double.infinity,
       decoration: BoxDecoration(
         color: const Color(0xFFF9F9F9),
         borderRadius: _fieldRadius(context),
@@ -419,27 +418,21 @@ class _SignupPageState extends State<SignupPage> {
 
   Widget _labeled(BuildContext context, String label, Widget field) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Align(
-          alignment: Alignment.center,
-          child: SizedBox(
-            width: _fieldWidth(context),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: Responsive.responsiveFontSize(context, 14),
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF111111),
-              ),
+        SizedBox(
+          width: double.infinity,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: Responsive.responsiveFontSize(context, 14),
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF111111),
             ),
           ),
         ),
         SizedBox(height: Responsive.responsiveHeight(context, 8)),
-        Align(
-          alignment: Alignment.center,
-          child: SizedBox(width: _fieldWidth(context), child: field),
-        ),
+        SizedBox(width: double.infinity, child: field),
       ],
     );
   }

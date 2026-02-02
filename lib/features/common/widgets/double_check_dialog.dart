@@ -11,6 +11,7 @@ class DoubleCheckDialog {
   }) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierColor: const Color(0x80C8C8C8),
       barrierDismissible: false,
       builder: (ctx) {
         return AlertDialog(
@@ -78,6 +79,7 @@ class DoubleCheckDialog {
   }) async {
     await showDialog<void>(
       context: context,
+      barrierColor: const Color(0x80C8C8C8),
       barrierDismissible: false,
       builder: (ctx) {
         return AlertDialog(

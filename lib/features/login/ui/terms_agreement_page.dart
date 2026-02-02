@@ -120,17 +120,21 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
         children: [
           Row(
             children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: SvgPicture.asset(
-                  'assets/images/signupicon/backicon.svg',
-                  width: Responsive.responsiveValue(context, 18),
-                  height: Responsive.responsiveValue(context, 16),
+              Padding(
+                padding: EdgeInsets.zero,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Transform.translate(
+                    offset: const Offset(-3, 0),
+                    child: SvgPicture.asset(
+                      'assets/images/signupicon/backicon.svg',
+                      width: Responsive.responsiveValue(context, 18),
+                      height: Responsive.responsiveValue(context, 16),
+                    ),
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
-                padding: EdgeInsets.only(
-                  left: Responsive.responsiveValue(context, 12),
-                ),
-                constraints: const BoxConstraints(),
               ),
             ],
           ),

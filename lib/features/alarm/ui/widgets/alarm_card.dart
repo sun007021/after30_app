@@ -65,7 +65,7 @@ class AlarmCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(
-          Responsive.responsiveValue(context, 8),
+          Responsive.responsiveValue(context, 16),
         ),
         side: BorderSide(
           color: alarm.isActive
