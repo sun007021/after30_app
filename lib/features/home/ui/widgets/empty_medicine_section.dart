@@ -17,59 +17,58 @@ class EmptyMedicineSection extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(height: Responsive.responsiveHeight(context, 8)),
+          SizedBox(height: Responsive.responsiveHeight(context, 70)),
           SvgPicture.asset(
-            'assets/images/medi_icon.svg',
+            'assets/images/medimain.svg',
             width: Responsive.responsiveValue(context, 100),
             height: Responsive.responsiveValue(context, 100),
           ),
-          SizedBox(height: Responsive.responsiveHeight(context, 50)),
+          SizedBox(height: Responsive.responsiveHeight(context, 32)),
           Text(
-            title ?? '등록된 약이 없어요',
+            title ?? '등록된 약이 없어요!',
             style: TextStyle(
-              fontSize: Responsive.responsiveFontSize(context, 13),
+              fontSize: Responsive.responsiveFontSize(context, 18),
               color: Colors.black87,
               fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: Responsive.responsiveHeight(context, 14)),
-          ElevatedButton(
-            onPressed: onAdd,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryBlue,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: EdgeInsets.symmetric(
-                horizontal: Responsive.responsiveValue(context, 40),
-                vertical: Responsive.responsiveValue(context, 5),
-              ),
-              visualDensity: VisualDensity.compact,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(
-                  Responsive.responsiveValue(context, 4),
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '약 등록하기',
-                  style: TextStyle(
-                    fontSize: Responsive.responsiveFontSize(context, 12),
-                    fontWeight: FontWeight.w700,
+          SizedBox(height: Responsive.responsiveHeight(context, 200)),
+          FractionallySizedBox(
+            child: SizedBox(
+              height: 45,
+              child: ElevatedButton(
+                onPressed: onAdd,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryBlue,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
                   ),
                 ),
-                SizedBox(width: Responsive.responsiveWidth(context, 8)),
-                Icon(
-                  Icons.add,
-                  size: Responsive.responsiveIconSize(context, 18),
-                  color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Text(
+                        '약 등록하기',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Icon(Icons.add, size: 25, color: Colors.white),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
-          SizedBox(height: Responsive.responsiveHeight(context, 8)),
         ],
       ),
     );

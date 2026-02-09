@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/utils/responsive.dart';
 
 /// 알람이 없을 때 표시되는 빈 상태 섹션
 class EmptyAlarmSection extends StatelessWidget {
@@ -13,57 +14,78 @@ class EmptyAlarmSection extends StatelessWidget {
       child: Align(
         alignment: Alignment.topCenter,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 80, 24, 32),
+          padding: Responsive.responsivePaddingLTRB(context, 24, 80, 24, 32),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
             children: [
-              const SizedBox(height: 8),
+              SizedBox(height: Responsive.responsiveHeight(context, 70)),
               SvgPicture.asset(
-                'assets/images/medi_icon.svg',
-                width: 100,
-                height: 100,
+                'assets/images/medimain.svg',
+                width: Responsive.responsiveValue(context, 100),
+                height: Responsive.responsiveValue(context, 100),
               ),
-              const SizedBox(height: 50),
-              const Text(
-                '등록된 약이 없어요',
+              SizedBox(height: Responsive.responsiveHeight(context, 32)),
+              Text(
+                '등록된 약이 없어요!',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: Responsive.responsiveFontSize(context, 18),
                   color: Colors.black87,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 14),
-              ElevatedButton(
-                onPressed: onAdd,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF235DFF),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 5,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Text(
-                      '약 등록하기',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+              SizedBox(height: Responsive.responsiveHeight(context, 12)),
+              const Spacer(),
+              FractionallySizedBox(
+                widthFactor: 0.9,
+                child: SizedBox(
+                  height: Responsive.responsiveValue(context, 45),
+                  child: ElevatedButton(
+                    onPressed: onAdd,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF235DFF),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          Responsive.responsiveValue(context, 6),
+                        ),
                       ),
                     ),
-                    SizedBox(width: 8),
-                    Icon(Icons.add, size: 18, color: Colors.white),
-                  ],
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: Responsive.responsiveValue(context, 16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.max,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '약 등록하기',
+                            style: TextStyle(
+                              fontSize: Responsive.responsiveFontSize(
+                                context,
+                                17,
+                              ),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(
+                            width: Responsive.responsiveWidth(context, 8),
+                          ),
+                          Icon(
+                            Icons.add,
+                            size: Responsive.responsiveIconSize(context, 25),
+                            color: Colors.white,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: Responsive.responsiveHeight(context, 12)),
             ],
           ),
         ),
@@ -71,6 +93,3 @@ class EmptyAlarmSection extends StatelessWidget {
     );
   }
 }
-
-
-
