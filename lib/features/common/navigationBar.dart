@@ -3,6 +3,7 @@ import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/alarm/ui/alarm_list.dart';
 import 'package:after30/features/calendar/ui/calendar_page.dart';
 import 'package:after30/features/my/my_page.dart';
+import 'package:after30/utils/responsive.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class AlarmBottomNavigation extends StatelessWidget {
@@ -21,21 +22,14 @@ class AlarmBottomNavigation extends StatelessWidget {
 
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // 화면 크기에 따라 아이콘 크기와 간격을 동적으로 조정
-    // 작은 화면(360px 이하): 아이콘 38px, 간격 32px
-    // 중간 화면(360-400px): 아이콘 42px, 간격 40px
-    // 큰 화면(400px 이상): 아이콘 45px, 간격 48px
-    final iconSize = screenWidth <= 360
-        ? 38.0
-        : screenWidth <= 400
-        ? 42.0
-        : 45.0;
+    final iconSize = Responsive.responsiveIconSize(context, 45);
     final iconSpacing = screenWidth <= 360
         ? 32.0
         : screenWidth <= 400
         ? 40.0
-        : 48.0;
+        : screenWidth <= 430
+        ? 48.0
+        : 56.0;
 
     return Container(
       padding: EdgeInsets.only(top: 16, bottom: 16 + bottomPadding - 8),
@@ -57,19 +51,14 @@ class AlarmBottomNavigation extends StatelessWidget {
         bottom: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // 화면 너비가 매우 작은 경우 간격을 더 줄임
+            // 기존 간격(32/40/48)을 유지하되, 매우 작은 화면에서만 축소
             final adjustedSpacing = constraints.maxWidth < 340
                 ? iconSpacing * 0.7
                 : iconSpacing;
-            final adjustedIconSize = constraints.maxWidth < 340
-                ? iconSize * 0.9
-                : iconSize;
 
-            return Transform.translate(
-              offset: const Offset(-4, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
@@ -81,8 +70,8 @@ class AlarmBottomNavigation extends StatelessWidget {
                       currentIndex == 0
                           ? 'assets/images/navicon/alarm_active.svg'
                           : 'assets/images/navicon/alarm_deactive.svg',
-                      width: adjustedIconSize,
-                      height: adjustedIconSize,
+                      width: iconSize,
+                      height: iconSize,
                     ),
                   ),
                   SizedBox(width: adjustedSpacing),
@@ -142,8 +131,8 @@ class AlarmBottomNavigation extends StatelessWidget {
                       currentIndex == 1
                           ? 'assets/images/navicon/fam_active.svg'
                           : 'assets/images/navicon/fam_deactive.svg',
-                      width: adjustedIconSize,
-                      height: adjustedIconSize,
+                      width: iconSize,
+                      height: iconSize,
                     ),
                   ),
                   SizedBox(width: adjustedSpacing),
@@ -158,8 +147,8 @@ class AlarmBottomNavigation extends StatelessWidget {
                       currentIndex == 2
                           ? 'assets/images/navicon/home_active.svg'
                           : 'assets/images/navicon/home_deactive.svg',
-                      width: adjustedIconSize,
-                      height: adjustedIconSize,
+                      width: iconSize,
+                      height: iconSize,
                     ),
                   ),
                   SizedBox(width: adjustedSpacing),
@@ -174,8 +163,8 @@ class AlarmBottomNavigation extends StatelessWidget {
                       currentIndex == 3
                           ? 'assets/images/navicon/his_active.svg'
                           : 'assets/images/navicon/his_deactive.svg',
-                      width: adjustedIconSize,
-                      height: adjustedIconSize,
+                      width: iconSize,
+                      height: iconSize,
                     ),
                   ),
                   SizedBox(width: adjustedSpacing),
@@ -190,12 +179,11 @@ class AlarmBottomNavigation extends StatelessWidget {
                       currentIndex == 4
                           ? 'assets/images/navicon/my_active.svg'
                           : 'assets/images/navicon/my_deactive.svg',
-                      width: adjustedIconSize,
-                      height: adjustedIconSize,
+                      width: iconSize,
+                      height: iconSize,
                     ),
                   ),
-                ],
-              ),
+              ],
             );
           },
         ),

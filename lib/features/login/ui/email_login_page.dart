@@ -238,6 +238,7 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
               ],
             ),
           ),
+          SizedBox(height: Responsive.responsiveHeight(context, 9)),
           Padding(
             padding: EdgeInsets.only(
               left: Responsive.responsiveValue(context, 12),

@@ -133,14 +133,14 @@ class _LoginPageState extends State<LoginPage> {
                         alignment: Alignment.center,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.chat_bubble,
-                              size: 18,
-                              color: Color(0xE6000000),
+                          children: [
+                            SvgPicture.asset(
+                              'assets/images/kakao_chat.svg',
+                              width: 18,
+                              height: 18,
                             ),
-                            SizedBox(width: 8),
-                            Text(
+                            const SizedBox(width: 8),
+                            const Text(
                               '카카오로 시작하기',
                               style: TextStyle(
                                 color: Color(0xFF191919),

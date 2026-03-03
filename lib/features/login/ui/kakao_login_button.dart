@@ -1,5 +1,6 @@
 // 이 위젯은 login.dart(로그인 화면)에서 사용됩니다.
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class KakaoLoginButton extends StatelessWidget {
   final bool isLoading;
@@ -39,10 +40,10 @@ class KakaoLoginButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.chat_bubble,
-                    size: 20,
-                    color: Color(0xE6000000),
+                  SvgPicture.asset(
+                    'assets/images/kakao_chat.svg',
+                    width: 20,
+                    height: 20,
                   ),
                   const SizedBox(width: 12),
                   const Text(

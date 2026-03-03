@@ -119,11 +119,31 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
                             color: Colors.transparent,
                             child: InkWell(
                               onTap: _handleKakaoLogin,
-                              child: Ink.image(
-                                image: const AssetImage(
-                                  'assets/images/kakao_login_medium_wide.png',
+                              child: Container(
+                                color: const Color(0xFFFEE500),
+                                alignment: Alignment.center,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SvgPicture.asset(
+                                      'assets/images/kakao_chat.svg',
+                                      width: 18,
+                                      height: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '카카오로 시작하기',
+                                      style: TextStyle(
+                                        color: const Color(0xFF191919),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: Responsive.responsiveFontSize(
+                                          context,
+                                          16,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                fit: BoxFit.cover,
                               ),
                             ),
                           ),
@@ -207,7 +227,7 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: Responsive.responsivePaddingLTRB(context, 24, 5, 24, 50),
+      padding: Responsive.responsivePaddingLTRB(context, 24, 5, 24, 55),
       decoration: const BoxDecoration(color: _primaryBlue),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
