@@ -504,14 +504,13 @@ class AlarmService {
       time.minute,
     );
 
-    // 오늘 이미 지난 시간이면 다음 주로
-    if (nextAlarm.isBefore(now)) {
-      nextAlarm = nextAlarm.add(const Duration(days: 7));
-    }
+    // 요일 차이를 먼저 계산해 같은 주의 목표 요일로 이동
+    var daysUntil = (targetDay - now.weekday + 7) % 7;
+    nextAlarm = nextAlarm.add(Duration(days: daysUntil));
 
-    // 목표 요일까지 조정
-    while (nextAlarm.weekday != targetDay) {
-      nextAlarm = nextAlarm.add(const Duration(days: 1));
+    // 목표 요일이 "오늘"인데 시간이 이미 지났거나 동일하면 다음 주로 이동
+    if (daysUntil == 0 && !nextAlarm.isAfter(now)) {
+      nextAlarm = nextAlarm.add(const Duration(days: 7));
     }
 
     return nextAlarm;

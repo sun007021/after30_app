@@ -2,8 +2,8 @@ import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/my/settings_store.dart';
 import 'package:after30/features/login/data/auth_service.dart';
 import 'dart:io';
-import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/common/page_title.dart';
@@ -23,7 +23,8 @@ class MyPage extends StatefulWidget {
   State<MyPage> createState() => _MyPageState();
 }
 
-class _MyPageState extends State<MyPage> {
+class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
+  static const MethodChannel _nativeChannel = MethodChannel('after30/native');
   bool _allowPush = true;
   bool _allowDevice = true;
   String? _nickname;
@@ -32,8 +33,23 @@ class _MyPageState extends State<MyPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
     _loadKakaoProfile();
+    _refreshDeviceAlarmState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshDeviceAlarmState();
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -44,6 +60,50 @@ class _MyPageState extends State<MyPage> {
       _allowPush = push;
       _allowDevice = device;
     });
+  }
+
+  Future<bool> _isExactAlarmAllowed() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      final allowed = await _nativeChannel.invokeMethod<bool>(
+        'isExactAlarmAllowed',
+      );
+      return allowed ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<bool> _isIgnoringBatteryOptimizations() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      final ignored = await _nativeChannel.invokeMethod<bool>(
+        'isIgnoringBatteryOptimizations',
+      );
+      return ignored ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<void> _openExactAlarmSettings() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _nativeChannel.invokeMethod<bool>('openExactAlarmSettings');
+    } catch (_) {}
+  }
+
+  Future<void> _openBatteryOptimizationSettings() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _nativeChannel.invokeMethod<bool>('openBatteryOptimizationSettings');
+    } catch (_) {}
+  }
+
+  Future<bool> _refreshDeviceAlarmState() async {
+    final exactAllowed = await _isExactAlarmAllowed();
+    final batteryIgnored = await _isIgnoringBatteryOptimizations();
+    return exactAllowed && batteryIgnored;
   }
 
   Future<void> _loadKakaoProfile() async {
@@ -72,23 +132,6 @@ class _MyPageState extends State<MyPage> {
       });
     } catch (_) {
       // 프로필 조회 실패 시 기존 기본값 유지
-    }
-  }
-
-  Future<void> _openSystemNotificationSettings() async {
-    if (Platform.isAndroid) {
-      const intent = AndroidIntent(
-        action: 'android.settings.APP_NOTIFICATION_SETTINGS',
-        arguments: <String, dynamic>{
-          'android.provider.extra.APP_PACKAGE': 'com.example.after30',
-        },
-      );
-      await intent.launch();
-    } else if (Platform.isIOS) {
-      final uri = Uri.parse('app-settings:');
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
     }
   }
 
@@ -158,10 +201,29 @@ class _MyPageState extends State<MyPage> {
                         title: '디바이스 알람 허용',
                         value: _allowDevice,
                         onChanged: (v) async {
+                          // 토글은 항상 사용자가 직접 켜고 끌 수 있게 유지
                           setState(() => _allowDevice = v);
                           await MySettingsStore.setAllowDeviceNotifications(v);
-                          if (v) {
-                            await _openSystemNotificationSettings();
+
+                          if (Platform.isAndroid && v) {
+                            await _openExactAlarmSettings();
+                            await _openBatteryOptimizationSettings();
+                          }
+
+                          final ready = await _refreshDeviceAlarmState();
+                          if (!mounted || !v) return;
+                          if (ready) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('디바이스 알람 준비가 완료되었습니다.')),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  '토글은 켜졌지만 기기 설정이 아직 미완료입니다. 정확 알람/배터리 최적화 해제를 확인해주세요.',
+                                ),
+                              ),
+                            );
                           }
                         },
                       ),

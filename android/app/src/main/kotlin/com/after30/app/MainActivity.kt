@@ -1,9 +1,14 @@
 package com.after30.app
 
 import android.app.KeyguardManager
+import android.app.AlarmManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -37,6 +42,61 @@ class MainActivity : FlutterActivity() {
                         try {
                             val kg = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
                             result.success(kg.isKeyguardLocked)
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "isExactAlarmAllowed" -> {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                                result.success(alarmManager.canScheduleExactAlarms())
+                            } else {
+                                result.success(true)
+                            }
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "openExactAlarmSettings" -> {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = Uri.parse("package:$packageName")
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(intent)
+                                result.success(true)
+                            } else {
+                                result.success(false)
+                            }
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "isIgnoringBatteryOptimizations" -> {
+                        try {
+                            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                            result.success(pm.isIgnoringBatteryOptimizations(packageName))
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "openBatteryOptimizationSettings" -> {
+                        try {
+                            val requestIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:$packageName")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            try {
+                                startActivity(requestIntent)
+                            } catch (_: Exception) {
+                                val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(fallbackIntent)
+                            }
+                            result.success(true)
                         } catch (e: Exception) {
                             result.error("ERROR", e.message, null)
                         }
