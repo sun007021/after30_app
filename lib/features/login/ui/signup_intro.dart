@@ -48,7 +48,9 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
       await FcmService.syncTokenToBackend();
 
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomePage()),
+        MaterialPageRoute(
+          builder: (context) => const HomePage(checkPhoneRegistration: true),
+        ),
       );
     } catch (e) {
       if (!mounted) return;

@@ -16,13 +16,17 @@ class SwitchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 56,
+      height: 48,
       child: Row(
         children: [
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: Colors.black,
+              ),
             ),
           ),
           Switch(

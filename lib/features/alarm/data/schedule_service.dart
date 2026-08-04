@@ -8,10 +8,17 @@ class ScheduleService {
     return resp.data;
   }
 
-  Future<List<dynamic>> getSchedules({bool includeInactive = false}) async {
+  Future<List<dynamic>> getSchedules({
+    bool includeInactive = false,
+    int? userId,
+  }) async {
+    final query = <String, dynamic>{'include_inactive': includeInactive};
+    if (userId != null) {
+      query['user_id'] = userId;
+    }
     final resp = await _client.get(
       '/schedules/',
-      queryParameters: {'include_inactive': includeInactive},
+      queryParameters: query,
     );
     return (resp.data as List).cast<dynamic>();
   }

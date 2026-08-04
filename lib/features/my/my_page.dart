@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/features/common/page_title.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
 import 'package:after30/features/my/ui/widgets/profile_tile.dart';
 import 'package:after30/features/my/ui/widgets/card_container.dart';
@@ -15,6 +14,8 @@ import 'package:after30/features/my/ui/widgets/link_list.dart';
 import 'package:after30/features/my/ui/widgets/delete_account_dialog.dart';
 import 'package:after30/utils/responsive.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
+import 'package:after30/services/notifications/fcm_service.dart';
 
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
@@ -29,6 +30,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
   bool _allowDevice = true;
   String? _nickname;
   String? _profileImageUrl;
+  bool _allowMarketing = false;
 
   @override
   void initState() {
@@ -96,7 +98,9 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
   Future<void> _openBatteryOptimizationSettings() async {
     if (!Platform.isAndroid) return;
     try {
-      await _nativeChannel.invokeMethod<bool>('openBatteryOptimizationSettings');
+      await _nativeChannel.invokeMethod<bool>(
+        'openBatteryOptimizationSettings',
+      );
     } catch (_) {}
   }
 
@@ -116,6 +120,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
         _nickname = nickname;
         _profileImageUrl = imageUrl;
       });
+      await _loadBackendProfile();
     } catch (_) {
       // 카카오 세션이 없으면 백엔드 프로필 조회 (이메일 로그인 등)
       await _loadBackendProfile();
@@ -129,6 +134,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
       setState(() {
         _nickname = profile.name ?? _nickname ?? '사용자';
         _profileImageUrl = profile.profileImageUrl ?? _profileImageUrl;
+        _allowMarketing = profile.allowMarketing ?? _allowMarketing;
       });
     } catch (_) {
       // 프로필 조회 실패 시 기존 기본값 유지
@@ -142,45 +148,51 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: Responsive.responsivePaddingLTRB(context, 20, 24, 20, 24),
+            padding: Responsive.responsivePaddingLTRB(context, 20, 36, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                PageTitle(
-                  title: '마이페이지',
-                  margin: Responsive.responsiveMarginLTRB(
-                    context,
-                    16,
-                    20,
-                    0,
-                    0,
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: Responsive.responsiveValue(context, 8),
+                  ),
+                  child: Text(
+                    '마이페이지',
+                    style: TextStyle(
+                      fontSize: Responsive.responsiveFontSize(context, 18),
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
-                SizedBox(height: Responsive.responsiveHeight(context, 8)),
+                SizedBox(height: Responsive.responsiveHeight(context, 16)),
                 ProfileTile(
                   nickname: _nickname ?? '사용자',
                   imageUrl: _profileImageUrl,
-                  onTap: () {
-                    Navigator.of(context).pushNamed(
+                  onTap: () async {
+                    await Navigator.of(context).pushNamed(
                       '/my-info',
                       arguments: {
                         'nickname': _nickname,
                         'imageUrl': _profileImageUrl,
-                        'allowMarketing': _allowPush,
+                        'allowMarketing': _allowMarketing,
                       },
                     );
+                    if (!mounted) return;
+                    await _loadBackendProfile();
                   },
                 ),
                 SizedBox(height: Responsive.responsiveHeight(context, 24)),
                 Padding(
                   padding: EdgeInsets.only(
-                    left: Responsive.responsiveValue(context, 16),
+                    left: Responsive.responsiveValue(context, 4),
                   ),
                   child: Text(
                     '알람설정',
                     style: TextStyle(
-                      fontSize: Responsive.responsiveFontSize(context, 16),
-                      fontWeight: FontWeight.w700,
+                      fontSize: Responsive.responsiveFontSize(context, 13),
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
                     ),
                   ),
                 ),
@@ -194,6 +206,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
                         onChanged: (v) async {
                           setState(() => _allowPush = v);
                           await MySettingsStore.setAllowPushNotifications(v);
+                          await FcmService.setPushEnabled(v);
                         },
                       ),
                       const Divider(height: 1),
@@ -201,20 +214,28 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
                         title: '디바이스 알람 허용',
                         value: _allowDevice,
                         onChanged: (v) async {
-                          // 토글은 항상 사용자가 직접 켜고 끌 수 있게 유지
                           setState(() => _allowDevice = v);
                           await MySettingsStore.setAllowDeviceNotifications(v);
 
-                          if (Platform.isAndroid && v) {
+                          if (!v) {
+                            await AlarmService().cancelAllActiveAlarmSchedules();
+                            return;
+                          }
+
+                          if (Platform.isAndroid) {
                             await _openExactAlarmSettings();
                             await _openBatteryOptimizationSettings();
                           }
 
+                          await AlarmService().rescheduleAllActiveFromStorage();
+
                           final ready = await _refreshDeviceAlarmState();
-                          if (!mounted || !v) return;
+                          if (!mounted) return;
                           if (ready) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('디바이스 알람 준비가 완료되었습니다.')),
+                              const SnackBar(
+                                content: Text('디바이스 알람 준비가 완료되었습니다.'),
+                              ),
                             );
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -233,7 +254,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
                 SizedBox(height: Responsive.responsiveHeight(context, 36)),
                 Padding(
                   padding: EdgeInsets.only(
-                    left: Responsive.responsiveValue(context, 16),
+                    left: Responsive.responsiveValue(context, 4),
                   ),
                   child: LinkList(
                     items: const [

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/home/ui/home_content.dart';
 import 'package:after30/features/common/navigationBar.dart';
+import 'package:after30/features/common/widgets/phone_register_dialog.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool checkPhoneRegistration;
+
+  const HomePage({super.key, this.checkPhoneRegistration = false});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -17,6 +20,13 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadUserInfo();
+    if (widget.checkPhoneRegistration) {
+      _checkPhoneRegistration();
+    }
+  }
+
+  Future<void> _checkPhoneRegistration() async {
+    await PhoneRegisterDialog.checkAndShowIfNeeded(context);
   }
 
   Future<void> _loadUserInfo() async {

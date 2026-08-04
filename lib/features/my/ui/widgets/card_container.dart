@@ -13,15 +13,8 @@ class CardContainer extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(
-          Responsive.responsiveValue(context, 12),
+          Responsive.responsiveValue(context, 5),
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x11000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
       ),
       child: Padding(
         padding: Responsive.responsivePadding(context, 16, 0),

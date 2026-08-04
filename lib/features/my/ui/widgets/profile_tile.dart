@@ -20,14 +20,13 @@ class ProfileTile extends StatelessWidget {
     return CardContainer(
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(5),
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            vertical: Responsive.responsiveValue(context, 12),
-          ),
+          padding: Responsive.responsivePaddingLTRB(context, 10, 15, 10, 15),
           child: Row(
             children: [
               CircleAvatar(
-                radius: Responsive.responsiveValue(context, 22),
+                radius: Responsive.responsiveValue(context, 20),
                 backgroundColor: Colors.grey.shade300,
                 backgroundImage: imageUrl != null
                     ? NetworkImage(imageUrl!)
@@ -38,14 +37,16 @@ class ProfileTile extends StatelessWidget {
                 child: Text(
                   '$nickname님의 정보',
                   style: TextStyle(
-                    fontSize: Responsive.responsiveFontSize(context, 16),
-                    fontWeight: FontWeight.w600,
+                    fontSize: Responsive.responsiveFontSize(context, 13),
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black,
                   ),
                 ),
               ),
               Icon(
                 Icons.chevron_right,
-                size: Responsive.responsiveIconSize(context, 24),
+                size: Responsive.responsiveIconSize(context, 32),
+                color: Colors.black54,
               ),
             ],
           ),

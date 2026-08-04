@@ -5,6 +5,7 @@ import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/calendar/data/history_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
 import 'package:after30/features/alarm/ui/fullscreen_alarm_page.dart';
+import 'package:after30/features/my/settings_store.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -364,6 +365,13 @@ class AlarmService {
         print('   ✅ 기존 알람 취소 완료');
       }
 
+      final deviceAllowed = await MySettingsStore.getAllowDeviceNotifications();
+      if (!deviceAllowed) {
+        await _saveAlarmWithNotificationIds(alarm, []);
+        print('   ⏸️ 디바이스 알람 비활성화 - 스케줄링 건너뜀');
+        return true;
+      }
+
       // 각 요일과 시간에 대해 알람 등록
       final notificationIds = <int>[];
       int idIndex = 0;
@@ -536,6 +544,20 @@ class AlarmService {
       }
     } catch (e) {
       print('알람 취소 실패: $e');
+    }
+  }
+
+  // 활성 알람의 디바이스 스케줄만 취소 (저장 데이터는 유지)
+  Future<void> cancelAllActiveAlarmSchedules() async {
+    try {
+      final alarms = await getAlarms();
+      for (final alarm in alarms) {
+        if (alarm.isActive) {
+          await cancelAlarm(alarm.id);
+        }
+      }
+    } catch (e) {
+      print('활성 알람 스케줄 취소 실패: $e');
     }
   }
 

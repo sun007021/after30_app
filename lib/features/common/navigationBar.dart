@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/alarm/ui/alarm_list.dart';
 import 'package:after30/features/calendar/ui/calendar_page.dart';
+import 'package:after30/features/family/ui/family_page.dart';
 import 'package:after30/features/my/my_page.dart';
 import 'package:after30/utils/responsive.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -77,55 +78,10 @@ class AlarmBottomNavigation extends StatelessWidget {
                   SizedBox(width: adjustedSpacing),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () async {
-                      await showModalBottomSheet(
-                        context: context,
-                        useSafeArea: true,
-                        isScrollControlled: true,
-                        backgroundColor: const Color(0xFFEBF0FF),
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(16),
-                          ),
-                        ),
-                        builder: (ctx) {
-                          final bottomSafe = MediaQuery.of(
-                            ctx,
-                          ).viewPadding.bottom;
-                          return SafeArea(
-                            top: false,
-                            left: false,
-                            right: false,
-                            bottom: true,
-                            child: Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                20,
-                                20,
-                                20,
-                                bottomSafe,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
-                                  Text(
-                                    '곧 출시될 기능입니다',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    '가족과 복약을 함께 관리하는 기능이 준비 중이에요.',
-                                    style: TextStyle(color: Colors.black54),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
+                    onTap: () {
+                      Navigator.of(
+                        context,
+                      ).pushReplacement(_noAnimRoute(const FamilyPage()));
                     },
                     child: SvgPicture.asset(
                       currentIndex == 1

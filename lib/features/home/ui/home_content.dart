@@ -4,12 +4,16 @@ import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/alarm/ui/add_alarm.dart';
 import 'package:after30/features/calendar/data/history_service.dart';
-import 'package:after30/features/common/topbar.dart';
 import 'package:after30/features/common/page_title.dart';
+import 'package:after30/features/family/data/family_service.dart';
+import 'package:after30/features/family/models/family_dashboard.dart';
+import 'package:after30/features/family/ui/family_page.dart';
+import 'package:after30/features/family/ui/family_invite_group_select_page.dart';
 import 'package:after30/features/home/ui/widgets/home_utils.dart';
 import 'package:after30/features/home/ui/widgets/home_date_header.dart';
 import 'package:after30/features/home/ui/widgets/empty_medicine_section.dart';
 import 'package:after30/features/home/ui/widgets/add_medicine_tile.dart';
+import 'package:after30/features/home/ui/widgets/home_family_gauge_row.dart';
 import 'package:after30/features/home/ui/widgets/medication_dose_tile.dart';
 import 'package:after30/utils/responsive.dart';
 
@@ -23,17 +27,62 @@ class HomeContent extends StatefulWidget {
 }
 
 class _HomeContentState extends State<HomeContent> {
+  final FamilyService _familyService = FamilyService();
   final Set<String> _completedDoseKeys = <String>{};
 
   DateTime _selectedDate = DateTime.now();
   List<Medication> _medications = [];
   bool _isLoading = true;
 
+  List<MemberMedicationSummary> _familyMembers = [];
+  Map<int, int> _userIdToGroupId = {};
+
   @override
   void initState() {
     super.initState();
     _loadDosesForDate(_selectedDate);
     _loadCompletedFromServer(_selectedDate);
+    _loadFamilyDashboard();
+  }
+
+  Future<void> _loadFamilyDashboard() async {
+    try {
+      final results = await Future.wait([
+        _familyService.getHomeDashboard(),
+        _familyService.getUserIdToGroupIdMap(),
+      ]);
+      final dashboard = results[0] as HomeDashboard;
+      final groupMap = results[1] as Map<int, int>;
+      if (!mounted) return;
+      setState(() {
+        _familyMembers = dashboard.membersSummary;
+        _userIdToGroupId = groupMap;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _familyMembers = [];
+        _userIdToGroupId = {};
+      });
+    }
+  }
+
+  Future<void> _openFamilyGroupForMember(MemberMedicationSummary member) async {
+    final groupId = _userIdToGroupId[member.userId];
+    await Navigator.of(context).pushReplacement(
+      PageRouteBuilder<void>(
+        pageBuilder: (_, __, ___) => FamilyPage(initialGroupId: groupId),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
+  Future<void> _openCreateGroup() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const FamilyInviteGroupSelectPage()),
+    );
+    await _loadFamilyDashboard();
   }
 
   Future<void> _loadDosesForDate(DateTime date) async {
@@ -211,131 +260,118 @@ class _HomeContentState extends State<HomeContent> {
     final List<Medication> dayMeds = [..._medications]
       ..sort((a, b) => a.time.compareTo(b.time));
     final double bottomSafe = MediaQuery.of(context).padding.bottom;
+    const skyBlue = Color(0xFFEBF0FF);
+
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
+      backgroundColor: skyBlue,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 상단 영역 하늘색 배경
+          // 상단: 흰 배경 (가족 게이지)
           Container(
-            height: Responsive.responsiveValue(context, 220),
-            color: const Color(0xFFEBF0FF),
+            color: Colors.white,
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: Responsive.responsiveHeight(context, 8)),
+                  HomeFamilyGaugeRow(
+                    members: _familyMembers,
+                    onMemberTap: _openFamilyGroupForMember,
+                    onAddTap: _openCreateGroup,
+                  ),
+                ],
+              ),
+            ),
           ),
-          // 본문 레이어
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 본문 스크롤
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.zero,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 상단 흰 배경 바 + 알람 아이콘
-                        const AlarmTopBar(),
-                        // 상단 파란 배경 스트립 + 타이틀
-                        Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.only(
-                            left: Responsive.responsiveValue(context, 22),
-                            right: Responsive.responsiveValue(context, 16),
-                            bottom: Responsive.responsiveValue(context, 5),
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF2FF),
-                            borderRadius: BorderRadius.circular(
-                              Responsive.responsiveValue(context, 12),
-                            ),
-                          ),
-                          child: const PageTitle(
-                            title: '나의 복약 체크 리스트',
-                            margin: EdgeInsets.zero,
-                          ),
-                        ),
-                        SizedBox(
-                          height: Responsive.responsiveHeight(context, 12),
-                        ),
-                        Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(32),
-                              topRight: Radius.circular(32),
-                            ),
-                          ),
-                          child: Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              Responsive.responsiveValue(context, 16),
-                              Responsive.responsiveValue(context, 24),
-                              Responsive.responsiveValue(context, 16),
-                              Responsive.responsiveValue(context, 24) +
-                                  bottomSafe,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                HomeDateHeader(
-                                  selectedDate: _selectedDate,
-                                  onPreviousDay: () => _changeDate(-1),
-                                  onNextDay: () => _changeDate(1),
-                                ),
-                                SizedBox(
-                                  height: Responsive.responsiveHeight(
-                                    context,
-                                    8,
-                                  ),
-                                ),
-                                if (_isLoading)
-                                  Padding(
-                                    padding: EdgeInsets.all(
-                                      Responsive.responsiveValue(context, 24),
-                                    ),
-                                    child: const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  )
-                                else if (dayMeds.isEmpty)
-                                  EmptyMedicineSection(onAdd: _goToRegister)
-                                else ...[
-                                  ...dayMeds.map((m) {
-                                    final doseKey =
-                                        '${m.scheduleId ?? m.id}_${yyyymmdd(_selectedDate)}_${m.time}';
-                                    return MedicationDoseTile(
-                                      medication: m,
-                                      selectedDate: _selectedDate,
-                                      doseKey: doseKey,
-                                      onMarkCompleted: _markCompleted,
-                                      onMarkUncompleted: _markUncompleted,
-                                    );
-                                  }),
-                                  SizedBox(
-                                    height: Responsive.responsiveHeight(
-                                      context,
-                                      8,
-                                    ),
-                                  ),
-                                  AddMedicineTile(onAdd: _goToRegister),
-                                  SizedBox(
-                                    height: Responsive.responsiveHeight(
-                                      context,
-                                      10,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                        Container(
-                          height: 120 + bottomSafe,
-                          color: Colors.white,
-                        ),
-                      ],
+          // 하단: 하늘색 배경 + 복약 체크리스트
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: Responsive.responsiveValue(context, 22),
+                      right: Responsive.responsiveValue(context, 16),
+                      top: Responsive.responsiveValue(context, 8),
+                      bottom: Responsive.responsiveValue(context, 5),
+                    ),
+                    child: const PageTitle(
+                      title: '나의 복약 체크 리스트',
+                      margin: EdgeInsets.zero,
                     ),
                   ),
-                ),
-              ],
+                  SizedBox(height: Responsive.responsiveHeight(context, 12)),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(32),
+                        topRight: Radius.circular(32),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        Responsive.responsiveValue(context, 16),
+                        Responsive.responsiveValue(context, 24),
+                        Responsive.responsiveValue(context, 16),
+                        Responsive.responsiveValue(context, 24) + bottomSafe,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          HomeDateHeader(
+                            selectedDate: _selectedDate,
+                            onPreviousDay: () => _changeDate(-1),
+                            onNextDay: () => _changeDate(1),
+                          ),
+                          SizedBox(
+                            height: Responsive.responsiveHeight(context, 8),
+                          ),
+                          if (_isLoading)
+                            Padding(
+                              padding: EdgeInsets.all(
+                                Responsive.responsiveValue(context, 24),
+                              ),
+                              child: const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          else if (dayMeds.isEmpty)
+                            EmptyMedicineSection(onAdd: _goToRegister)
+                          else ...[
+                            ...dayMeds.map((m) {
+                              final doseKey =
+                                  '${m.scheduleId ?? m.id}_${yyyymmdd(_selectedDate)}_${m.time}';
+                              return MedicationDoseTile(
+                                medication: m,
+                                selectedDate: _selectedDate,
+                                doseKey: doseKey,
+                                onMarkCompleted: _markCompleted,
+                                onMarkUncompleted: _markUncompleted,
+                              );
+                            }),
+                            SizedBox(
+                              height: Responsive.responsiveHeight(context, 8),
+                            ),
+                            AddMedicineTile(onAdd: _goToRegister),
+                            SizedBox(
+                              height: Responsive.responsiveHeight(context, 10),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    height: 120 + bottomSafe,
+                    color: Colors.white,
+                  ),
+                ],
+              ),
             ),
           ),
         ],

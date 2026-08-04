@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
+import 'package:after30/core/auth/current_user_resolver.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/home/ui/home.dart';
@@ -346,13 +347,18 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
         email: email,
         password: password,
       );
-      await UserStore.setCurrentUserId(email);
-      AlarmService.setCurrentUserId(email);
+      final userId = await CurrentUserResolver.resolveUserId();
+      await UserStore.setCurrentUserId(
+        userId?.toString() ?? email,
+      );
+      AlarmService.setCurrentUserId(userId?.toString() ?? email);
       // 로그인 성공 시 FCM 토큰을 백엔드로 동기화
       await FcmService.syncTokenToBackend();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomePage()),
+        MaterialPageRoute(
+          builder: (_) => const HomePage(checkPhoneRegistration: true),
+        ),
         (route) => false,
       );
     } catch (e) {

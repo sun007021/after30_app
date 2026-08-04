@@ -33,7 +33,6 @@ dependencies:
   kakao_flutter_sdk_user: ^1.9.5 # 카카오 로그인 API 패키지
   kakao_flutter_sdk_auth: ^1.9.5 # 카카오 인가코드용 Auth API
   table_calendar: ^3.0.9 # 달력 위젯 패키지
-  provider: ^6.1.5 # 상태 관리 패키지
   awesome_notifications: ^0.10.1 # 알림 패키지
   timezone: ^0.9.2 # 시간대 관리 패키지
   shared_preferences: ^2.2.2 # 로컬 저장소 패키지

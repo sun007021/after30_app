@@ -7,12 +7,39 @@ class HistoryService {
   Future<List<dynamic>> getUserHistories({
     required String startDate, // YYYY-MM-DD
     required String endDate, // YYYY-MM-DD
+    int? userId,
   }) async {
+    final query = <String, dynamic>{
+      'start_date': startDate,
+      'end_date': endDate,
+    };
+    if (userId != null) {
+      query['user_id'] = userId;
+    }
     final resp = await _client.get(
       '/histories/',
-      queryParameters: {'start_date': startDate, 'end_date': endDate},
+      queryParameters: query,
     );
-    final data = resp.data as Map<String, dynamic>;
+    return _flattenHistoryResponse(resp.data);
+  }
+
+  Future<List<dynamic>> getFamilyMemberHistories({
+    required int memberUserId,
+    required String startDate,
+    required String endDate,
+  }) async {
+    final resp = await _client.get(
+      '/families/members/$memberUserId/histories',
+      queryParameters: {
+        'start_date': startDate,
+        'end_date': endDate,
+      },
+    );
+    return _flattenHistoryResponse(resp.data);
+  }
+
+  List<dynamic> _flattenHistoryResponse(dynamic data) {
+    if (data is! Map<String, dynamic>) return const [];
     final daily = (data['daily_details'] as List?) ?? const [];
     final flat = <dynamic>[];
     for (final d in daily) {

@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
+import 'package:after30/features/my/settings_store.dart';
 
 @pragma('vm:entry-point')
 Future<void> fcmBackgroundHandler(RemoteMessage message) async {
@@ -29,6 +30,9 @@ class FcmService {
 
     // 포그라운드 수신
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      final allowPush = await MySettingsStore.getAllowPushNotifications();
+      if (!allowPush) return;
+
       final title = message.notification?.title ?? 'FCM';
       final body = message.notification?.body ?? '(본문 없음)';
       debugPrint('FCM(포그라운드) ${message.messageId}: $title - $body');
@@ -62,6 +66,8 @@ class FcmService {
     await logToken();
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       debugPrint('FCM 토큰 갱신: $newToken');
+      final allowPush = await MySettingsStore.getAllowPushNotifications();
+      if (!allowPush) return;
       try {
         await MyProfileService().updateFcmToken(newToken);
       } catch (e) {
@@ -85,6 +91,9 @@ class FcmService {
 
   static Future<void> syncTokenToBackend() async {
     try {
+      final allowPush = await MySettingsStore.getAllowPushNotifications();
+      if (!allowPush) return;
+
       final token = await FirebaseMessaging.instance.getToken();
       if (token == null) {
         debugPrint('FCM 토큰이 없어 백엔드 전송을 건너뜁니다.');
@@ -94,6 +103,18 @@ class FcmService {
       debugPrint('FCM 토큰을 백엔드로 동기화했습니다.');
     } catch (e) {
       debugPrint('FCM 토큰 백엔드 동기화 실패: $e');
+    }
+  }
+
+  static Future<void> setPushEnabled(bool enabled) async {
+    try {
+      if (enabled) {
+        await syncTokenToBackend();
+      } else {
+        await FirebaseMessaging.instance.deleteToken();
+      }
+    } catch (e) {
+      debugPrint('푸시 알림 설정 변경 실패: $e');
     }
   }
 }

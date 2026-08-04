@@ -68,7 +68,9 @@ class _LoginPageState extends State<LoginPage> {
 
   void _navigateToHome() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const HomePage()),
+      MaterialPageRoute(
+        builder: (context) => const HomePage(checkPhoneRegistration: true),
+      ),
     );
   }
 

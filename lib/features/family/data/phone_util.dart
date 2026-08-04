@@ -57,6 +57,27 @@ class PhoneUtil {
     return normalized.startsWith('+82');
   }
 
+  /// API 조회용 로컬 전화번호 (예: 010-0000-0001)
+  static String toApiPhoneQuery(String phone) {
+    final normalized = normalizePhoneNumber(phone);
+    if (!normalized.startsWith('+82')) {
+      return phone.replaceAll(RegExp(r'[\s\(\)]'), '');
+    }
+
+    final local = '0${normalized.substring(3)}';
+    if (local.length == 11) {
+      return '${local.substring(0, 3)}-'
+          '${local.substring(3, 7)}-'
+          '${local.substring(7)}';
+    }
+    if (local.length == 10) {
+      return '${local.substring(0, 3)}-'
+          '${local.substring(3, 6)}-'
+          '${local.substring(6)}';
+    }
+    return local;
+  }
+
   /// 전화번호를 마스킹 처리합니다 (개인정보 보호용).
   static String maskPhoneNumber(String phone) {
     String normalized = normalizePhoneNumber(phone);

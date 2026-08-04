@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:provider/provider.dart';
 import 'package:after30/features/login/ui/login.dart';
 import 'package:after30/features/login/ui/signup_page.dart';
 import 'package:after30/features/login/ui/signup_intro.dart';
@@ -11,9 +10,9 @@ import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/features/family/ui/family_page.dart';
 import 'package:flutter/widgets.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
-import 'package:after30/services/invite_view_model.dart';
 import 'package:after30/features/my/my_page.dart';
 import 'package:after30/features/my/my_info_page.dart';
+import 'package:after30/features/my/my_info_edit_page.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
@@ -94,39 +93,37 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => InviteViewModel())],
-      child: MaterialApp(
-        navigatorKey: _navigatorKey,
-        title: '식후 30분',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFEE500)),
-          useMaterial3: true,
-          pageTransitionsTheme: const PageTransitionsTheme(
-            builders: {
-              TargetPlatform.android: NoTransitionsPageTransitionsBuilder(),
-              TargetPlatform.iOS: NoTransitionsPageTransitionsBuilder(),
-              TargetPlatform.macOS: NoTransitionsPageTransitionsBuilder(),
-              TargetPlatform.windows: NoTransitionsPageTransitionsBuilder(),
-              TargetPlatform.linux: NoTransitionsPageTransitionsBuilder(),
-            },
-          ),
+    return MaterialApp(
+      navigatorKey: _navigatorKey,
+      title: '식후 30분',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFEE500)),
+        useMaterial3: true,
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: NoTransitionsPageTransitionsBuilder(),
+            TargetPlatform.iOS: NoTransitionsPageTransitionsBuilder(),
+            TargetPlatform.macOS: NoTransitionsPageTransitionsBuilder(),
+            TargetPlatform.windows: NoTransitionsPageTransitionsBuilder(),
+            TargetPlatform.linux: NoTransitionsPageTransitionsBuilder(),
+          },
         ),
-        initialRoute: '/startup',
-        routes: {
-          '/startup': (context) => const StartupPage(),
-          '/login': (context) => const LoginPage(),
-          '/signup-intro': (context) => const SignupIntroPage(),
-          '/signup-terms': (context) => const TermsAgreementPage(),
-          '/email-login': (context) => const EmailLoginPage(),
-          '/signup': (context) => const SignupPage(),
-          '/home': (context) => const HomePage(),
-          '/family': (context) => const FamilyPage(),
-          '/fullscreen_alarm': (context) => const FullscreenAlarmPlaceholder(),
-          '/my': (context) => const MyPage(),
-          '/my-info': (context) => const MyInfoPage(),
-        },
       ),
+      initialRoute: '/startup',
+      routes: {
+        '/startup': (context) => const StartupPage(),
+        '/login': (context) => const LoginPage(),
+        '/signup-intro': (context) => const SignupIntroPage(),
+        '/signup-terms': (context) => const TermsAgreementPage(),
+        '/email-login': (context) => const EmailLoginPage(),
+        '/signup': (context) => const SignupPage(),
+        '/home': (context) => const HomePage(),
+        '/family': (context) => const FamilyPage(),
+        '/fullscreen_alarm': (context) => const FullscreenAlarmPlaceholder(),
+        '/my': (context) => const MyPage(),
+        '/my-info': (context) => const MyInfoPage(),
+        '/my-info-edit': (context) => const MyInfoEditPage(),
+      },
     );
   }
 }

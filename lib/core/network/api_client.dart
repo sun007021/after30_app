@@ -24,8 +24,10 @@ class ApiClient {
               options.headers['Authorization'] = 'Bearer $token';
             }
           }
+          final query = options.queryParameters;
+          final querySuffix = query.isNotEmpty ? '?$query' : '';
           // ignore: avoid_print
-          print('➡️  ${options.method} ${options.path}');
+          print('➡️  ${options.method} ${options.path}$querySuffix');
           handler.next(options);
         },
         onResponse: (response, handler) {

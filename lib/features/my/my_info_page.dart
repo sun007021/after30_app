@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/features/common/page_title.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
+import 'package:after30/features/family/data/phone_util.dart';
+import 'package:after30/features/my/ui/widgets/my_info_widgets.dart';
 import 'package:after30/utils/responsive.dart';
 
 class MyInfoPage extends StatefulWidget {
@@ -16,16 +16,11 @@ class MyInfoPage extends StatefulWidget {
 class _MyInfoPageState extends State<MyInfoPage> {
   String? _nickname;
   String? _email;
+  String? _phoneNumber;
+  String? _gender;
   String? _imageUrl;
   bool _marketingConsent = false;
   bool _isKakaoLoggedIn = false;
-
-  Future<void> _openExternalLink(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
 
   @override
   void didChangeDependencies() {
@@ -50,28 +45,93 @@ class _MyInfoPageState extends State<MyInfoPage> {
         _email = account?.email;
         _isKakaoLoggedIn = true;
       });
+      await _loadBackendProfile(preserveKakaoState: true);
     } catch (_) {
-      // 카카오 미로그인(=이메일 로그인 등)인 경우 백엔드 프로필 조회
       await _loadBackendProfile();
     }
   }
 
-  Future<void> _loadBackendProfile() async {
+  Future<void> _loadBackendProfile({bool preserveKakaoState = false}) async {
     try {
       final profile = await MyProfileService().getMyProfile();
       if (!mounted) return;
       setState(() {
-        _nickname = _nickname ?? profile.name ?? '사용자';
+        _nickname = profile.name ?? _nickname ?? '사용자';
         _email = profile.email ?? _email;
+        _phoneNumber = profile.phoneNumber;
+        _gender = profile.gender;
         _marketingConsent = profile.allowMarketing ?? _marketingConsent;
         _imageUrl = _imageUrl ?? profile.profileImageUrl;
-        _isKakaoLoggedIn = false;
+        if (profile.provider != null) {
+          _isKakaoLoggedIn = profile.provider!.toLowerCase().contains('kakao');
+        }
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || preserveKakaoState) return;
       setState(() {
         _isKakaoLoggedIn = false;
       });
+    }
+  }
+
+  void _applyProfile(MyProfile profile) {
+    setState(() {
+      _nickname = profile.name ?? _nickname ?? '사용자';
+      _email = profile.email ?? _email;
+      _phoneNumber = profile.phoneNumber;
+      _gender = profile.gender;
+      _marketingConsent = profile.allowMarketing ?? _marketingConsent;
+      _imageUrl = profile.profileImageUrl ?? _imageUrl;
+      if (profile.provider != null) {
+        _isKakaoLoggedIn = profile.provider!.toLowerCase().contains('kakao');
+      }
+    });
+  }
+
+  String _formatPhone(String? phone) {
+    if (phone == null || phone.trim().isEmpty) return '-';
+    if (phone.contains('-')) return phone;
+    return PhoneUtil.toApiPhoneQuery(phone);
+  }
+
+  String _formatGender(String? gender) {
+    if (gender == null || gender.trim().isEmpty) return '-';
+    switch (gender.trim().toUpperCase()) {
+      case 'M':
+      case 'MALE':
+      case '남':
+        return '남';
+      case 'F':
+      case 'FEMALE':
+      case '여':
+        return '여';
+      default:
+        return gender;
+    }
+  }
+
+  String _formatMarketingConsent(bool consent) => consent ? '동의' : '미동의';
+
+  String _formatSso(bool isKakaoLoggedIn) =>
+      isKakaoLoggedIn ? '카카오톡' : '이메일';
+
+  Future<void> _openEditPage() async {
+    final result = await Navigator.of(context).pushNamed(
+      '/my-info-edit',
+      arguments: {
+        'name': _nickname,
+        'phoneNumber': _phoneNumber,
+        'email': _email,
+        'gender': _gender,
+        'isKakaoLoggedIn': _isKakaoLoggedIn,
+      },
+    );
+    if (!mounted) return;
+    if (result is MyProfile) {
+      _applyProfile(result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('회원정보가 수정되었습니다.')),
+      );
     }
   }
 
@@ -82,88 +142,56 @@ class _MyInfoPageState extends State<MyInfoPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: Responsive.responsivePaddingLTRB(context, 20, 24, 20, 24),
+            padding: Responsive.responsivePaddingLTRB(context, 20, 36, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: EdgeInsets.only(
-                    top: Responsive.responsiveHeight(context, 18),
-                  ),
-                  child: Row(
+                MyInfoHeader(
+                  actionLabel: '수정하기',
+                  actionFilled: false,
+                  onBack: () => Navigator.of(context).pop(),
+                  onAction: _openEditPage,
+                ),
+                SizedBox(height: Responsive.responsiveHeight(context, 16)),
+                MyInfoSectionCard(
+                  title: '기본 정보',
+                  child: Column(
                     children: [
-                      InkWell(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: Icon(
-                          Icons.arrow_back_ios_new,
-                          size: Responsive.responsiveIconSize(context, 22),
-                        ),
+                      MyInfoReadRow(label: '성명', value: _nickname ?? '-'),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 14),
                       ),
-                      SizedBox(width: Responsive.responsiveWidth(context, 8)),
-                      const PageTitle(
-                        title: '내 정보 조회',
-                        margin: EdgeInsets.zero,
+                      MyInfoReadRow(
+                        label: '전화번호',
+                        value: _formatPhone(_phoneNumber),
+                      ),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 14),
+                      ),
+                      MyInfoReadRow(
+                        label: '성별',
+                        value: _formatGender(_gender),
+                      ),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 14),
+                      ),
+                      MyInfoReadRow(label: '이메일 주소', value: _email ?? '-'),
+                      SizedBox(
+                        height: Responsive.responsiveHeight(context, 14),
+                      ),
+                      MyInfoReadRow(
+                        label: '연동된 SSO',
+                        value: _formatSso(_isKakaoLoggedIn),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(height: Responsive.responsiveHeight(context, 8)),
-
-                // 기본 정보 카드
-                _Card(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _SectionTitle('기본 정보'),
-                      Divider(height: Responsive.responsiveHeight(context, 24)),
-                      _InfoRow(label: '성명', value: _nickname ?? '-'),
-                      SizedBox(
-                        height: Responsive.responsiveHeight(context, 16),
-                      ),
-                      _InfoRow(label: '이메일 주소', value: _email ?? '-'),
-                      SizedBox(
-                        height: Responsive.responsiveHeight(context, 16),
-                      ),
-                      if (_isKakaoLoggedIn)
-                        const _InfoRow(label: '연동된 SSO', value: '카카오톡'),
-                    ],
-                  ),
-                ),
-
-                SizedBox(height: Responsive.responsiveHeight(context, 20)),
-
-                // 기타 정보 카드
-                _Card(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _SectionTitle('기타 정보'),
-                      Divider(height: Responsive.responsiveHeight(context, 24)),
-                      SizedBox(height: Responsive.responsiveHeight(context, 4)),
-                      _InfoRow(
-                        label: '개인정보 수집 및 이용 동의',
-                        trailing: Icon(
-                          Icons.chevron_right,
-                          size: Responsive.responsiveIconSize(context, 24),
-                        ),
-                        onTap: () => _openExternalLink(
-                          'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link',
-                        ),
-                      ),
-                      SizedBox(
-                        height: Responsive.responsiveHeight(context, 12),
-                      ),
-                      _InfoRow(
-                        label: '서비스 이용약관',
-                        trailing: Icon(
-                          Icons.chevron_right,
-                          size: Responsive.responsiveIconSize(context, 24),
-                        ),
-                        onTap: () => _openExternalLink(
-                          'https://www.notion.so/30-2b2ac07ca4e98040a729c7433c26a896?source=copy_link',
-                        ),
-                      ),
-                    ],
+                SizedBox(height: Responsive.responsiveHeight(context, 15)),
+                MyInfoSectionCard(
+                  title: '기타 정보',
+                  child: MyInfoReadRow(
+                    label: '광고 정보 수신 동의',
+                    value: _formatMarketingConsent(_marketingConsent),
                   ),
                 ),
               ],
@@ -172,108 +200,6 @@ class _MyInfoPageState extends State<MyInfoPage> {
         ),
       ),
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 4),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  final Widget child;
-  const _Card({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(
-          Responsive.responsiveValue(context, 12),
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x11000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: Responsive.responsivePadding(context, 16, 14),
-        child: child,
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: Responsive.responsiveFontSize(context, 16),
-        fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String? value;
-  final Widget? trailing;
-  final VoidCallback? onTap;
-  const _InfoRow({required this.label, this.value, this.trailing, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: Responsive.responsiveFontSize(context, 14),
-              color: Colors.black87,
-            ),
-          ),
-        ),
-        SizedBox(width: Responsive.responsiveWidth(context, 1)),
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: onTap != null
-                ? InkWell(
-                    onTap: onTap,
-                    child:
-                        trailing ??
-                        Text(
-                          value ?? '-',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                            fontSize: Responsive.responsiveFontSize(
-                              context,
-                              14,
-                            ),
-                            color: Colors.black87,
-                          ),
-                        ),
-                  )
-                : (trailing ??
-                      Text(
-                        value ?? '-',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: Responsive.responsiveFontSize(context, 14),
-                          color: Colors.black87,
-                        ),
-                      )),
-          ),
-        ),
-      ],
     );
   }
 }

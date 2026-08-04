@@ -199,7 +199,7 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                     ],
                   ),
                   Wrap(
-                    spacing: Responsive.responsiveValue(context, 4),
+                    spacing: Responsive.responsiveValue(context, 10),
                     runSpacing: Responsive.responsiveValue(context, 8),
                     alignment: WrapAlignment.start,
                     children: _allDays.map((day) {

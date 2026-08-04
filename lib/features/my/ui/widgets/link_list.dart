@@ -19,7 +19,11 @@ class LinkList extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 items[i],
-                style: const TextStyle(fontSize: 14, color: Colors.black87),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black,
+                ),
               ),
             ),
           ),

@@ -220,7 +220,7 @@ class _AlarmContentState extends State<AlarmContent> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(height: Responsive.responsiveHeight(context, 8)),
+            SizedBox(height: Responsive.responsiveHeight(context, 12)),
             ..._alarms.asMap().entries.map((entry) {
               final idx = entry.key;
               final alarm = entry.value;

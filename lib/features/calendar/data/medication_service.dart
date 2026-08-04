@@ -26,12 +26,22 @@ class MedicationService {
 
   static Future<List<Medication>> fetchMedications(
     DateTime start,
-    DateTime end,
-  ) async {
+    DateTime end, {
+    int? userId,
+  }) async {
+    final currentUserIdStr = await UserStore.getCurrentUserId();
+    final currentUserId = int.tryParse(currentUserIdStr ?? '');
+    final isOtherUser =
+        userId != null && currentUserId != null && userId != currentUserId;
+    final scheduleUserId = isOtherUser ? userId : null;
+
     final scheduleService = ScheduleService();
-    final schedules = await scheduleService.getSchedules(includeInactive: true);
+    final schedules = await scheduleService.getSchedules(
+      includeInactive: true,
+      userId: scheduleUserId,
+    );
     final prefs = await SharedPreferences.getInstance();
-    final userId = await UserStore.getCurrentUserId();
+    final localPrefsUserId = currentUserIdStr;
 
     // /schedules/의 created_at 기준일(가장 이른 생성일)을 계산
     DateTime? earliestCreatedAtDateOnly;
@@ -146,10 +156,10 @@ class MedicationService {
               cutoff = DateTime(parsed.year, parsed.month, parsed.day);
             }
           }
-          // 로컬 저장 기준일(토글 시점) 사용 - 사용자별 네임스페이스 우선, 없으면 레거시 키 사용
-          if (cutoff == null) {
-            final keyNs = userId != null
-                ? 'inactive_since_${userId}_${scheduleId.toString()}'
+          // 로컬 저장 기준일(토글 시점) 사용 - 본인 스케줄에만 적용
+          if (cutoff == null && !isOtherUser) {
+            final keyNs = localPrefsUserId != null
+                ? 'inactive_since_${localPrefsUserId}_${scheduleId.toString()}'
                 : 'inactive_since_${scheduleId.toString()}';
             final localStr =
                 prefs.getString(keyNs) ??
@@ -197,6 +207,7 @@ class MedicationService {
     final histList = await hist.getUserHistories(
       startDate: _formatYMD(start),
       endDate: _formatYMD(end),
+      userId: scheduleUserId,
     );
 
     final historyMap = <String, Map<String, dynamic>>{};
@@ -275,6 +286,54 @@ class MedicationService {
         return only.isBefore(earliestCreatedAtDateOnly!);
       });
     }
+    return meds;
+  }
+
+  static Future<List<Medication>> fetchFamilyMemberMedications(
+    int memberUserId,
+    DateTime start,
+    DateTime end,
+  ) async {
+    final hist = HistoryService();
+    final histList = await hist.getFamilyMemberHistories(
+      memberUserId: memberUserId,
+      startDate: _formatYMD(start),
+      endDate: _formatYMD(end),
+    );
+
+    final meds = <Medication>[];
+    for (final item in histList) {
+      if (item is! Map<String, dynamic>) continue;
+      final sid = (item['schedule_id'] as num?)?.toInt();
+      final dateStr = item['scheduled_date']?.toString();
+      final timeStr = item['scheduled_time']?.toString();
+      if (dateStr == null || timeStr == null) continue;
+
+      final tNorm = _normalizeTime(timeStr).substring(0, 5);
+      final date = DateTime.tryParse(dateStr);
+      if (date == null) continue;
+
+      var status = (item['status']?.toString() ?? '').toLowerCase();
+      if (status.isEmpty) status = 'pending';
+
+      meds.add(
+        Medication(
+          id: '${sid ?? 0}_${dateStr}_$tNorm',
+          name: item['medication_name']?.toString() ?? '',
+          dosage: '1정',
+          time: tNorm,
+          date: date,
+          status: status,
+          scheduleId: sid,
+          historyId: (item['id'] as num?)?.toInt(),
+          takenAt: item['taken_at'] != null
+              ? DateTime.tryParse(item['taken_at'].toString())
+              : null,
+        ),
+      );
+    }
+
+    meds.sort((a, b) => a.time.compareTo(b.time));
     return meds;
   }
 }
