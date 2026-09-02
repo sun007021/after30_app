@@ -97,7 +97,7 @@ class _MyAppState extends State<MyApp> {
       navigatorKey: _navigatorKey,
       title: '식후 30분',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFEE500)),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFEBF0FF)),
         useMaterial3: true,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
