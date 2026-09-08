@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/login/ui/login.dart';
 import 'package:after30/features/login/ui/signup_page.dart';
@@ -222,6 +223,15 @@ class _StartupPageState extends State<StartupPage> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: SvgPicture.asset(
+          'assets/images/mainicon.svg',
+          width: 80,
+          height: 80,
+        ),
+      ),
+    );
   }
 }
