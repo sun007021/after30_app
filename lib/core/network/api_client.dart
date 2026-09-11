@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:after30/core/config/api_config.dart';
 import 'package:after30/core/storage/token_store.dart';
 
@@ -26,15 +27,17 @@ class ApiClient {
           }
           final query = options.queryParameters;
           final querySuffix = query.isNotEmpty ? '?$query' : '';
-          // ignore: avoid_print
-          print('➡️  ${options.method} ${options.path}$querySuffix');
+          if (kDebugMode) {
+            debugPrint('➡️  ${options.method} ${options.path}$querySuffix');
+          }
           handler.next(options);
         },
         onResponse: (response, handler) {
-          // ignore: avoid_print
-          print(
-            '✅ ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.path}',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '✅ ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.path}',
+            );
+          }
           handler.next(response);
         },
         onError: (error, handler) async {
@@ -49,10 +52,11 @@ class ApiClient {
               } catch (_) {}
             }
           }
-          // ignore: avoid_print
-          print(
-            '❌ ${error.response?.statusCode ?? '-'} ${error.requestOptions.method} ${error.requestOptions.path}',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '❌ ${error.response?.statusCode ?? '-'} ${error.requestOptions.method} ${error.requestOptions.path}',
+            );
+          }
           handler.next(error);
         },
       ),
