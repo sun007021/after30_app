@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
@@ -80,12 +79,37 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   }
 
   void _addTime() {
+    // 마지막 시간 + 1시간을 기본값으로 제안해 같은 시각이 중복 추가되는 것을 막는다.
+    TimeOfDay candidate;
+    if (_times.isEmpty) {
+      candidate = const TimeOfDay(hour: 8, minute: 0);
+    } else {
+      final lastMinutes = _times
+          .map((t) => t.hour * 60 + t.minute)
+          .reduce((a, b) => a > b ? a : b);
+      final nextMinutes = (lastMinutes + 60) % (24 * 60);
+      candidate = TimeOfDay(hour: nextMinutes ~/ 60, minute: nextMinutes % 60);
+    }
+    final duplicate = _times.any(
+      (t) => t.hour == candidate.hour && t.minute == candidate.minute,
+    );
+    if (duplicate) {
+      DoubleCheckDialog.showSingle(
+        context: context,
+        title: '안내',
+        message: '이미 같은 시간이 등록되어 있습니다. 시간을 눌러 변경해주세요.',
+      );
+      return;
+    }
     setState(() {
-      _times.add(TimeOfDay(hour: 8, minute: 0));
+      _times.add(candidate);
+      _times.sort(
+        (a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute),
+      );
     });
   }
 
-  void _removeTime() {
+  void _removeTimeAt(int idx) {
     setState(() {
       if (_times.length == 1) {
         DoubleCheckDialog.showSingle(
@@ -94,9 +118,24 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
           message: '복용 시간은 최소 1개 이상 입력해야 합니다.',
         );
       } else {
-        _times.removeLast();
+        _times.removeAt(idx);
       }
     });
+  }
+
+  // 등록/수정 직전에 중복 시간을 제거하고 정렬해 서버 저장값과 로컬 스케줄이
+  // 어긋나지 않도록 한다(서버는 중복 시간을 제거해서 저장함).
+  List<TimeOfDay> _dedupeAndSortTimes(List<TimeOfDay> input) {
+    final seen = <int>{};
+    final result = <TimeOfDay>[];
+    for (final t in input) {
+      final key = t.hour * 60 + t.minute;
+      if (seen.add(key)) {
+        result.add(t);
+      }
+    }
+    result.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
+    return result;
   }
 
   String _formatTimeOfDay(TimeOfDay tod) {
@@ -131,7 +170,6 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 0),
       body: Stack(
         children: [
           SafeArea(
@@ -250,23 +288,11 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove, color: Colors.black),
-                            onPressed: _removeTime,
-                            color: Colors.black,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.add, color: Colors.black),
-                            onPressed: _addTime,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
+                      IconButton(
+                        icon: const Icon(Icons.add, color: Colors.black),
+                        onPressed: _addTime,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
@@ -276,25 +302,39 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                     final t = entry.value;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: GestureDetector(
-                        onTap: () => _pickTime(idx),
-                        child: AbsorbPointer(
-                          child: TextField(
-                            readOnly: true,
-                            controller: TextEditingController(
-                              text: _formatTimeOfDay(t),
-                            ),
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
-                              contentPadding: EdgeInsets.symmetric(
-                                vertical: 8,
-                                horizontal: 12,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _pickTime(idx),
+                              child: AbsorbPointer(
+                                child: TextField(
+                                  readOnly: true,
+                                  controller: TextEditingController(
+                                    text: _formatTimeOfDay(t),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 8,
+                                      horizontal: 12,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              color: Color(0xFF235DFF),
+                            ),
+                            tooltip: '이 시간 삭제',
+                            onPressed: () => _removeTimeAt(idx),
+                          ),
+                        ],
                       ),
                     );
                   }),
@@ -305,7 +345,9 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                   ElevatedButton(
                     onPressed: () async {
                       final name = _medicineController.text.trim();
-                      final times = List<TimeOfDay>.from(_times);
+                      // 서버는 중복 시간을 제거해서 저장하므로, 등록 전에 로컬에서도
+                      // 중복을 제거해 서버 값과 어긋나지 않게 한다.
+                      final times = _dedupeAndSortTimes(_times);
                       final hasMissing =
                           name.isEmpty ||
                           _selectedDays.isEmpty ||

@@ -43,21 +43,37 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
     }
   }
 
-  Future<void> _onComplete(BuildContext context) async {
+  Future<bool> _onComplete(BuildContext context) async {
+    bool success = false;
     try {
       final hh = widget.time.hour.toString().padLeft(2, '0');
       final mm = widget.time.minute.toString().padLeft(2, '0');
-      await AlarmService.markTakenFromUi(
+      success = await AlarmService.markTakenFromUi(
         medicineName: widget.alarm.name,
         dayKor: widget.day,
         hhmm: '$hh:$mm',
       );
+    } catch (_) {
+      success = false;
+    }
+    if (!success) {
+      // 서버 기록 실패(스케줄 매칭 실패, 네트워크 오류 등): 화면을 닫지 않고
+      // 사용자가 다시 시도할 수 있도록 알린다.
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('복용 완료 처리에 실패했습니다. 다시 시도해주세요.')),
+        );
+      }
+      return false;
+    }
+    try {
       await AwesomeNotifications().cancel(widget.notificationId);
     } catch (_) {}
     if (context.mounted) {
       // 스택을 정리하고 홈으로 이동하여 스타트업 스피너(무한 로딩) 상태를 피한다
       Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     }
+    return true;
   }
 
   @override
@@ -147,7 +163,10 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
                 _SlideToActButton(
                   label: '슬라이드하여 약 체크하러 가기',
                   backgroundColor: const Color(0xFF505050),
-                  onCompleted: () => _onCheckOthers(context),
+                  onCompleted: () async {
+                    await _onCheckOthers(context);
+                    return true;
+                  },
                   icon: Icons.arrow_forward_rounded,
                   iconColor: Colors.white,
                 ),
@@ -168,7 +187,8 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
 
 class _SlideToActButton extends StatefulWidget {
   final String label;
-  final VoidCallback onCompleted;
+  // 성공 여부를 반환한다. 실패 시 슬라이드 상태를 되돌려 재시도할 수 있게 한다.
+  final Future<bool> Function() onCompleted;
   final Color backgroundColor;
   final IconData icon;
   final Color iconColor;
@@ -233,11 +253,21 @@ class _SlideToActButtonState extends State<_SlideToActButton> {
                       );
                     });
                   },
-                  onPanEnd: (_) {
+                  onPanEnd: (_) async {
                     if (_completed) return;
                     if (_dragPx >= maxDrag * 0.85) {
-                      _completed = true;
-                      widget.onCompleted();
+                      setState(() {
+                        _completed = true;
+                      });
+                      final success = await widget.onCompleted();
+                      if (!mounted) return;
+                      if (!success) {
+                        // 실패 시 잠금을 풀고 위치를 되돌려 재시도할 수 있게 한다.
+                        setState(() {
+                          _completed = false;
+                          _dragPx = 0;
+                        });
+                      }
                     } else {
                       setState(() {
                         _dragPx = 0;
