@@ -15,6 +15,8 @@ import 'package:after30/features/my/my_page.dart';
 import 'package:after30/features/my/my_info_page.dart';
 import 'package:after30/features/my/my_info_edit_page.dart';
 import 'package:after30/core/storage/user_store.dart';
+import 'package:after30/core/storage/onboarding_store.dart';
+import 'package:after30/features/onboarding/ui/onboarding_page.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -113,6 +115,7 @@ class _MyAppState extends State<MyApp> {
       initialRoute: '/startup',
       routes: {
         '/startup': (context) => const StartupPage(),
+        '/onboarding': (context) => const OnboardingPage(),
         '/login': (context) => const LoginPage(),
         '/signup-intro': (context) => const SignupIntroPage(),
         '/signup-terms': (context) => const TermsAgreementPage(),
@@ -209,18 +212,28 @@ class _StartupPageState extends State<StartupPage> {
       final ok = await BackendAuthService().refreshSession();
       if (!mounted) return;
       if (ok) {
+        await OnboardingStore.setCompleted();
         // 저장된 사용자 ID가 있다면 네임스페이스 설정 후 재스케줄
         final userId = await UserStore.getCurrentUserId();
         AlarmService.setCurrentUserId(userId);
         await AlarmService().rescheduleAllActiveFromStorage();
+        if (!mounted) return;
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
-        Navigator.of(context).pushReplacementNamed('/login');
+        await _goToOnboardingOrLogin();
       }
     } catch (_) {
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/login');
+      await _goToOnboardingOrLogin();
     }
+  }
+
+  Future<void> _goToOnboardingOrLogin() async {
+    final seenOnboarding = await OnboardingStore.isCompleted();
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushReplacementNamed(seenOnboarding ? '/login' : '/onboarding');
   }
 
   @override
