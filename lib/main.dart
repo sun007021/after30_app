@@ -177,8 +177,10 @@ class _StartupPageState extends State<StartupPage> {
         if (initialAction != null) {
           final payload = initialAction.payload ?? {};
           final isFs = payload['fs'] == '1';
-          final locked = await isDeviceLocked();
-          if (isFs && locked) {
+          // 앱이 알림으로 콜드 스타트된 경우, 잠금이 풀려 있어도 풀스크린
+          // 알람 화면을 보여준다(잠금 여부와 무관하게 사용자가 알림으로
+          // 앱을 열었다는 사실 자체가 이동 의도를 나타낸다).
+          if (isFs) {
             final alarmId = payload['alarmId'] ?? '';
             final name = payload['medicineName'] ?? '약';
             final timeStr = payload['time'] ?? '08:00';
