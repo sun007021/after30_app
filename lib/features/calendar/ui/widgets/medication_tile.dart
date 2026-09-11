@@ -12,13 +12,18 @@ class MedicationTile extends StatelessWidget {
 
   const MedicationTile({super.key, required this.medication, this.selectedDay});
 
+  // 복용 예정 시각으로부터 이 유예 시간(분)이 지나야 '미복용'으로 표시한다.
+  // 홈 쪽 lib/features/home/ui/widgets/medication_dose_tile.dart 의
+  // _graceMinutes 값과 반드시 동일하게 유지해야 한다.
+  static const int _graceMinutes = 60;
+
   @override
   Widget build(BuildContext context) {
     const primaryBlue = Color(0xFF235DFF);
     const dangerRed = Color(0xFFE50000);
     final bool isTaken = (medication.status.toLowerCase() == 'taken');
 
-    // 미복용 판단: 선택한 날짜가 과거이거나, 오늘이면서 예정 시각이 지났고 아직 완료 아님
+    // 미복용 판단: 선택한 날짜가 과거이거나, 오늘이면서 유예 시간이 지났고 아직 완료 아님
     bool isMissed = false;
     try {
       if (!isTaken && selectedDay != null) {
@@ -35,7 +40,10 @@ class MedicationTile extends StatelessWidget {
           final parts = medication.time.split(':');
           final hh = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
           final mm = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
-          overdueToday = hh < now.hour || (hh == now.hour && mm <= now.minute);
+          final scheduledTotalMinutes = hh * 60 + mm;
+          final nowTotalMinutes = now.hour * 60 + now.minute;
+          overdueToday =
+              nowTotalMinutes >= scheduledTotalMinutes + _graceMinutes;
         }
         isMissed = isPastDay || overdueToday;
       }
