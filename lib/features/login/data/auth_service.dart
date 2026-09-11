@@ -10,8 +10,8 @@ class AuthService {
     try {
       await UserApi.instance.logout();
     } catch (_) {}
-    // 디바이스 알람과 관련 저장 데이터 정리
-    await AlarmService().clearAllAlarmData();
+    // 기기에 예약된 알림만 취소하고, 저장된 알람 데이터는 유지(재로그인 시 복구용)
+    await AlarmService().cancelAllActiveAlarmSchedules();
     await TokenStore.clear();
     await UserStore.clear();
     AlarmService.setCurrentUserId(null);

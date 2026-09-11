@@ -19,6 +19,8 @@ class AlarmService {
   static const String actionKeyCheckOthers = 'CHECK_OTHERS';
 
   static const String _alarmsKeyLegacy = 'medicine_alarms';
+  static const String _nextNotificationIdKey = 'alarm_next_notification_id';
+  static const int _maxNotificationId = 2000000; // 32비트 정수 범위 내 안전 상한
   static String? _currentUserId; // 사용자 네임스페이스
   static int _nextNotificationId = 1; // 순차적 알람 ID
   static GlobalKey<NavigatorState>? _navigatorKey; // 전체화면 네비게이션용
@@ -47,6 +49,9 @@ class AlarmService {
   Future<void> initialize() async {
     // 시간대 초기화
     tz.initializeTimeZones();
+
+    // 순차적 알람 ID 카운터 복원(앱 재시작 시 리셋되어 기존 알림을 덮어쓰는 문제 방지)
+    await _restoreNextNotificationId();
 
     // 알림 초기화
     await AwesomeNotifications().initialize(
@@ -95,6 +100,57 @@ class AlarmService {
     );
   }
 
+  // 다음 발급할 알림 ID를 SharedPreferences에서 복원(없으면 기존 최댓값+1로 보정)
+  Future<void> _restoreNextNotificationId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getInt(_nextNotificationIdKey);
+      if (stored != null && stored > 0) {
+        _nextNotificationId = stored;
+      }
+
+      // 저장된 notification_ids_* 중 최댓값보다 작으면 최댓값+1로 보정(기존 사용자 마이그레이션)
+      var maxExisting = 0;
+      for (final key in prefs.getKeys()) {
+        if (key.startsWith('notification_ids_')) {
+          final ids = prefs.getStringList(key) ?? const [];
+          for (final idString in ids) {
+            final id = int.tryParse(idString);
+            if (id != null && id > maxExisting) {
+              maxExisting = id;
+            }
+          }
+        }
+      }
+      if (_nextNotificationId <= maxExisting) {
+        _nextNotificationId = maxExisting + 1;
+      }
+      if (_nextNotificationId > _maxNotificationId || _nextNotificationId < 1) {
+        _nextNotificationId = 1;
+      }
+
+      await prefs.setInt(_nextNotificationIdKey, _nextNotificationId);
+    } catch (e) {
+      print('알림 ID 카운터 복원 실패: $e');
+    }
+  }
+
+  // 다음 알림 ID를 발급하고 영속화(상한 도달 시 1로 순환)
+  Future<int> _allocateNextNotificationId() async {
+    final id = _nextNotificationId;
+    _nextNotificationId++;
+    if (_nextNotificationId > _maxNotificationId) {
+      _nextNotificationId = 1;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_nextNotificationIdKey, _nextNotificationId);
+    } catch (e) {
+      print('알림 ID 카운터 저장 실패: $e');
+    }
+    return id;
+  }
+
   // 10분 미루기(단발성 재알림)
   Future<void> snoozeNotification({
     required int baseNotificationId,
@@ -102,7 +158,7 @@ class AlarmService {
     int minutes = 10,
   }) async {
     try {
-      final snoozeId = _nextNotificationId++;
+      final snoozeId = await _allocateNextNotificationId();
       final target = DateTime.now().add(Duration(minutes: minutes));
       await AwesomeNotifications().createNotification(
         content: NotificationContent(
@@ -385,7 +441,7 @@ class AlarmService {
           // 기존 ID가 있으면 재사용, 없으면 새로 생성
           final notificationId = idIndex < existingNotificationIds.length
               ? existingNotificationIds[idIndex]
-              : _nextNotificationId++;
+              : await _allocateNextNotificationId();
 
           await _scheduleSingleAlarmWithId(alarm, day, time, notificationId);
           notificationIds.add(notificationId);
@@ -403,6 +459,12 @@ class AlarmService {
       print('❌ 알람 스케줄링 실패: $e');
       return false;
     }
+  }
+
+  // 해당 알람이 이미 기기에 예약돼 있는지 확인(새 기기/재설치 후 동기화용)
+  Future<bool> hasScheduledNotifications(String alarmId) async {
+    final ids = await _getExistingNotificationIds(alarmId);
+    return ids.isNotEmpty;
   }
 
   // 기존 알림 ID 가져오기
@@ -430,15 +492,11 @@ class AlarmService {
     int notificationId,
   ) async {
     try {
-      final now = DateTime.now();
       final dayIndex = _getDayIndex(day);
-
-      // 다음 해당 요일의 시간 계산
-      var nextAlarmTime = _getNextAlarmTime(now, dayIndex, time);
 
       if (_verboseLogs) {
         print(
-          '      📅 $day ${time.hour}:${time.minute} - 다음 알람: ${nextAlarmTime.toString()}',
+          '      📅 $day ${time.hour}:${time.minute} - weekday=$dayIndex 매주 반복',
         );
         print('      🆔 알림ID: $notificationId (재사용됨)');
       }
@@ -477,13 +535,10 @@ class AlarmService {
           NotificationActionButton(key: actionKeyCheckOthers, label: '이외 약 체크'),
         ],
         schedule: NotificationCalendar(
-          year: nextAlarmTime.year,
-          month: nextAlarmTime.month,
-          day: nextAlarmTime.day,
-          hour: nextAlarmTime.hour,
-          minute: nextAlarmTime.minute,
+          weekday: dayIndex,
+          hour: time.hour,
+          minute: time.minute,
           second: 0,
-          millisecond: 0,
           repeats: true,
           preciseAlarm: true,
           allowWhileIdle: true,
@@ -501,27 +556,6 @@ class AlarmService {
   int _getDayIndex(String day) {
     const dayMap = {'월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7};
     return dayMap[day] ?? 1;
-  }
-
-  DateTime _getNextAlarmTime(DateTime now, int targetDay, TimeOfDay time) {
-    var nextAlarm = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      time.hour,
-      time.minute,
-    );
-
-    // 요일 차이를 먼저 계산해 같은 주의 목표 요일로 이동
-    var daysUntil = (targetDay - now.weekday + 7) % 7;
-    nextAlarm = nextAlarm.add(Duration(days: daysUntil));
-
-    // 목표 요일이 "오늘"인데 시간이 이미 지났거나 동일하면 다음 주로 이동
-    if (daysUntil == 0 && !nextAlarm.isAfter(now)) {
-      nextAlarm = nextAlarm.add(const Duration(days: 7));
-    }
-
-    return nextAlarm;
   }
 
   // 알람 취소 (ID는 유지)
