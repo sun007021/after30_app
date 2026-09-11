@@ -15,7 +15,9 @@ class AlarmService {
   factory AlarmService() => _instance;
   AlarmService._internal();
   static const bool _verboseLogs = false; // 상세 로그 스위치
-  static const String actionKeySnooze10 = 'SNOOZE_10';
+  // 문자열 값은 기기에 이미 예약된 알림의 액션 키와 호환되어야 하므로 유지하고,
+  // 실제 동작(복용 완료)에 맞춰 식별자 이름만 정리했다.
+  static const String actionKeyMarkTaken = 'SNOOZE_10';
   static const String actionKeyCheckOthers = 'CHECK_OTHERS';
 
   static const String _alarmsKeyLegacy = 'medicine_alarms';
@@ -151,71 +153,6 @@ class AlarmService {
     return id;
   }
 
-  // 10분 미루기(단발성 재알림)
-  Future<void> snoozeNotification({
-    required int baseNotificationId,
-    required MedicineAlarm alarm,
-    int minutes = 10,
-  }) async {
-    try {
-      final snoozeId = await _allocateNextNotificationId();
-      final target = DateTime.now().add(Duration(minutes: minutes));
-      await AwesomeNotifications().createNotification(
-        content: NotificationContent(
-          id: snoozeId,
-          channelKey: 'medicine_alarms',
-          title: '약 복용 알람 (미루기)',
-          body: '${alarm.name} ${minutes}분 후 다시 알려드릴게요.',
-          notificationLayout: NotificationLayout.Default,
-          wakeUpScreen: true,
-          fullScreenIntent: true,
-          autoDismissible: false,
-          locked: true,
-          category: NotificationCategory.Alarm,
-          displayOnBackground: true,
-          displayOnForeground: true,
-          payload: {
-            'alarmId': alarm.id,
-            'medicineName': alarm.name,
-            'time':
-                '${target.hour.toString().padLeft(2, '0')}:${target.minute.toString().padLeft(2, '0')}',
-            'day': _weekdayToKor(target.weekday),
-            'notificationId': '$snoozeId',
-            'fs': '1',
-          },
-        ),
-        actionButtons: [
-          NotificationActionButton(
-            key: actionKeySnooze10,
-            label: '복용 완료',
-            actionType: ActionType.SilentAction,
-          ),
-          NotificationActionButton(key: actionKeyCheckOthers, label: '이외 약 체크'),
-        ],
-        schedule: NotificationCalendar(
-          year: target.year,
-          month: target.month,
-          day: target.day,
-          hour: target.hour,
-          minute: target.minute,
-          second: 0,
-          millisecond: 0,
-          repeats: false,
-          preciseAlarm: true,
-          allowWhileIdle: true,
-        ),
-      );
-    } catch (e) {
-      print('미루기 스케줄 실패: $e');
-    }
-  }
-
-  static String _weekdayToKor(int weekday) {
-    const days = ['월', '화', '수', '목', '금', '토', '일'];
-    final idx = (weekday - 1).clamp(0, 6);
-    return days[idx];
-  }
-
   static String _formatYMD(DateTime d) {
     return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
@@ -256,7 +193,8 @@ class AlarmService {
     }
   }
 
-  static Future<void> _markTakenBestEffort({
+  // 성공/실패를 반환한다. 스케줄 매칭 실패, API 호출 실패 모두 실패(false)로 취급한다.
+  static Future<bool> _markTakenBestEffort({
     required String medicineName,
     required String dayKor,
     required String hhmm,
@@ -291,7 +229,7 @@ class AlarmService {
         if (_verboseLogs) {
           print('복용 완료 매칭 실패: name=$medicineName day=$dayEnum time=$timeHms');
         }
-        return;
+        return false;
       }
       final today = DateTime.now();
       await HistoryService().markTaken(
@@ -303,18 +241,20 @@ class AlarmService {
       if (_verboseLogs) {
         print('복용 완료 처리 API 호출 성공: scheduleId=$matchId time=$timeHms');
       }
+      return true;
     } catch (e) {
       print('복용 완료 API 호출 실패: $e');
+      return false;
     }
   }
 
-  // 외부(UI)에서 복용 완료를 호출할 수 있도록 공개 메서드 제공
-  static Future<void> markTakenFromUi({
+  // 외부(UI)에서 복용 완료를 호출할 수 있도록 공개 메서드 제공. 성공 여부를 반환한다.
+  static Future<bool> markTakenFromUi({
     required String medicineName,
     required String dayKor,
     required String hhmm,
   }) async {
-    await _markTakenBestEffort(
+    return _markTakenBestEffort(
       medicineName: medicineName,
       dayKor: dayKor,
       hhmm: hhmm,
@@ -348,16 +288,21 @@ class AlarmService {
       );
 
       // 액션 버튼 처리
-      if (pressedKey == actionKeySnooze10) {
-        // 복용 완료: 현재 알림만 닫고 종료
+      if (pressedKey == actionKeyMarkTaken) {
+        // 복용 완료: 성공한 경우에만 알림을 닫는다. 실패 시(오프라인/서버 거부 등)
+        // 알림을 유지해 사용자가 다시 시도할 수 있게 한다.
         try {
-          await _markTakenBestEffort(
+          final success = await _markTakenBestEffort(
             medicineName: name,
             dayKor: day,
             hhmm: timeStr,
           );
-          await AwesomeNotifications().cancel(notifId);
-          print('복용 완료 처리됨: notificationId=$notifId');
+          if (success) {
+            await AwesomeNotifications().cancel(notifId);
+            print('복용 완료 처리됨: notificationId=$notifId');
+          } else {
+            print('복용 완료 처리 실패: 알림 유지 - notificationId=$notifId');
+          }
         } catch (e) {
           print('복용 완료 처리 실패: $e');
         }
@@ -370,7 +315,22 @@ class AlarmService {
           return;
         }
       }
-      // 기본 동작(버튼 키 없음)은 아무 것도 하지 않음 - 자동 네비게이션 방지
+      // 기본 동작(버튼 키 없음): 알림 본문을 직접 탭한 경우 풀스크린 알람 화면으로 이동한다.
+      // 사용자가 알림을 직접 탭했을 때만 이 경로를 타므로, 포그라운드에서 조작 없이
+      // 화면이 튀는 문제(자동 네비게이션 방지 의도)는 발생하지 않는다.
+      // 네비게이터가 아직 준비되지 않은 콜드 스타트 상황이면 조용히 무시하고
+      // main.dart의 시작 경로가 처리하도록 둔다.
+      final navState = _navigatorKey?.currentState;
+      final navContext = navState?.context;
+      if (navContext != null) {
+        showFullscreenAlarm(
+          navContext,
+          alarm,
+          TimeOfDay(hour: hour, minute: minute),
+          day,
+          notificationId: notifId,
+        );
+      }
       return;
     } catch (e) {
       print('전체화면 이동 실패: $e');
@@ -528,7 +488,7 @@ class AlarmService {
         ),
         actionButtons: [
           NotificationActionButton(
-            key: actionKeySnooze10,
+            key: actionKeyMarkTaken,
             label: '복용 완료',
             actionType: ActionType.SilentAction,
           ),
