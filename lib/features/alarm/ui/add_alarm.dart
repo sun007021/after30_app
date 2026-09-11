@@ -370,7 +370,12 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                           'medication_name': name,
                           'times': timeStrings,
                           'repeat_days': repeatDays,
-                          'start_date': startDate,
+                          // 신규 등록일 때만 시작일을 오늘로 지정한다.
+                          // 수정 시에는 start_date 를 보내지 않아 기존 시작일이
+                          // 유지되도록 한다(보내면 과거 미복용 기록이 캘린더에서
+                          // 사라지는 문제가 있었음).
+                          if (widget.initialAlarm == null)
+                            'start_date': startDate,
                         };
                         if (widget.initialAlarm == null) {
                           final created = await scheduleService.createSchedule(

@@ -7,10 +7,16 @@ import 'package:after30/utils/responsive.dart';
 
 /// 홈 화면의 약물 복용 타일 위젯
 class MedicationDoseTile extends StatelessWidget {
+  // 복용 예정 시각으로부터 이 유예 시간(분)이 지나야 '미복용'으로 표시한다.
+  // 캘린더 쪽 lib/features/calendar/ui/widgets/medication_tile.dart 의
+  // graceMinutes 값과 반드시 동일하게 유지해야 한다.
+  static const int _graceMinutes = 60;
+
   final Medication medication;
   final DateTime selectedDate;
   final String doseKey;
-  final Future<void> Function(String) onMarkCompleted;
+  final bool isProcessing;
+  final Future<bool> Function(String) onMarkCompleted;
   final Future<void> Function(String) onMarkUncompleted;
 
   const MedicationDoseTile({
@@ -18,6 +24,7 @@ class MedicationDoseTile extends StatelessWidget {
     required this.medication,
     required this.selectedDate,
     required this.doseKey,
+    this.isProcessing = false,
     required this.onMarkCompleted,
     required this.onMarkUncompleted,
   });
@@ -39,7 +46,9 @@ class MedicationDoseTile extends StatelessWidget {
       final parts = timeStr.split(':');
       final hh = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
       final mm = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
-      return hh < now.hour || (hh == now.hour && mm <= now.minute);
+      final scheduledTotalMinutes = hh * 60 + mm;
+      final nowTotalMinutes = now.hour * 60 + now.minute;
+      return nowTotalMinutes >= scheduledTotalMinutes + _graceMinutes;
     } catch (_) {
       return false;
     }
@@ -65,13 +74,20 @@ class MedicationDoseTile extends StatelessWidget {
   Future<void> _handleMarkCompleted(BuildContext context) async {
     final confirmed = await DoubleCheckDialog.show(
       context: context,
-      title: '오늘도 해내셨네요!',
-      message: '꾸준히 약을 챙겨 먹는 모습이 멋져요. 오늘의 복약 완료 도장을 찍어 드릴게요.',
-      cancelLabel: '닫기',
-      confirmLabel: '확인',
+      title: '복용을 완료로 기록할까요?',
+      message: '확인하면 오늘의 복약 기록에 복용 완료로 저장돼요.',
+      cancelLabel: '취소',
+      confirmLabel: '기록하기',
     );
     if (!confirmed) return;
-    await onMarkCompleted(doseKey);
+    final success = await onMarkCompleted(doseKey);
+    if (success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('오늘도 해내셨네요! 복약 완료로 기록했어요.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -181,11 +197,13 @@ class MedicationDoseTile extends StatelessWidget {
                     ),
                   ),
                 const Spacer(),
-                if (isCompleted || isMissed)
+                // 되돌리기(복약 미완료) 전용 메뉴. 복용 완료는 아래의 명시적인 버튼으로 처리한다.
+                if (isCompleted)
                   Builder(
                     builder: (buttonCtx) => GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTapDown: (TapDownDetails details) async {
+                        if (isProcessing) return;
                         try {
                           final RenderBox buttonBox =
                               buttonCtx.findRenderObject() as RenderBox;
@@ -206,39 +224,31 @@ class MedicationDoseTile extends StatelessWidget {
                             overlay.size.width - bottomRight.dx,
                             overlay.size.height - bottomRight.dy,
                           );
-                          final List<PopupMenuEntry<String>> items = isCompleted
-                              ? const [
-                                  PopupMenuItem<String>(
-                                    value: 'undo',
-                                    child: Text('복약 미완료'),
-                                  ),
-                                ]
-                              : const [
-                                  PopupMenuItem<String>(
-                                    value: 'complete',
-                                    child: Text('복용 완료'),
-                                  ),
-                                ];
                           final selected = await showMenu<String>(
                             context: buttonCtx,
                             position: position,
                             color: Colors.white,
-                            items: items,
+                            items: const [
+                              PopupMenuItem<String>(
+                                value: 'undo',
+                                child: Text('복약 미완료'),
+                              ),
+                            ],
                           );
-                          if (selected == 'complete') {
-                            await _handleMarkCompleted(buttonCtx);
-                          } else if (selected == 'undo') {
+                          if (selected == 'undo') {
                             await onMarkUncompleted(doseKey);
                           }
                         } catch (_) {}
                       },
                       child: SizedBox(
-                        width: Responsive.responsiveIconSize(context, 24),
-                        height: Responsive.responsiveIconSize(context, 24),
-                        child: Icon(
-                          Icons.more_vert,
-                          size: Responsive.responsiveIconSize(context, 24),
-                          color: Colors.black26,
+                        width: Responsive.responsiveIconSize(context, 44),
+                        height: Responsive.responsiveIconSize(context, 44),
+                        child: Center(
+                          child: Icon(
+                            Icons.more_vert,
+                            size: Responsive.responsiveIconSize(context, 24),
+                            color: Colors.black26,
+                          ),
                         ),
                       ),
                     ),
@@ -281,24 +291,30 @@ class MedicationDoseTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (!isCompleted && isToday && !isOverdue)
+                // 아직 복용하지 않은 상태(예정/미복용)라면 항상 명시적인 완료 버튼을 보여준다.
+                // 미래 날짜의 복약은 아직 완료 처리할 수 없으므로 제외한다.
+                if (!isCompleted && (isToday || isMissed))
                   Padding(
                     padding: EdgeInsets.only(
                       top: Responsive.responsiveValue(context, 8),
                     ),
                     child: ElevatedButton(
-                      onPressed: () => _handleMarkCompleted(context),
+                      onPressed: isProcessing
+                          ? null
+                          : () => _handleMarkCompleted(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
+                        disabledBackgroundColor: primaryBlue.withOpacity(0.5),
                         elevation: 0,
                         padding: EdgeInsets.symmetric(
-                          horizontal: Responsive.responsiveValue(context, 12),
+                          horizontal: Responsive.responsiveValue(context, 16),
                           vertical: Responsive.responsiveValue(context, 5),
                         ),
+                        // 시니어 사용자를 고려해 터치 영역을 최소 44px 이상 확보한다.
                         minimumSize: Size(
                           0,
-                          Responsive.responsiveValue(context, 20),
+                          Responsive.responsiveValue(context, 44),
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
@@ -306,13 +322,31 @@ class MedicationDoseTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                      child: Text(
-                        '복용 완료',
-                        style: TextStyle(
-                          fontSize: Responsive.responsiveFontSize(context, 12),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: isProcessing
+                          ? SizedBox(
+                              width: Responsive.responsiveIconSize(
+                                context,
+                                16,
+                              ),
+                              height: Responsive.responsiveIconSize(
+                                context,
+                                16,
+                              ),
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              '복용 완료',
+                              style: TextStyle(
+                                fontSize: Responsive.responsiveFontSize(
+                                  context,
+                                  12,
+                                ),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
               ],
