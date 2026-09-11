@@ -379,9 +379,26 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   }
 
   String _friendlyLoginErrorMessage(Object error) {
+    // BackendAuthService.loginWithEmail 은 DioException 을
+    // 'Exception: 이메일 로그인 실패 ($status): $body' 형태의 문자열로 감싸 던진다.
+    // 응답을 받지 못한 경우(status == null) 는 연결 실패·타임아웃 등 네트워크 오류다.
     final s = error.toString();
-    if (s.contains('(401)') || s.contains('401') || s.contains('일치하지 않습니다')) {
+    final statusMatch = RegExp(r'실패\s*\((\d{3}|null)\)').firstMatch(s);
+    final statusToken = statusMatch?.group(1);
+
+    if (statusToken == 'null') {
+      return '네트워크 연결을 확인해주세요.';
+    }
+
+    final status = int.tryParse(statusToken ?? '');
+    if (status == 401 || s.contains('일치하지 않습니다')) {
       return '이메일 또는 비밀번호가 일치하지 않습니다.';
+    }
+    if (status == 422) {
+      return '이메일 형식을 확인해주세요.';
+    }
+    if (status != null && status >= 500) {
+      return '서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
     }
     return '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
   }
