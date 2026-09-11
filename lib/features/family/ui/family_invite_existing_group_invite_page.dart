@@ -41,6 +41,7 @@ class _FamilyInviteExistingGroupInvitePageState
   final List<_InvitePhoneEntry> _entries = [];
   bool _isSending = false;
   bool _isLookingUp = false;
+  int? _createdGroupId;
 
   @override
   void dispose() {
@@ -118,33 +119,60 @@ class _FamilyInviteExistingGroupInvitePageState
     }
 
     setState(() => _isSending = true);
-    try {
-      var groupId = widget.groupId;
-      if (groupId == null) {
+
+    var groupId = widget.groupId ?? _createdGroupId;
+    if (groupId == null) {
+      try {
         final group = await _familyService.createGroup(widget.groupName);
         groupId = group.id;
+        _createdGroupId = groupId;
+      } catch (_) {
+        if (mounted) {
+          setState(() => _isSending = false);
+        }
+        if (!mounted) return;
+        await _showMessageDialog('그룹 생성에 실패했습니다.');
+        return;
       }
+    }
 
-      for (final entry in _entries) {
+    final failedEntries = <_InvitePhoneEntry>[];
+    for (final entry in _entries) {
+      try {
         await _familyService.sendInvitation(
           groupId: groupId,
           inviteePhoneNumber: entry.phone,
         );
+      } catch (_) {
+        failedEntries.add(entry);
       }
+    }
+
+    final totalCount = _entries.length;
+    final successCount = totalCount - failedEntries.length;
+
+    if (!mounted) return;
+    setState(() {
+      _entries
+        ..clear()
+        ..addAll(failedEntries);
+      _isSending = false;
+    });
+
+    if (failedEntries.isEmpty) {
       if (!mounted) return;
       await _showMessageDialog('초대를 전송했습니다.');
       if (!mounted) return;
       _navigateToFamilyMain(groupId);
-    } catch (_) {
-      if (!mounted) return;
-      await _showMessageDialog(
-        widget.isNewGroup ? '그룹 생성 또는 초대 전송에 실패했습니다.' : '초대 전송에 실패했습니다.',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
-      }
+      return;
     }
+
+    final failedNames = failedEntries.map((entry) => entry.label).join(', ');
+    final message = successCount > 0
+        ? '$totalCount명 중 $successCount명에게 초대를 보냈습니다. $failedNames님에게는 실패했어요.'
+        : '초대 전송에 실패했습니다. $failedNames님에게는 실패했어요.';
+    if (!mounted) return;
+    await _showMessageDialog(message);
   }
 
   Future<void> _showLookupErrorDialog() async {
