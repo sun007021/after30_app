@@ -352,6 +352,8 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
         userId?.toString() ?? email,
       );
       AlarmService.setCurrentUserId(userId?.toString() ?? email);
+      // 사용자 네임스페이스 설정 이후, 저장된 활성 알람을 기기에 재예약
+      await AlarmService().rescheduleAllActiveFromStorage();
       // 로그인 성공 시 FCM 토큰을 백엔드로 동기화
       await FcmService.syncTokenToBackend();
       if (!mounted) return;
