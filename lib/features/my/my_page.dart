@@ -17,6 +17,16 @@ import 'package:after30/features/common/widgets/double_check_dialog.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
 
+// 개인정보 처리방침 문서 링크
+const String _privacyPolicyUrl =
+    'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link';
+// 사용자 의견 보내기(Tally 설문 폼) 링크
+const String _feedbackFormUrl = 'https://tally.so/r/zx9v5R';
+
+// 앱 정보 다이얼로그 표시값. pubspec.yaml의 version 필드가 바뀌면 함께 갱신할 것.
+const String _appDisplayName = '식후 30분';
+const String _appVersion = '0.0.1+3';
+
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
 
@@ -139,6 +149,35 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
     } catch (_) {
       // 프로필 조회 실패 시 기존 기본값 유지
     }
+  }
+
+  Future<void> _openExternalLink(String url) async {
+    final uri = Uri.parse(url);
+    final canLaunch = await canLaunchUrl(uri);
+    final launched =
+        canLaunch && await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('링크를 열 수 없습니다. 잠시 후 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  Future<void> _showAppInfoDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text(_appDisplayName),
+        content: const Text('버전 $_appVersion'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -265,7 +304,11 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
                       '사용자 의견 보내기',
                     ],
                     onTapIndex: (i) async {
-                      if (i == 2) {
+                      if (i == 0) {
+                        await _showAppInfoDialog();
+                      } else if (i == 1) {
+                        await _openExternalLink(_privacyPolicyUrl);
+                      } else if (i == 2) {
                         final confirmed = await DoubleCheckDialog.show(
                           context: context,
                           title: '로그아웃 하시겠습니까?',
@@ -275,18 +318,10 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
                         );
                         if (!confirmed) return;
                         await AuthService.logout(context);
-                      } else if (i == 1) {
-                        final uri = Uri.parse(
-                          'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link',
-                        );
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(
-                            uri,
-                            mode: LaunchMode.externalApplication,
-                          );
-                        }
                       } else if (i == 3) {
                         await DeleteAccountDialog.show(context);
+                      } else if (i == 4) {
+                        await _openExternalLink(_feedbackFormUrl);
                       }
                     },
                   ),
