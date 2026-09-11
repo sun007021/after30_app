@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:after30/features/alarm/ui/add_alarm.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
@@ -83,11 +85,31 @@ class _AlarmContentState extends State<AlarmContent> {
           ..addAll(mapped);
         _isLoading = false;
       });
+
+      // 화면 표시는 먼저 마치고, 기기 예약 동기화는 뒤이어 수행(새 기기/재설치 후 복구용)
+      unawaited(_syncDeviceSchedules(mapped));
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       print('알람 불러오기 실패: $e');
+    }
+  }
+
+  // 활성 알람 중 기기에 예약된 알림이 없는 항목만 새로 예약(중복 예약 방지)
+  Future<void> _syncDeviceSchedules(List<MedicineAlarm> alarms) async {
+    for (final alarm in alarms) {
+      if (!alarm.isActive) continue;
+      try {
+        final hasSchedule = await _alarmService.hasScheduledNotifications(
+          alarm.id,
+        );
+        if (!hasSchedule) {
+          await _alarmService.scheduleAlarm(alarm);
+        }
+      } catch (e) {
+        print('알람 기기 동기화 실패: id=${alarm.id}, error=$e');
+      }
     }
   }
 
