@@ -34,21 +34,10 @@ class _LoginPageState extends State<LoginPage> {
         kakaoToken = await UserApi.instance.loginWithKakaoAccount();
       }
 
-      // Kakao access token log (masked)
-      final kakaoAccess = kakaoToken.accessToken;
-
-      // ignore: avoid_print
-      print('🔑 Kakao access token: $kakaoAccess');
-
       final backend = BackendAuthService();
-      final resp = await backend.loginWithKakaoAccessToken(
+      await backend.loginWithKakaoAccessToken(
         kakaoToken.accessToken,
       );
-
-      // Backend access token log (masked)
-      final beAccess = resp.accessToken;
-      // ignore: avoid_print
-      print('🔐 Backend access token: $beAccess');
 
       // 현재 사용자 ID 저장 및 알람 네임스페이스 설정
       final me = await UserApi.instance.me();
