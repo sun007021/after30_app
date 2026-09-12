@@ -36,6 +36,20 @@ Future<bool> isDeviceLocked() async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Android 15(SDK 35)부터 앱이 시스템 바 뒤까지 그려진다(edge-to-edge).
+  // targetSdk 36에서는 해제할 수 없으므로 명시적으로 선언해 의도를 드러낸다.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  // statusBarColor / systemNavigationBarColor는 SDK 35에서 지원 중단됐고
+  // edge-to-edge에서는 적용되지도 않는다. 아이콘 밝기만 지정한다.
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
+
   await Firebase.initializeApp();
 
   // 알람 서비스 초기화

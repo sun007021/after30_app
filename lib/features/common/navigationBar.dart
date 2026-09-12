@@ -33,7 +33,10 @@ class AlarmBottomNavigation extends StatelessWidget {
         : 56.0;
 
     return Container(
-      padding: EdgeInsets.only(top: 16, bottom: 16 + bottomPadding - 8),
+      // edge-to-edge에서 하단 시스템 바(제스처 바 포함) 높이를 직접 더한다.
+      // 값은 기존과 동일(8 + 인셋). 아래 SafeArea는 네 방향 모두 false라
+      // 인셋을 소비하지 않으므로 이 계산이 유일한 하단 인셋 처리다.
+      padding: EdgeInsets.only(top: 16, bottom: 8 + bottomPadding),
       decoration: const BoxDecoration(
         color: Color.fromARGB(255, 252, 252, 252),
         boxShadow: [
