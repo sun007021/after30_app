@@ -1,6 +1,7 @@
 import 'package:after30/core/network/api_client.dart';
 import 'package:after30/features/login/models/auth_models.dart';
 import 'package:after30/core/storage/token_store.dart';
+import 'package:after30/features/my/data/my_profile_service.dart';
 import 'package:dio/dio.dart';
 
 class BackendAuthService {
@@ -106,17 +107,52 @@ class BackendAuthService {
         accessExpiresIn: data.accessExpiresIn,
         refreshExpiresIn: data.refreshExpiresIn,
       );
+      // 서버 회원가입 스키마에는 gender 필드가 없어 무시되므로,
+      // 토큰 저장 직후 별도로 PATCH /users/me 를 호출해 성별을 저장한다.
+      // 이 저장이 실패하더라도 회원가입 자체는 성공으로 처리한다.
+      if (gender.trim().isNotEmpty) {
+        try {
+          await _client.patch(
+            '/users/me',
+            data: {'gender': MyProfile.genderToApi(gender)},
+          );
+        } catch (_) {
+          // 성별 저장 실패는 무시한다 (가입 실패로 취급하지 않음).
+        }
+      }
       return data;
     } on DioException catch (e) {
       final body = e.response?.data;
-      String? detail;
-      if (body is Map && body['detail'] is String) {
-        detail = body['detail'] as String;
-      } else if (body is String) {
-        detail = body;
-      }
-      throw Exception(detail ?? '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      final detail = _parseErrorDetail(body);
+      throw Exception(detail.isNotEmpty ? detail : '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
+  }
+
+  /// 서버 에러 응답의 `detail` 을 사람이 읽을 수 있는 메시지로 변환한다.
+  /// `detail` 은 문자열이거나(FastAPI validation error) 배열일 수 있다.
+  String _parseErrorDetail(dynamic body) {
+    if (body is Map) {
+      final detail = body['detail'];
+      if (detail is String) return detail;
+      if (detail is List) {
+        final messages = detail
+            .map((item) {
+              if (item is Map && item['msg'] is String) {
+                return (item['msg'] as String).replaceFirst(
+                  RegExp(r'^Value error,\s*'),
+                  '',
+                );
+              }
+              return item?.toString() ?? '';
+            })
+            .where((m) => m.isNotEmpty)
+            .toList();
+        if (messages.isNotEmpty) return messages.join('\n');
+      }
+    } else if (body is String) {
+      return body;
+    }
+    return '';
   }
 
   /// 새 액세스 토큰 발급: POST /auth/token/refresh

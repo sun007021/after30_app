@@ -36,15 +36,29 @@ class _SignupPageState extends State<SignupPage> {
   double _fieldHeight(BuildContext context) =>
       Responsive.responsiveHeight(context, 46);
 
+  static final RegExp _emailRegex = RegExp(r'^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$');
+  static const int _minPasswordLength = 8;
+
   bool get _isFormValid {
     final nameOk = _nameController.text.trim().isNotEmpty;
     final genderOk = _selectedGender != null;
     final email = _emailController.text.trim();
-    final emailOk = email.contains('@') && email.contains('.');
+    final emailOk = _emailRegex.hasMatch(email);
     final pw = _passwordController.text;
     final pw2 = _confirmPasswordController.text;
-    final pwOk = pw.isNotEmpty && pw == pw2;
+    final pwOk = pw.length >= _minPasswordLength && pw == pw2;
     return nameOk && genderOk && emailOk && pwOk;
+  }
+
+  bool get _passwordTooShort {
+    final pw = _passwordController.text;
+    return pw.isNotEmpty && pw.length < _minPasswordLength;
+  }
+
+  bool get _passwordMismatch {
+    final pw = _passwordController.text;
+    final pw2 = _confirmPasswordController.text;
+    return pw2.isNotEmpty && pw != pw2;
   }
 
   @override
@@ -199,6 +213,38 @@ class _SignupPageState extends State<SignupPage> {
                           ),
                         ),
                       ),
+                      if (_passwordTooShort)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            top: Responsive.responsiveValue(context, 6),
+                          ),
+                          child: Text(
+                            '비밀번호는 최소 8자 이상이어야 합니다',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: Responsive.responsiveFontSize(
+                                context,
+                                12,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (_passwordMismatch)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            top: Responsive.responsiveValue(context, 6),
+                          ),
+                          child: Text(
+                            '비밀번호가 일치하지 않습니다',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: Responsive.responsiveFontSize(
+                                context,
+                                12,
+                              ),
+                            ),
+                          ),
+                        ),
                       SizedBox(
                         height: Responsive.responsiveHeight(context, 32),
                       ),
@@ -373,28 +419,30 @@ class _SignupPageState extends State<SignupPage> {
     Widget? trailing,
     double? width,
   }) {
-    return Container(
-      height: _fieldHeight(context),
-      width: width ?? double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9F9F9),
-        borderRadius: _fieldRadius(context),
-        border: Border.all(color: const Color(0xFF111111), width: 1),
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: Responsive.responsiveValue(context, 12),
-      ),
-      child: Row(
-        children: [
-          SvgPicture.asset(
-            asset,
-            width: _fieldIconSize(context),
-            height: _fieldIconSize(context),
-          ),
-          SizedBox(width: Responsive.responsiveValue(context, 12)),
-          Expanded(child: child),
-          if (trailing != null) trailing,
-        ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: _fieldHeight(context)),
+      child: Container(
+        width: width ?? double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF9F9F9),
+          borderRadius: _fieldRadius(context),
+          border: Border.all(color: const Color(0xFF111111), width: 1),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.responsiveValue(context, 12),
+        ),
+        child: Row(
+          children: [
+            SvgPicture.asset(
+              asset,
+              width: _fieldIconSize(context),
+              height: _fieldIconSize(context),
+            ),
+            SizedBox(width: Responsive.responsiveValue(context, 12)),
+            Expanded(child: child),
+            if (trailing != null) trailing,
+          ],
+        ),
       ),
     );
   }

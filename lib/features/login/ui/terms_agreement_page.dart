@@ -17,15 +17,9 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
 
   bool _agreePersonalInfo = false; // (필수) 개인정보 수집 및 이용 동의
   bool _agreeServiceTerms = false; // (필수) 서비스 이용약관
-  bool _agreeRealNameId = false; // (필수) 실명 인증된 아이디로 가입
-  bool _agreeLocationBased = false; // (필수) 위치기반 서비스 이용약관
   bool _agreeMarketing = false; // (선택) 광고 정보 수신 동의
 
-  bool get _allRequiredAgreed =>
-      _agreePersonalInfo &&
-      _agreeServiceTerms &&
-      _agreeRealNameId &&
-      _agreeLocationBased;
+  bool get _allRequiredAgreed => _agreePersonalInfo && _agreeServiceTerms;
 
   bool get _allAgreed => _allRequiredAgreed && _agreeMarketing;
 
@@ -33,8 +27,6 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     setState(() {
       _agreePersonalInfo = value;
       _agreeServiceTerms = value;
-      _agreeRealNameId = value;
-      _agreeLocationBased = value;
       _agreeMarketing = value;
     });
   }
