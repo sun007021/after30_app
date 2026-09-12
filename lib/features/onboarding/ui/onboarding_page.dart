@@ -94,7 +94,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
+      // SystemUiOverlayStyle.dark는 systemNavigationBarColor(SDK 35에서 지원
+      // 중단, edge-to-edge에서 무시됨)를 설정한다. 흰 배경 화면이므로
+      // 색상 없이 아이콘 밝기만 어둡게 지정한다.
+      value: const SystemUiOverlayStyle(
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
       child: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
