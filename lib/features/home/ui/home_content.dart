@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/calendar/data/medication_service.dart';
@@ -28,7 +29,11 @@ class HomeContent extends StatefulWidget {
 
 class _HomeContentState extends State<HomeContent> {
   final FamilyService _familyService = FamilyService();
-  final Set<String> _completedDoseKeys = <String>{};
+  final Set<String> _processingDoseKeys = <String>{};
+
+  // 캘린더(calendar_page.dart)의 firstDay/lastDay 와 동일한 기준을 사용한다.
+  static final DateTime _minSelectableDate = DateTime(2000, 1, 1);
+  static final DateTime _maxSelectableDate = DateTime(2100, 12, 31);
 
   DateTime _selectedDate = DateTime.now();
   List<Medication> _medications = [];
@@ -41,7 +46,6 @@ class _HomeContentState extends State<HomeContent> {
   void initState() {
     super.initState();
     _loadDosesForDate(_selectedDate);
-    _loadCompletedFromServer(_selectedDate);
     _loadFamilyDashboard();
   }
 
@@ -110,149 +114,157 @@ class _HomeContentState extends State<HomeContent> {
     }
   }
 
-  Future<void> _loadCompletedFromServer(DateTime date) async {
-    try {
-      final hs = HistoryService();
-      final ymd = yyyymmdd(date);
-      final list = await hs.getUserHistories(
-        startDate:
-            '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
-        endDate:
-            '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
-      );
-      final next = <String>{};
-      for (final item in list) {
-        final m = item as Map<String, dynamic>;
-        final status = (m['status'] ?? '').toString().toLowerCase();
-        if (status == 'taken') {
-          final scheduleId = (m['schedule_id'] as num?)?.toInt();
-          final timeStr = (m['scheduled_time'] ?? '00:00').toString();
-          if (scheduleId != null) {
-            next.add('${scheduleId}_${ymd}_$timeStr');
-          }
-        }
-      }
-      if (mounted) {
-        setState(() {
-          _completedDoseKeys
-            ..clear()
-            ..addAll(next);
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _completedDoseKeys.clear();
-        });
-      }
-    }
-  }
-
   Future<void> _goToRegister() async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const MedicineRegisterPage()),
     );
     await _loadDosesForDate(_selectedDate);
-    await _loadCompletedFromServer(_selectedDate);
   }
+
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  bool get _canGoPreviousDay =>
+      _dateOnly(_selectedDate).isAfter(_minSelectableDate);
+
+  bool get _canGoNextDay =>
+      _dateOnly(_selectedDate).isBefore(_maxSelectableDate);
 
   void _changeDate(int deltaDays) {
+    final candidate = _selectedDate.add(Duration(days: deltaDays));
+    final candidateOnly = _dateOnly(candidate);
+    if (candidateOnly.isBefore(_minSelectableDate) ||
+        candidateOnly.isAfter(_maxSelectableDate)) {
+      return;
+    }
     setState(() {
-      _selectedDate = _selectedDate.add(Duration(days: deltaDays));
+      _selectedDate = candidate;
     });
     _loadDosesForDate(_selectedDate);
-    _loadCompletedFromServer(_selectedDate);
   }
 
-  Future<void> _markCompleted(String doseKey) async {
-    try {
-      final parts = doseKey.split('_');
-      if (parts.length >= 3) {
-        final scheduleId = int.tryParse(parts[0]);
-        final dateStr =
-            '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
-        final timeStr = parts[2];
-        if (scheduleId != null) {
-          final hs = HistoryService();
-          // 같은 일정/시간의 히스토리가 있으면 PUT으로 taken + taken_at 갱신,
-          // 없으면 process API로 신규 완료 처리
-          int? historyId;
-          try {
-            final list = await hs.getUserHistories(
-              startDate: dateStr,
-              endDate: dateStr,
-            );
-            for (final item in list) {
-              if (item is! Map<String, dynamic>) continue;
-              final sid = (item['schedule_id'] as num?)?.toInt();
-              final scheduledTime = (item['scheduled_time'] ?? '').toString();
-              if (sid == scheduleId &&
-                  (scheduledTime == timeStr ||
-                      scheduledTime.startsWith(timeStr))) {
-                historyId = (item['id'] as num?)?.toInt();
-                break;
-              }
-            }
-          } catch (_) {}
-          if (historyId != null) {
-            await hs.updateHistoryStatus(
-              historyId: historyId,
-              status: 'taken',
-              takenAt: DateTime.now(),
-            );
-          } else {
-            await hs.markTaken(
-              scheduleId: scheduleId,
-              scheduledDate: dateStr,
-              scheduledTime: timeStr,
-            );
-          }
-          await _loadDosesForDate(_selectedDate);
-          await _loadCompletedFromServer(_selectedDate);
-        }
+  /// 서버 에러(DioException)에서 사용자에게 보여줄 메시지를 뽑아낸다.
+  /// 서버가 detail 을 문자열로 내려주면 그대로 보여주고, 그렇지 않으면 일반 문구를 사용한다.
+  String _extractErrorMessage(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map && data['detail'] is String) {
+        return data['detail'] as String;
       }
-    } catch (_) {}
+    }
+    return '처리 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.';
+  }
+
+  Future<bool> _markCompleted(String doseKey) async {
+    final parts = doseKey.split('_');
+    if (parts.length < 3) return false;
+    final scheduleId = int.tryParse(parts[0]);
+    if (scheduleId == null) return false;
+    final dateStr =
+        '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+    final timeStr = parts[2];
+
+    if (_processingDoseKeys.contains(doseKey)) return false;
+    setState(() => _processingDoseKeys.add(doseKey));
+    try {
+      final hs = HistoryService();
+      // 같은 일정/시간의 히스토리가 있으면 PUT으로 taken + taken_at 갱신,
+      // 없으면 process API로 신규 완료 처리
+      int? historyId;
+      try {
+        final list = await hs.getUserHistories(
+          startDate: dateStr,
+          endDate: dateStr,
+        );
+        for (final item in list) {
+          if (item is! Map<String, dynamic>) continue;
+          final sid = (item['schedule_id'] as num?)?.toInt();
+          final scheduledTime = (item['scheduled_time'] ?? '').toString();
+          if (sid == scheduleId &&
+              (scheduledTime == timeStr ||
+                  scheduledTime.startsWith(timeStr))) {
+            historyId = (item['id'] as num?)?.toInt();
+            break;
+          }
+        }
+      } catch (_) {}
+      if (historyId != null) {
+        await hs.updateHistoryStatus(
+          historyId: historyId,
+          status: 'taken',
+          takenAt: DateTime.now(),
+        );
+      } else {
+        await hs.markTaken(
+          scheduleId: scheduleId,
+          scheduledDate: dateStr,
+          scheduledTime: timeStr,
+        );
+      }
+      await _loadDosesForDate(_selectedDate);
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_extractErrorMessage(e))),
+        );
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _processingDoseKeys.remove(doseKey));
+      }
+    }
   }
 
   Future<void> _markUncompleted(String doseKey) async {
+    final parts = doseKey.split('_');
+    if (parts.length < 3) return;
+    final scheduleId = int.tryParse(parts[0]);
+    if (scheduleId == null) return;
+    final dateStr =
+        '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+    final timeStr = parts[2];
+
+    if (_processingDoseKeys.contains(doseKey)) return;
+    setState(() => _processingDoseKeys.add(doseKey));
     try {
-      final parts = doseKey.split('_');
-      if (parts.length >= 3) {
-        final scheduleId = int.tryParse(parts[0]);
-        final dateStr =
-            '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
-        final timeStr = parts[2];
-        if (scheduleId != null) {
-          final hs = HistoryService();
-          // 선택한 날짜의 히스토리에서 해당 일정의 완료 기록을 찾아 ID로 상태 업데이트
-          final list = await hs.getUserHistories(
-            startDate: dateStr,
-            endDate: dateStr,
-          );
-          int? historyId;
-          for (final item in list) {
-            if (item is! Map<String, dynamic>) continue;
-            final sid = (item['schedule_id'] as num?)?.toInt();
-            final scheduledTime = (item['scheduled_time'] ?? '').toString();
-            if (sid == scheduleId &&
-                (scheduledTime == timeStr ||
-                    scheduledTime.startsWith(timeStr))) {
-              historyId = (item['id'] as num?)?.toInt();
-              break;
-            }
-          }
-          if (historyId != null) {
-            await hs.updateHistoryStatus(
-              historyId: historyId,
-              status: 'cancelled',
-            );
-          }
-          await _loadDosesForDate(_selectedDate);
-          await _loadCompletedFromServer(_selectedDate);
+      final hs = HistoryService();
+      // 선택한 날짜의 히스토리에서 해당 일정의 완료 기록을 찾아 ID로 상태 업데이트
+      final list = await hs.getUserHistories(
+        startDate: dateStr,
+        endDate: dateStr,
+      );
+      int? historyId;
+      for (final item in list) {
+        if (item is! Map<String, dynamic>) continue;
+        final sid = (item['schedule_id'] as num?)?.toInt();
+        final scheduledTime = (item['scheduled_time'] ?? '').toString();
+        if (sid == scheduleId &&
+            (scheduledTime == timeStr ||
+                scheduledTime.startsWith(timeStr))) {
+          historyId = (item['id'] as num?)?.toInt();
+          break;
         }
       }
-    } catch (_) {}
+      if (historyId != null) {
+        await hs.updateHistoryStatus(
+          historyId: historyId,
+          status: 'cancelled',
+        );
+      }
+      await _loadDosesForDate(_selectedDate);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_extractErrorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _processingDoseKeys.remove(doseKey));
+      }
+    }
   }
 
   @override
@@ -325,8 +337,12 @@ class _HomeContentState extends State<HomeContent> {
                         children: [
                           HomeDateHeader(
                             selectedDate: _selectedDate,
-                            onPreviousDay: () => _changeDate(-1),
-                            onNextDay: () => _changeDate(1),
+                            onPreviousDay: _canGoPreviousDay
+                                ? () => _changeDate(-1)
+                                : null,
+                            onNextDay: _canGoNextDay
+                                ? () => _changeDate(1)
+                                : null,
                           ),
                           SizedBox(
                             height: Responsive.responsiveHeight(context, 8),
@@ -350,6 +366,9 @@ class _HomeContentState extends State<HomeContent> {
                                 medication: m,
                                 selectedDate: _selectedDate,
                                 doseKey: doseKey,
+                                isProcessing: _processingDoseKeys.contains(
+                                  doseKey,
+                                ),
                                 onMarkCompleted: _markCompleted,
                                 onMarkUncompleted: _markUncompleted,
                               );

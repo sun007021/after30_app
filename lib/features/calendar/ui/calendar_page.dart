@@ -30,7 +30,6 @@ class _CalendarPageState extends State<CalendarPage> {
       DraggableScrollableController();
   final GlobalKey _monthHeaderKey = GlobalKey();
   final GlobalKey _calendarCardKey = GlobalKey();
-  double? _maxSheetFraction;
   double? _minInitialSheetFraction;
 
   @override
@@ -67,7 +66,6 @@ class _CalendarPageState extends State<CalendarPage> {
 
     if (!mounted) return;
     setState(() {
-      _maxSheetFraction = maxFraction;
       _minInitialSheetFraction = initialFraction;
     });
     // 첫 프레임에서도 아래 위치로 보장
