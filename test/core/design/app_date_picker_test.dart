@@ -98,6 +98,60 @@ void main() {
     expect(picker.initialDateTime, DateTime(2030, 1, 1));
   });
 
+  testWidgets('initial이 min보다 이전이면 스크롤 없이 완료를 눌러도 반환값은 min이다', (tester) async {
+    DateTime? result;
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      Builder(
+        builder: (context) => AppButton(
+          label: '날짜 선택',
+          onPressed: () async {
+            result = await showAppDatePicker(
+              context: context,
+              initial: DateTime(2020, 1, 1),
+              min: DateTime(2025, 6, 1),
+              max: DateTime(2030, 1, 1),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('날짜 선택'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('완료'));
+    await tester.pumpAndSettle();
+    expect(result, DateTime(2025, 6, 1));
+  });
+
+  testWidgets('initial이 max보다 이후면 스크롤 없이 완료를 눌러도 반환값은 max이다', (tester) async {
+    DateTime? result;
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      Builder(
+        builder: (context) => AppButton(
+          label: '날짜 선택',
+          onPressed: () async {
+            result = await showAppDatePicker(
+              context: context,
+              initial: DateTime(2035, 1, 1),
+              min: DateTime(2020, 1, 1),
+              max: DateTime(2030, 1, 1),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('날짜 선택'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('완료'));
+    await tester.pumpAndSettle();
+    expect(result, DateTime(2030, 1, 1));
+  });
+
   testWidgets('min과 max가 모두 DateTime.now()여도(시각 차이) 예외 없이 동작한다', (tester) async {
     // DateTime.now()를 각각 다른 시점에 호출하면 시/분/초/밀리초가 달라져
     // min > max 처럼 보일 수 있다(레이스). 날짜 단위로 정규화하면 같은
