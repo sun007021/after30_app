@@ -37,12 +37,9 @@ class AppTypography {
   );
 
   /// Dynamic Type 등으로 인해 레이아웃이 깨질 수 있는 자리에서 textScaler를
-  /// 최대 1.3배로 제한한 [MediaQueryData]를 반환한다. 필요한 위젯 서브트리를
-  /// `MediaQuery(data: AppTypography.clampedTextScale(context), child: ...)`
-  /// 로 감싸서 사용한다.
-  static MediaQueryData clampedTextScale(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final clamped = mq.textScaler.clamp(maxScaleFactor: 1.3);
-    return mq.copyWith(textScaler: clamped);
+  /// 최대 1.3배로 제한한 위젯 서브트리를 만든다.
+  /// `AppTypography.clampTextScale(child: ...)`처럼 감싸서 사용한다.
+  static Widget clampTextScale({required Widget child}) {
+    return MediaQuery.withClampedTextScaling(maxScaleFactor: 1.3, child: child);
   }
 }

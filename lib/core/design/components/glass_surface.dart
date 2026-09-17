@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/app_platform.dart';
 import 'package:after30/core/design/tokens/app_colors.dart';
 import 'package:after30/core/design/tokens/app_radius.dart';
 
@@ -39,8 +40,13 @@ class GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final highContrast = MediaQuery.highContrastOf(context);
-    final resolvedShape =
-        shape ?? RoundedRectangleBorder(borderRadius: borderRadius ?? AppRadius.borderRadius(AppRadius.lg));
+    final defaultRadius = borderRadius ?? AppRadius.borderRadius(AppRadius.lg);
+    // 글래스는 내비게이션 레이어(iOS) 전용이므로 기본 shape도 연속 곡률로
+    // 맞춘다. Android에서 실수로 쓰이더라도 사각 곡률로 안전하게 대체된다.
+    final resolvedShape = shape ??
+        (isCupertino(context)
+            ? RoundedSuperellipseBorder(borderRadius: defaultRadius)
+            : RoundedRectangleBorder(borderRadius: defaultRadius));
 
     if (highContrast) {
       // 고대비 모드: 블러/반투명 대신 불투명 배경으로 대체한다.

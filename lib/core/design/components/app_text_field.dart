@@ -220,10 +220,12 @@ class _AppTextFieldState extends State<AppTextField> {
         ],
         Container(
           constraints: const BoxConstraints(minHeight: 46),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: AppColors.surfaceMuted,
-            borderRadius: AppRadius.borderRadius(AppRadius.sm),
-            border: Border.all(color: borderColor, width: 1.5),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: AppRadius.borderRadius(AppRadius.sm),
+              side: BorderSide(color: borderColor, width: 1.5),
+            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
@@ -256,7 +258,9 @@ class _AppTextFieldState extends State<AppTextField> {
               if (widget.showObscureToggle)
                 CupertinoButton(
                   padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
+                  // 아이콘 자체는 18pt로 작게 두되, 탭 영역은 HIG 최소
+                  // 권장치인 44pt를 확보한다.
+                  minimumSize: const Size(44, 44),
                   onPressed: () => setState(() => _obscure = !_obscure),
                   child: Icon(
                     _obscure ? CupertinoIcons.eye_slash_fill : CupertinoIcons.eye_fill,
@@ -267,7 +271,7 @@ class _AppTextFieldState extends State<AppTextField> {
               else if (_controller.text.isNotEmpty && !widget.readOnly)
                 CupertinoButton(
                   padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
+                  minimumSize: const Size(44, 44),
                   onPressed: () {
                     _controller.clear();
                     widget.onChanged?.call('');
