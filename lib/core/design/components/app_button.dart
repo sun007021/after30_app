@@ -5,6 +5,7 @@ import 'package:after30/core/design/tokens/app_colors.dart';
 import 'package:after30/core/design/tokens/app_haptics.dart';
 import 'package:after30/core/design/tokens/app_radius.dart';
 import 'package:after30/core/design/components/glass_surface.dart';
+import 'package:after30/utils/responsive.dart';
 
 /// [AppButton] 색상/강조 변형.
 enum AppButtonVariant {
@@ -72,11 +73,25 @@ class _AppButtonState extends State<AppButton> {
   double get _height => widget.size == AppButtonSize.large ? 50 : 44;
 
   @override
-  Widget build(BuildContext context) {
-    if (isCupertino(context)) {
-      return _buildCupertino(context);
+  void didUpdateWidget(covariant AppButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 눌린 상태에서 버튼이 비활성화되면(onPressed가 null이 되면) 눌림
+    // 투명도가 그대로 남아있을 수 있으므로 초기화한다.
+    if (widget.onPressed == null && _pressed) {
+      _pressed = false;
     }
-    return _buildMaterial(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final semanticLabel = widget.loading ? '${widget.label}, 로딩 중' : widget.label;
+    return Semantics(
+      button: true,
+      enabled: !widget._disabled,
+      label: semanticLabel,
+      excludeSemantics: true,
+      child: isCupertino(context) ? _buildCupertino(context) : _buildMaterial(context),
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -119,15 +134,22 @@ class _AppButtonState extends State<AppButton> {
       button = SizedBox(width: double.infinity, child: button);
     }
 
+    // onTapDown/onTapCancel/onTapUp는 disabled 여부와 무관하게 항상 등록해
+    // 둔다. 셋을 모두 null로 두면 GestureDetector가 TapGestureRecognizer
+    // 자체를 제거하는데, 누르고 있는 도중에 disabled로 바뀌면 눌려 있던
+    // 인식기가 빌드 도중 강제로 dispose되면서 예전 onTapCancel 콜백이
+    // "spontaneous cancel"로 동기 호출되어 "setState() called during
+    // build" 예외가 난다. disabled일 때는 opacity 계산에서 0.4가 항상
+    // 우선하므로 _pressed가 true여도 눌림 효과가 보이지 않아 안전하다.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: widget._disabled ? null : (_) => setState(() => _pressed = true),
-      onTapCancel: widget._disabled ? null : () => setState(() => _pressed = false),
-      onTapUp: widget._disabled ? null : (_) => setState(() => _pressed = false),
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) => setState(() => _pressed = false),
       onTap: widget._disabled
           ? null
           : () {
-              AppHaptics.selection(context);
+              AppHaptics.buttonPress(context);
               widget.onPressed?.call();
             },
       child: button,
@@ -162,7 +184,7 @@ class _AppButtonState extends State<AppButton> {
   // ---------------------------------------------------------------------
 
   Widget _buildMaterial(BuildContext context) {
-    final child = _content(_materialForegroundColor());
+    final child = _content(_materialForegroundColor(), fontSize: Responsive.responsiveFontSize(context, 16));
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.sm));
     final minSize = Size(0, _height);
 
@@ -239,7 +261,7 @@ class _AppButtonState extends State<AppButton> {
     }
   }
 
-  Widget _content(Color foreground) {
+  Widget _content(Color foreground, {double fontSize = 16}) {
     if (widget.loading) {
       return SizedBox(
         width: 20,
@@ -255,13 +277,13 @@ class _AppButtonState extends State<AppButton> {
         children: [
           widget.icon!,
           const SizedBox(width: 8),
-          Text(widget.label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: foreground)),
+          Text(widget.label, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600, color: foreground)),
         ],
       );
     }
     return Text(
       widget.label,
-      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: foreground),
+      style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600, color: foreground),
     );
   }
 }
