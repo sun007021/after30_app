@@ -204,6 +204,7 @@
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
+				A0A1B2C31E0000000000C001 /* [Firebase] Copy GoogleService-Info.plist */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				8AD5796E9B7377E059F07E0B /* [CP] Embed Pods Frameworks */,
@@ -240,10 +241,10 @@
 			};
 			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
 			compatibilityVersion = "Xcode 9.3";
-			developmentRegion = en;
+			developmentRegion = ko;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				ko,
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
@@ -327,6 +328,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+		};
+		A0A1B2C31E0000000000C001 /* [Firebase] Copy GoogleService-Info.plist */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/Runner/GoogleService-Info.plist",
+			);
+			name = "[Firebase] Copy GoogleService-Info.plist";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/GoogleService-Info.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "GOOGLESERVICE_INFO_PLIST=\"$PROJECT_DIR/Runner/GoogleService-Info.plist\"\nDEST=\"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/GoogleService-Info.plist\"\nif [ -f \"$GOOGLESERVICE_INFO_PLIST\" ]; then\n  cp -f \"$GOOGLESERVICE_INFO_PLIST\" \"$DEST\"\n  echo \"[Firebase] Copied GoogleService-Info.plist into app bundle\"\nelse\n  echo \"warning: GoogleService-Info.plist not found at $GOOGLESERVICE_INFO_PLIST. Firebase will fail to initialize at runtime until the file is added. See ios/Runner/README-firebase.md\"\nfi\n";
+			showEnvVarsInLog = 0;
 		};
 		A49D5072A652A1FE530D558D /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

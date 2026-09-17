@@ -46,6 +46,3 @@ app.*.map.json
 
 # iOS related
 **/ios/Flutter/Team.xcconfig
-**/ios/Pods/
-**/ios/.symlinks/
-**/ios/Runner/GoogleService-Info.plist
