@@ -183,6 +183,9 @@ Future<T?> showAppActionSheet<T>({
 
   return showModalBottomSheet<T>(
     context: context,
+    // showModalBottomSheet만 useRootNavigator 기본값이 false이므로 명시한다
+    // (W10의 탭별 Navigator 위에서도 항상 최상단에 뜨도록).
+    useRootNavigator: true,
     backgroundColor: Colors.white,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.md))),
     builder: (ctx) {
@@ -230,49 +233,111 @@ Future<String?> showAppTextInputAlert({
   String confirmLabel = '확인',
   int? maxLength,
   TextInputType? keyboardType,
-}) async {
-  final controller = TextEditingController(text: initialValue);
+}) {
+  final cupertino = isCupertino(context);
+  final body = _TextInputAlertBody(
+    title: title,
+    message: message,
+    initialValue: initialValue,
+    cancelLabel: cancelLabel,
+    confirmLabel: confirmLabel,
+    maxLength: maxLength,
+    keyboardType: keyboardType,
+    cupertino: cupertino,
+  );
 
-  if (isCupertino(context)) {
-    return showCupertinoDialog<String>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            if (message != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(message)),
-            CupertinoTextField(
-              controller: controller,
-              maxLength: maxLength,
-              keyboardType: keyboardType,
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.of(ctx).pop(), child: Text(cancelLabel)),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: Text(confirmLabel),
-          ),
-        ],
-      ),
-    );
+  if (cupertino) {
+    return showCupertinoDialog<String>(context: context, builder: (ctx) => body);
   }
 
   return showDialog<String>(
     context: context,
     barrierColor: const Color(0x80C8C8C8),
-    builder: (ctx) => AlertDialog(
+    barrierDismissible: false,
+    builder: (ctx) => body,
+  );
+}
+
+/// [showAppTextInputAlert]의 본문. [TextEditingController]를 이 위젯이
+/// 직접 소유하고 dispose하여 누수를 막는다(예전에는 함수 스코프에서
+/// 만든 컨트롤러를 다이얼로그가 닫힌 뒤에도 정리하지 않았다).
+class _TextInputAlertBody extends StatefulWidget {
+  const _TextInputAlertBody({
+    required this.title,
+    required this.message,
+    required this.initialValue,
+    required this.cancelLabel,
+    required this.confirmLabel,
+    required this.maxLength,
+    required this.keyboardType,
+    required this.cupertino,
+  });
+
+  final String title;
+  final String? message;
+  final String? initialValue;
+  final String cancelLabel;
+  final String confirmLabel;
+  final int? maxLength;
+  final TextInputType? keyboardType;
+  final bool cupertino;
+
+  @override
+  State<_TextInputAlertBody> createState() => _TextInputAlertBodyState();
+}
+
+class _TextInputAlertBodyState extends State<_TextInputAlertBody> {
+  late final TextEditingController _controller = TextEditingController(text: widget.initialValue);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.cupertino) {
+      return CupertinoAlertDialog(
+        title: Text(widget.title),
+        content: Column(
+          children: [
+            if (widget.message != null)
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(widget.message!)),
+            CupertinoTextField(
+              controller: _controller,
+              maxLength: widget.maxLength,
+              keyboardType: widget.keyboardType,
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(), child: Text(widget.cancelLabel)),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(context).pop(_controller.text),
+            child: Text(widget.confirmLabel),
+          ),
+        ],
+      );
+    }
+
+    return AlertDialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      title: Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (message != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(message)),
-          TextField(controller: controller, maxLength: maxLength, keyboardType: keyboardType, autofocus: true),
+          if (widget.message != null)
+            Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(widget.message!)),
+          TextField(
+            controller: _controller,
+            maxLength: widget.maxLength,
+            keyboardType: widget.keyboardType,
+            autofocus: true,
+          ),
         ],
       ),
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -281,7 +346,7 @@ Future<String?> showAppTextInputAlert({
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: () => Navigator.of(ctx).pop(),
+                onPressed: () => Navigator.of(context).pop(),
                 style: OutlinedButton.styleFrom(
                   backgroundColor: AppColors.surfaceMuted,
                   foregroundColor: AppColors.label,
@@ -289,13 +354,13 @@ Future<String?> showAppTextInputAlert({
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   minimumSize: const Size.fromHeight(44),
                 ),
-                child: Text(cancelLabel),
+                child: Text(widget.cancelLabel),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(controller.text),
+                onPressed: () => Navigator.of(context).pop(_controller.text),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -303,12 +368,12 @@ Future<String?> showAppTextInputAlert({
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   minimumSize: const Size.fromHeight(44),
                 ),
-                child: Text(confirmLabel),
+                child: Text(widget.confirmLabel),
               ),
             ),
           ],
         ),
       ],
-    ),
-  );
+    );
+  }
 }
