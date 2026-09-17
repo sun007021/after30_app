@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# iOS related
+**/ios/Flutter/Team.xcconfig
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Runner/GoogleService-Info.plist
