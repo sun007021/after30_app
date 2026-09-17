@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-# platform :ios, '12.0'
+platform :ios, '16.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -29,6 +29,7 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
+  use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
@@ -39,5 +40,31 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    target.build_configurations.each do |config|
+      # 배포 타깃이 앱보다 낮은 pod만 16.0으로 끌어올린다.
+      # (일부 pod가 더 낮은 값을 선언해 생기는 Xcode 26 경고/링크 문제를 피하되,
+      # 더 높은 값을 선언한 pod는 그대로 둔다)
+      current_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if current_target.nil? || current_target.to_f < 16.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      end
+    end
   end
+
+  # awesome_notifications 공식 iOS 설정: 정적 프레임워크 관련 빌드 세팅을
+  # pod과 메인 타깃 모두에 적용해야 한다.
+  awesome_pod_file = File.expand_path(
+    File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'),
+    '.symlinks'
+  )
+  require awesome_pod_file
+  update_awesome_pod_build_settings(installer)
 end
+
+awesome_pod_file = File.expand_path(
+  File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'),
+  '.symlinks'
+)
+require awesome_pod_file
+update_awesome_main_target_settings('Runner', File.dirname(File.realpath(__FILE__)), flutter_root)
