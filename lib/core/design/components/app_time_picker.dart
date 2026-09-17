@@ -21,8 +21,11 @@ Future<TimeOfDay?> showAppTimePicker({
 
   return showModalBottomSheet<TimeOfDay>(
     context: context,
+    // W10에서 탭별 Navigator + 플로팅 탭바를 도입할 예정이므로, 피커가
+    // 항상 루트 Navigator 위(탭 셸보다 위)에 표시되도록 고정한다.
+    useRootNavigator: true,
     backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
+    shape: const RoundedSuperellipseBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (ctx) {
@@ -32,6 +35,15 @@ Future<TimeOfDay?> showAppTimePicker({
           height: 320,
           child: Column(
             children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryLabel.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
