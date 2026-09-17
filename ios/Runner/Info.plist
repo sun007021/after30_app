@@ -32,7 +32,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>kakaolink</string>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).kakao</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>kakao54b330c450ea6d30f52c96937e871989</string>

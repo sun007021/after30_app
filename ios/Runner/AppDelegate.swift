@@ -25,6 +25,8 @@ import shared_preferences_foundation
       let registrar = controller.registrar(forPlugin: "NativeChannel")
     {
       NativeChannel.register(with: registrar)
+    } else {
+      assertionFailure("NativeChannel 등록 실패: FlutterViewController 또는 registrar를 찾을 수 없음")
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
