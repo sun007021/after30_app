@@ -27,8 +27,8 @@ class AppTheme {
       splashFactory: isIOS ? NoSplash.splashFactory : null,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: _ReducedMotionCupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: _ReducedMotionCupertinoPageTransitionsBuilder(),
           TargetPlatform.android: NoTransitionsPageTransitionsBuilder(),
           TargetPlatform.windows: NoTransitionsPageTransitionsBuilder(),
           TargetPlatform.linux: NoTransitionsPageTransitionsBuilder(),
@@ -38,6 +38,34 @@ class AppTheme {
           ? const CupertinoThemeData(primaryColor: AppColors.primary)
           : null,
     );
+  }
+}
+
+/// iOS/macOS용 [CupertinoPageTransitionsBuilder]를 감싸되, 접근성 설정에서
+/// "동작 줄이기"(`MediaQuery.disableAnimationsOf`)가 켜져 있으면 슬라이드
+/// 대신 페이드로 대체한다(§4.3 모션 규칙).
+///
+/// [PageTransitionsTheme]는 [ThemeData] 생성 시점(=[AppTheme.build] 호출
+/// 시점)에 한 번 만들어지고 이후 라우트 전환마다 재사용되므로, 실행 중에
+/// 바뀌는 [MediaQuery] 값을 반영하려면 여기 [buildTransitions]처럼 매 전환마다
+/// `context`를 통해 다시 읽어야 한다.
+class _ReducedMotionCupertinoPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _ReducedMotionCupertinoPageTransitionsBuilder();
+
+  static const _cupertino = CupertinoPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return FadeTransition(opacity: animation, child: child);
+    }
+    return _cupertino.buildTransitions(route, context, animation, secondaryAnimation, child);
   }
 }
 
