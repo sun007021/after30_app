@@ -21,8 +21,10 @@ import shared_preferences_foundation
         with: registry.registrar(forPlugin: "SharedPreferencesPlugin")!)
     }
 
-    if let controller = window?.rootViewController as? FlutterViewController {
-      NativeChannel.register(with: controller.registrar(forPlugin: "NativeChannel"))
+    if let controller = window?.rootViewController as? FlutterViewController,
+      let registrar = controller.registrar(forPlugin: "NativeChannel")
+    {
+      NativeChannel.register(with: registrar)
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
