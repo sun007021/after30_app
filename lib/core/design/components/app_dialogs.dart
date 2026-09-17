@@ -40,6 +40,7 @@ Future<void> showAppAlert({
   await showDialog<void>(
     context: context,
     barrierColor: const Color(0x80C8C8C8),
+    barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

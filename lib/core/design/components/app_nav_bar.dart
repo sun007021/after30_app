@@ -33,7 +33,7 @@ class AppNavBar extends StatelessWidget implements PreferredSizeWidget {
   final bool largeTitle;
 
   static const double _compactHeight = 44;
-  static const double _largeTitleExtra = 52;
+  static const double _largeTitleExtra = 64;
 
   @override
   Size get preferredSize => Size.fromHeight(_compactHeight + (largeTitle ? _largeTitleExtra : 0));
