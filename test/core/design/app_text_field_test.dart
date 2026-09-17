@@ -81,6 +81,112 @@ void main() {
     expect(find.byType(KeyboardDoneBar), findsNothing);
   });
 
+  testWidgets('showKeyboardDoneBar를 지정하지 않아도 숫자패드면 자동으로 완료 바가 뜬다', (tester) async {
+    final focusNode = FocusNode();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      Material(child: AppTextField(focusNode: focusNode, keyboardType: TextInputType.number)),
+    );
+    focusNode.requestFocus();
+    await tester.pump();
+    expect(find.text('완료'), findsOneWidget);
+  });
+
+  testWidgets('decimal/signed 옵션이 붙은 숫자 키보드도 완료 바가 뜬다', (tester) async {
+    final focusNode = FocusNode();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      Material(
+        child: AppTextField(
+          focusNode: focusNode,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+        ),
+      ),
+    );
+    focusNode.requestFocus();
+    await tester.pump();
+    expect(find.text('완료'), findsOneWidget);
+  });
+
+  testWidgets('완료 바는 텍스트필드 컬럼이 아니라 루트 Overlay 위에 뜬다', (tester) async {
+    final focusNode = FocusNode();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      Material(child: AppTextField(focusNode: focusNode, keyboardType: TextInputType.phone)),
+    );
+    focusNode.requestFocus();
+    await tester.pump();
+
+    final doneBarFinder = find.byType(KeyboardDoneBar);
+    expect(doneBarFinder, findsOneWidget);
+    // AppTextField 자신의 서브트리(Column) 밖, Overlay 트리 위에 있어야
+    // 하므로 AppTextField 조상이 아니어야 한다.
+    expect(find.ancestor(of: doneBarFinder, matching: find.byType(AppTextField)), findsNothing);
+  });
+
+  testWidgets('일반 텍스트 키보드에서는 완료 바를 자동으로 띄우지 않는다', (tester) async {
+    final focusNode = FocusNode();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      Material(child: AppTextField(focusNode: focusNode)),
+    );
+    focusNode.requestFocus();
+    await tester.pump();
+    expect(find.byType(KeyboardDoneBar), findsNothing);
+  });
+
+  testWidgets('prefix/suffix 위젯을 표시한다', (tester) async {
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      const Material(
+        child: AppTextField(prefix: Icon(Icons.search), suffix: Text('단위')),
+      ),
+    );
+    expect(find.byIcon(Icons.search), findsOneWidget);
+    expect(find.text('단위'), findsOneWidget);
+  });
+
+  testWidgets('Android materialDecoration을 지정하면 그대로 사용한다', (tester) async {
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.android,
+      const Material(
+        child: AppTextField(
+          label: '무시됨',
+          materialDecoration: InputDecoration(labelText: '커스텀 라벨'),
+        ),
+      ),
+    );
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.decoration?.labelText, '커스텀 라벨');
+  });
+
+  testWidgets('controller/focusNode를 교체해도 예외 없이 새 값으로 동작한다', (tester) async {
+    final controllerA = TextEditingController(text: 'A');
+    final controllerB = TextEditingController(text: 'B');
+
+    Widget build(TextEditingController c) =>
+        Material(child: AppTextField(controller: c));
+
+    await pumpWithPlatform(tester, TargetPlatform.iOS, build(controllerA));
+    expect(find.text('A'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(home: build(controllerB)),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('B'), findsOneWidget);
+
+    controllerA.dispose();
+    controllerB.dispose();
+  });
+
   testWidgets('showObscureToggle이 켜져 있으면 눈 아이콘으로 obscureText를 토글한다', (tester) async {
     await pumpWithPlatform(
       tester,
