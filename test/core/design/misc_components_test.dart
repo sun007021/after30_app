@@ -31,6 +31,25 @@ void main() {
       await tester.pump();
       expect(result, isTrue);
     });
+
+    testWidgets('시각적 크기는 22pt여도 히트 영역은 44×44pt 이상이다', (tester) async {
+      bool? result;
+      await pumpWithPlatform(
+        tester,
+        TargetPlatform.iOS,
+        Material(child: AppCheckmark(checked: false, onChanged: (v) => result = v)),
+      );
+
+      final size = tester.getSize(find.byType(AppCheckmark));
+      expect(size.width, greaterThanOrEqualTo(44));
+      expect(size.height, greaterThanOrEqualTo(44));
+
+      // 원(22pt) 바깥이지만 44pt 히트 영역 안쪽인 지점을 탭해도 반응해야 한다.
+      final center = tester.getCenter(find.byType(AppCheckmark));
+      await tester.tapAt(center + const Offset(15, 0));
+      await tester.pump();
+      expect(result, isTrue);
+    });
   });
 
   group('GlassSurface', () {
