@@ -47,6 +47,9 @@ dependencies:
   url_launcher: ^6.3.0 # 외부 브라우저/앱 링크 실행
   firebase_core:
   firebase_messaging:
+  flutter_localizations: # Cupertino 위젯(피커 등)의 한국어 로케일 지원
+    sdk: flutter
+  package_info_plus: ^8.1.2 # 앱 버전/빌드 번호 조회
 
 dev_dependencies:
   flutter_test:
