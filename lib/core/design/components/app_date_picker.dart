@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:after30/core/design/app_platform.dart';
 import 'package:after30/core/design/tokens/app_colors.dart';
+import 'package:after30/core/design/tokens/app_radius.dart';
 
 /// [showAppDatePicker]가 지원하는 모드.
 enum AppDatePickerMode {
@@ -64,7 +65,7 @@ Future<DateTime?> showAppDatePicker({
     useRootNavigator: true,
     backgroundColor: AppColors.surface,
     shape: const RoundedSuperellipseBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
     ),
     builder: (ctx) {
       return SafeArea(
