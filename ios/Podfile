@@ -42,9 +42,13 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
 
     target.build_configurations.each do |config|
-      # 모든 pod의 최소 배포 타깃을 앱과 동일하게 16.0으로 통일한다.
-      # (일부 pod가 더 낮은 값을 선언해도 Xcode 26 경고/링크 문제를 피하기 위함)
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      # 배포 타깃이 앱보다 낮은 pod만 16.0으로 끌어올린다.
+      # (일부 pod가 더 낮은 값을 선언해 생기는 Xcode 26 경고/링크 문제를 피하되,
+      # 더 높은 값을 선언한 pod는 그대로 둔다)
+      current_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if current_target.nil? || current_target.to_f < 16.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      end
     end
   end
 
