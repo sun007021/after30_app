@@ -89,6 +89,43 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('iOS에서는 상단 안전영역 아래에 배너가 표시된다', (tester) async {
+    late BuildContext capturedContext;
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      Builder(
+        // 실제 기기의 다른 MediaQueryData 값(크기 등)은 그대로 두고 top
+        // 패딩만 안전영역 값으로 덮어써야 하므로, 통째로 새 MediaQueryData를
+        // 만들지 않고 기존 값을 copyWith한다.
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(padding: const EdgeInsets.only(top: 59)),
+          child: Scaffold(
+            body: Builder(
+              builder: (context) {
+                capturedContext = context;
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    AppToast.show(capturedContext, '안전영역 테스트');
+    await tester.pump();
+
+    final positioned = tester.widget<Positioned>(
+      find.ancestor(of: find.text('안전영역 테스트'), matching: find.byType(Positioned)).first,
+    );
+    // 상단 안전영역(59pt) + 여백(8pt) 아래에 배치되어야 한다.
+    expect(positioned.top, 67);
+
+    await tester.pump(const Duration(milliseconds: 3000));
+    await tester.pump();
+  });
+
   testWidgets('Android에서는 기존 SnackBar로 메시지를 띄우고 배경색을 지정하지 않는다', (tester) async {
     await pumpWithPlatform(
       tester,
