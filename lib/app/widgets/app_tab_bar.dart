@@ -168,6 +168,10 @@ class _IosTabItem extends StatelessWidget {
       button: true,
       selected: selected,
       label: meta.label,
+      // 안의 Text가 같은 라벨을 또 한 번 읽어서 "알람 알람"처럼 두 번
+      // 읽히는 것을 막는다(m8) — 이 Semantics 노드가 자식들의 시맨틱스를
+      // 대신하고, 자식(Text/SvgPicture)의 시맨틱스는 트리에서 제외한다.
+      excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
