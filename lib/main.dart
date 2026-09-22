@@ -5,12 +5,12 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/core/design/app_theme.dart';
 import 'package:after30/core/design/gallery/design_gallery_page.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/features/login/ui/login.dart';
 import 'package:after30/features/login/ui/signup_page.dart';
 import 'package:after30/features/login/ui/signup_intro.dart';
 import 'package:after30/features/login/ui/terms_agreement_page.dart';
 import 'package:after30/features/login/ui/email_login_page.dart';
-import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/features/family/ui/family_page.dart';
 import 'package:flutter/widgets.dart';
@@ -120,7 +120,10 @@ class _MyAppState extends State<MyApp> {
         '/signup-terms': (context) => const TermsAgreementPage(),
         '/email-login': (context) => const EmailLoginPage(),
         '/signup': (context) => const SignupPage(),
-        '/home': (context) => const HomePage(),
+        // 알림/로그인 이후 '/home'으로 이동하는 기존 경로들은 앱 셸(AppShell)의
+        // 홈 탭으로 진입한다(plan §6 W10 4항). AppShell의 기본 탭이 홈이므로
+        // 별도 인자 없이 그대로 쓴다.
+        '/home': (context) => const AppShell(),
         '/family': (context) => const FamilyPage(),
         '/fullscreen_alarm': (context) => const FullscreenAlarmPlaceholder(),
         '/my': (context) => const MyPage(),

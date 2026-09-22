@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/alarm/ui/alarm_list.dart';
 import 'package:after30/features/calendar/ui/calendar_page.dart';
@@ -13,6 +14,14 @@ class AlarmBottomNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 앱 셸(AppShell) 안에서는 셸 자체의 탭바가 대신 그려지므로 이 위젯은
+    // 아무것도 그리지 않는다(plan §6 W10 3항). 각 화면이 여전히
+    // `bottomNavigationBar: AlarmBottomNavigation(...)`을 쓰고 있어도
+    // 호환되도록, 실제 제거는 화면 담당 에이전트가 한다.
+    if (AppShell.isInside(context)) {
+      return const SizedBox.shrink();
+    }
+
     PageRouteBuilder<T> _noAnimRoute<T>(Widget page) {
       return PageRouteBuilder<T>(
         pageBuilder: (_, __, ___) => page,
