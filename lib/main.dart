@@ -1,5 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/core/design/app_theme.dart';
+import 'package:after30/core/design/gallery/design_gallery_page.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/login/ui/login.dart';
 import 'package:after30/features/login/ui/signup_page.dart';
@@ -99,19 +103,14 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: '식후 30분',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFEBF0FF)),
-        useMaterial3: true,
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: NoTransitionsPageTransitionsBuilder(),
-            TargetPlatform.iOS: NoTransitionsPageTransitionsBuilder(),
-            TargetPlatform.macOS: NoTransitionsPageTransitionsBuilder(),
-            TargetPlatform.windows: NoTransitionsPageTransitionsBuilder(),
-            TargetPlatform.linux: NoTransitionsPageTransitionsBuilder(),
-          },
-        ),
-      ),
+      theme: AppTheme.build(),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('ko', 'KR')],
+      locale: const Locale('ko', 'KR'),
       initialRoute: '/startup',
       routes: {
         '/startup': (context) => const StartupPage(),
@@ -127,23 +126,9 @@ class _MyAppState extends State<MyApp> {
         '/my': (context) => const MyPage(),
         '/my-info': (context) => const MyInfoPage(),
         '/my-info-edit': (context) => const MyInfoEditPage(),
+        if (kDebugMode) '/dev/design-gallery': (context) => const DesignGalleryPage(),
       },
     );
-  }
-}
-
-class NoTransitionsPageTransitionsBuilder extends PageTransitionsBuilder {
-  const NoTransitionsPageTransitionsBuilder();
-
-  @override
-  Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    return child;
   }
 }
 
