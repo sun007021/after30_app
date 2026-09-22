@@ -1,15 +1,8 @@
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:after30/app/app_shell.dart';
 import 'package:after30/core/design/gallery/design_gallery_page.dart';
-import 'package:after30/core/storage/onboarding_store.dart';
-import 'package:after30/core/storage/user_store.dart';
-import 'package:after30/features/alarm/data/alarm_service.dart';
-import 'package:after30/features/alarm/models/medicine_alarm.dart';
-import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/features/login/ui/email_login_page.dart';
 import 'package:after30/features/login/ui/login.dart';
 import 'package:after30/features/login/ui/signup_intro.dart';
@@ -20,14 +13,14 @@ import 'package:after30/features/my/my_info_page.dart';
 import 'package:after30/features/my/my_page.dart';
 import 'package:after30/features/onboarding/ui/onboarding_page.dart';
 
-/// 앱 전역 라우트 이름 테이블(PR #31 B1). 기존에는 `main.dart`의
-/// `MaterialApp.routes`에만 있었는데, [AppShell] 탭 안에서 이름 있는
-/// 라우트를 push하면(`pushNamed`) 탭 Navigator가 이 테이블을 몰라
-/// "onGenerateRoute was null"로 죽었다. `MaterialApp.routes`와 각 탭
-/// Navigator의 `onGenerateRoute`([generateTabRoute])가 이 맵 하나를
-/// 공유하도록 분리했다.
+/// 앱 전역 라우트 이름 테이블(PR #31 B1) — `/startup`, `/fullscreen_alarm`
+/// 제외. 이 두 라우트는 `main.dart`가 소유한(W3/W4가 계속 작업 중인)
+/// `StartupPage`/`FullscreenAlarmPlaceholder`를 그대로 써야 해서(N3),
+/// `main.dart`가 [buildAppRoutes]에 자신의 빌더를 넘겨 완성한다. 탭
+/// Navigator의 `onGenerateRoute`([generateTabRoute])는 이 두 라우트를
+/// 다루지 않으므로(둘 다 셸을 벗어나는 라우트라 [kTabLocalRouteNames]에
+/// 없음) 이 부분 집합만으로 충분하다.
 final Map<String, WidgetBuilder> appRoutes = {
-  '/startup': (context) => const StartupPage(),
   '/onboarding': (context) => const OnboardingPage(),
   '/login': (context) => const LoginPage(),
   '/signup-intro': (context) => const SignupIntroPage(),
@@ -38,28 +31,56 @@ final Map<String, WidgetBuilder> appRoutes = {
   // 홈 탭으로 진입한다(plan §6 W10 4항). AppShell의 기본 탭이 홈이므로
   // 별도 인자 없이 그대로 쓴다.
   '/home': (context) => const AppShell(),
-  '/fullscreen_alarm': (context) => const FullscreenAlarmPlaceholder(),
   '/my': (context) => const MyPage(),
   '/my-info': (context) => const MyInfoPage(),
   '/my-info-edit': (context) => const MyInfoEditPage(),
   if (kDebugMode) '/dev/design-gallery': (context) => const DesignGalleryPage(),
 };
 
+/// `MaterialApp.routes`용 완성된 라우트 테이블을 만든다(N3). `/startup`,
+/// `/fullscreen_alarm`은 `main.dart`가 소유한 위젯이라 여기서 직접
+/// import하지 않고 호출부가 빌더를 넘겨준다 — `app_routes.dart`가
+/// `main.dart`를 import하면(반대로 `main.dart`는 이미 이 파일을
+/// import한다) 순환 참조가 생기고, `StartupPage`/`FullscreenAlarmPlaceholder`가
+/// 어느 워크스트림 소유인지도 애매해진다.
+Map<String, WidgetBuilder> buildAppRoutes({
+  required WidgetBuilder startup,
+  required WidgetBuilder fullscreenAlarm,
+}) {
+  return {'/startup': startup, ...appRoutes, '/fullscreen_alarm': fullscreenAlarm};
+}
+
 /// 탭 Navigator 안에서 그대로 push해도 되는(탭 스택에 남아도 되는) 라우트
 /// 이름들. 여기 없는 이름(특히 로그인/온보딩/홈처럼 셸을 벗어나야 하는
 /// 라우트)은 [generateTabRoute]가 루트 내비게이터로 전달한다.
 const Set<String> kTabLocalRouteNames = {'/my-info', '/my-info-edit'};
 
+/// 탭 안에서 push되면 안 되는(셸을 완전히 벗어나야 하는) 라우트 이름들
+/// (N4). [kTabLocalRouteNames]에도 이 집합에도 없는 이름은 "알 수 없는
+/// 이름"으로 취급해 아무 데도 보내지 않는다 — 함부로 루트로 보내버리면
+/// 오타/등록 누락을 조용히 셸 탈출로 둔갑시키게 된다.
+const Set<String> kShellExitRouteNames = {
+  '/startup',
+  '/onboarding',
+  '/login',
+  '/signup-intro',
+  '/signup-terms',
+  '/email-login',
+  '/signup',
+  '/home',
+  '/fullscreen_alarm',
+};
+
 /// [AppShell] 탭 Navigator용 `onGenerateRoute`(PR #31 B1).
 ///
-/// - [kTabLocalRouteNames]에 있는 이름은 [appRoutes]에서 빌더를 찾아 탭
-///   스택에 그대로 쌓는다(예: 마이 탭 안에서의 `/my-info`, `/my-info-edit`).
-/// - 그 외 이름(예: `/login`, `/home`)은 탭 안에 남아서는 안 되는 화면이므로,
-///   루트 내비게이터(`Navigator.of(context, rootNavigator: true)`)로 그대로
-///   전달하고, 탭 스택에는 아무 흔적도 남기지 않는다. 로그아웃/탈퇴처럼
-///   이미 `rootNavigator: true`를 쓰는 호출부가 정상 동작이고, 이 분기는
-///   실수로 rootNavigator 없이 셸 안에서 이런 라우트를 부르더라도 최소한
-///   크래시 없이 셸을 벗어나게 하는 안전장치다.
+/// - [kTabLocalRouteNames]에 있는 이름은 [appRoutes]에서 빌더를 찾아
+///   `MaterialPageRoute`로 탭 스택에 그대로 쌓는다(예: 마이 탭 안에서의
+///   `/my-info`, `/my-info-edit`). `MaterialPageRoute`를 써야 플랫폼
+///   기본 전환(iOS 푸시 애니메이션 + 엣지 스와이프 백)을 그대로 받는다
+///   (N2) — 전환 시간 0인 `PageRouteBuilder`를 쓰면 이게 사라진다.
+///   Android는 앱 테마의 `pageTransitionsTheme`가 이미 전환 없음으로
+///   설정돼 있어 동작이 그대로 유지된다.
+/// - 그 외 이름은 [_ShellExitForwarder]가 처리한다(N4).
 Route<dynamic> generateTabRoute(RouteSettings settings) {
   final name = settings.name;
   final builder = (name != null && kTabLocalRouteNames.contains(name))
@@ -67,12 +88,7 @@ Route<dynamic> generateTabRoute(RouteSettings settings) {
       : null;
 
   if (builder != null) {
-    return PageRouteBuilder<void>(
-      settings: settings,
-      pageBuilder: (context, _, __) => builder(context),
-      transitionDuration: Duration.zero,
-      reverseTransitionDuration: Duration.zero,
-    );
+    return MaterialPageRoute<void>(settings: settings, builder: builder);
   }
 
   return PageRouteBuilder<void>(
@@ -83,8 +99,18 @@ Route<dynamic> generateTabRoute(RouteSettings settings) {
   );
 }
 
-/// 탭 스택에 쌓이면 안 되는 라우트를 루트 내비게이터로 넘기고, 자기 자신은
-/// 탭 스택에서 바로 pop하는 투명한 중계 위젯.
+/// 탭 스택에 쌓이면 안 되는 라우트를 처리하는 투명한 중계 위젯(N4).
+///
+/// - 이름이 [kShellExitRouteNames]에 있으면(예: `/login`, `/home`) 원래
+///   이 라우트는 `Navigator.of(context, rootNavigator: true)`로 push됐어야
+///   한다 — 디버그 빌드에서는 그 실수를 [FlutterError]로 크게 알리고,
+///   릴리스 빌드에서는 조용히 복구하기 위해 루트 내비게이터로
+///   `pushNamedAndRemoveUntil`을 대신 호출해(셸 전체를 걷어내고 새로
+///   시작) 최소한 사용자가 셸 안에 갇히지는 않게 한다.
+/// - 이름이 알 수 없는(둘 중 어디에도 없는) 경우 — 오타이거나 탭 로컬
+///   라우트 등록을 빠뜨린 경우다. 디버그에서는 역시 크게 알리고,
+///   릴리스에서는 아무 데도 보내지 않고 그냥 이 화면을 pop한다(어디로
+///   보내야 할지 모르는 상태에서 함부로 셸을 걷어내는 것보다 안전하다).
 class _ShellExitForwarder extends StatefulWidget {
   const _ShellExitForwarder({required this.routeSettings});
 
@@ -98,15 +124,45 @@ class _ShellExitForwarderState extends State<_ShellExitForwarder> {
   @override
   void initState() {
     super.initState();
+    final name = widget.routeSettings.name;
+    final isShellExit = name != null && kShellExitRouteNames.contains(name);
+
+    assert(() {
+      if (isShellExit) {
+        throw FlutterError.fromParts([
+          ErrorSummary(
+            "탭 Navigator 안에서 셸을 벗어나야 하는 라우트 '$name'을(를) "
+            'rootNavigator 없이 push했습니다.',
+          ),
+          ErrorDescription(
+            'Navigator.of(context).pushNamed(...) 대신 '
+            "Navigator.of(context, rootNavigator: true).pushNamed('$name', ...)를 "
+            '쓰세요. 릴리스 빌드에서는 이 실수를 조용히 복구하려고 루트 '
+            '내비게이터로 대신 전달하지만(pushNamedAndRemoveUntil, 셸 전체를 '
+            '걷어냄), 디버그에서는 호출부를 고치라는 신호로 예외를 던집니다.',
+          ),
+        ]);
+      }
+      throw FlutterError.fromParts([
+        ErrorSummary("탭 Navigator가 모르는 라우트 이름 '$name'을(를) push했습니다."),
+        ErrorDescription(
+          'appRoutes에도 없고 셸을 벗어나야 하는 라우트 목록에도 없습니다. '
+          '오타이거나 탭 로컬 라우트 등록을 빠뜨렸을 수 있습니다. 릴리스 '
+          '빌드에서는 아무 데도 보내지 않고 이 화면을 그냥 pop합니다.',
+        ),
+      ]);
+    }());
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final name = widget.routeSettings.name;
-      if (name != null) {
+      if (isShellExit) {
         Navigator.of(
           context,
           rootNavigator: true,
-        ).pushNamed(name, arguments: widget.routeSettings.arguments);
+        ).pushNamedAndRemoveUntil(name, (route) => false);
       }
+      // 알 수 없는 이름이면 어디로도 보내지 않고 이 자리(탭 스택)만
+      // 정리한다.
       final tabNavigator = Navigator.of(context);
       if (tabNavigator.canPop()) {
         tabNavigator.pop();
@@ -116,110 +172,6 @@ class _ShellExitForwarderState extends State<_ShellExitForwarder> {
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-// 전체화면 알림을 위한 플레이스홀더
-class FullscreenAlarmPlaceholder extends StatelessWidget {
-  const FullscreenAlarmPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // 실제로는 알람 데이터를 받아와서 FullscreenAlarm을 표시해야 합니다
-    return const Scaffold(body: Center(child: Text('전체화면 알림')));
-  }
-}
-
-class StartupPage extends StatefulWidget {
-  const StartupPage({super.key});
-  @override
-  State<StartupPage> createState() => _StartupPageState();
-}
-
-class _StartupPageState extends State<StartupPage> {
-  @override
-  void initState() {
-    super.initState();
-    _attemptRefresh();
-  }
-
-  Future<void> _attemptRefresh() async {
-    try {
-      // FullScreen Intent로 앱이 기동된 경우에만 풀스크린 라우트로 이동
-      try {
-        final initialAction = await AwesomeNotifications()
-            .getInitialNotificationAction();
-        if (initialAction != null) {
-          final payload = initialAction.payload ?? {};
-          final isFs = payload['fs'] == '1';
-          // 앱이 알림으로 콜드 스타트된 경우, 잠금이 풀려 있어도 풀스크린
-          // 알람 화면을 보여준다(잠금 여부와 무관하게 사용자가 알림으로
-          // 앱을 열었다는 사실 자체가 이동 의도를 나타낸다).
-          if (isFs) {
-            final alarmId = payload['alarmId'] ?? '';
-            final name = payload['medicineName'] ?? '약';
-            final timeStr = payload['time'] ?? '08:00';
-            final day = payload['day'] ?? '월';
-            final notifId = initialAction.id ?? 0;
-            final hour = int.tryParse(timeStr.split(':').first) ?? 8;
-            final minute = int.tryParse(timeStr.split(':').last) ?? 0;
-            if (!mounted) return;
-            AlarmService.showFullscreenAlarm(
-              context,
-              MedicineAlarm(
-                id: alarmId.isEmpty ? null : alarmId,
-                name: name,
-                times: [TimeOfDay(hour: hour, minute: minute)],
-                days: [day],
-              ),
-              TimeOfDay(hour: hour, minute: minute),
-              day,
-              notificationId: notifId,
-            );
-            return;
-          }
-        }
-      } catch (_) {}
-
-      final ok = await BackendAuthService().refreshSession();
-      if (!mounted) return;
-      if (ok) {
-        await OnboardingStore.setCompleted();
-        // 저장된 사용자 ID가 있다면 네임스페이스 설정 후 재스케줄
-        final userId = await UserStore.getCurrentUserId();
-        AlarmService.setCurrentUserId(userId);
-        await AlarmService().rescheduleAllActiveFromStorage();
-        if (!mounted) return;
-        Navigator.of(context).pushReplacementNamed('/home');
-      } else {
-        await _goToOnboardingOrLogin();
-      }
-    } catch (_) {
-      if (!mounted) return;
-      await _goToOnboardingOrLogin();
-    }
-  }
-
-  Future<void> _goToOnboardingOrLogin() async {
-    final seenOnboarding = await OnboardingStore.isCompleted();
-    if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushReplacementNamed(seenOnboarding ? '/login' : '/onboarding');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: SvgPicture.asset(
-          'assets/images/mainicon.svg',
-          width: 80,
-          height: 80,
-        ),
-      ),
-    );
-  }
 }
 
 // FamilyPage는 W10 이전에 '/family'라는 최상위 이름 라우트로도 등록돼

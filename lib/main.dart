@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/app/app_routes.dart';
 import 'package:after30/core/design/app_theme.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
+import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'package:after30/features/login/data/backend_auth_service.dart';
+import 'package:after30/core/storage/onboarding_store.dart';
+import 'package:after30/core/storage/user_store.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 
@@ -93,9 +99,118 @@ class _MyAppState extends State<MyApp> {
       supportedLocales: const [Locale('ko', 'KR')],
       locale: const Locale('ko', 'KR'),
       initialRoute: '/startup',
-      // 라우트 이름 테이블은 lib/app/app_routes.dart에서 공유한다(PR #31
-      // B1). AppShell 탭 Navigator의 onGenerateRoute도 같은 맵을 쓴다.
-      routes: appRoutes,
+      // 대부분의 라우트 이름 테이블은 lib/app/app_routes.dart에서
+      // 공유한다(PR #31 B1). AppShell 탭 Navigator의 onGenerateRoute도
+      // 같은 맵을 쓴다. `/startup`, `/fullscreen_alarm`은 이 파일이
+      // 소유한 위젯(W3/W4가 계속 작업 중)이라 여기서 직접 넘긴다(N3).
+      routes: buildAppRoutes(
+        startup: (context) => const StartupPage(),
+        fullscreenAlarm: (context) => const FullscreenAlarmPlaceholder(),
+      ),
+    );
+  }
+}
+
+// 전체화면 알림을 위한 플레이스홀더
+class FullscreenAlarmPlaceholder extends StatelessWidget {
+  const FullscreenAlarmPlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 실제로는 알람 데이터를 받아와서 FullscreenAlarm을 표시해야 합니다
+    return const Scaffold(body: Center(child: Text('전체화면 알림')));
+  }
+}
+
+class StartupPage extends StatefulWidget {
+  const StartupPage({super.key});
+  @override
+  State<StartupPage> createState() => _StartupPageState();
+}
+
+class _StartupPageState extends State<StartupPage> {
+  @override
+  void initState() {
+    super.initState();
+    _attemptRefresh();
+  }
+
+  Future<void> _attemptRefresh() async {
+    try {
+      // FullScreen Intent로 앱이 기동된 경우에만 풀스크린 라우트로 이동
+      try {
+        final initialAction = await AwesomeNotifications()
+            .getInitialNotificationAction();
+        if (initialAction != null) {
+          final payload = initialAction.payload ?? {};
+          final isFs = payload['fs'] == '1';
+          // 앱이 알림으로 콜드 스타트된 경우, 잠금이 풀려 있어도 풀스크린
+          // 알람 화면을 보여준다(잠금 여부와 무관하게 사용자가 알림으로
+          // 앱을 열었다는 사실 자체가 이동 의도를 나타낸다).
+          if (isFs) {
+            final alarmId = payload['alarmId'] ?? '';
+            final name = payload['medicineName'] ?? '약';
+            final timeStr = payload['time'] ?? '08:00';
+            final day = payload['day'] ?? '월';
+            final notifId = initialAction.id ?? 0;
+            final hour = int.tryParse(timeStr.split(':').first) ?? 8;
+            final minute = int.tryParse(timeStr.split(':').last) ?? 0;
+            if (!mounted) return;
+            AlarmService.showFullscreenAlarm(
+              context,
+              MedicineAlarm(
+                id: alarmId.isEmpty ? null : alarmId,
+                name: name,
+                times: [TimeOfDay(hour: hour, minute: minute)],
+                days: [day],
+              ),
+              TimeOfDay(hour: hour, minute: minute),
+              day,
+              notificationId: notifId,
+            );
+            return;
+          }
+        }
+      } catch (_) {}
+
+      final ok = await BackendAuthService().refreshSession();
+      if (!mounted) return;
+      if (ok) {
+        await OnboardingStore.setCompleted();
+        // 저장된 사용자 ID가 있다면 네임스페이스 설정 후 재스케줄
+        final userId = await UserStore.getCurrentUserId();
+        AlarmService.setCurrentUserId(userId);
+        await AlarmService().rescheduleAllActiveFromStorage();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        await _goToOnboardingOrLogin();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      await _goToOnboardingOrLogin();
+    }
+  }
+
+  Future<void> _goToOnboardingOrLogin() async {
+    final seenOnboarding = await OnboardingStore.isCompleted();
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushReplacementNamed(seenOnboarding ? '/login' : '/onboarding');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: SvgPicture.asset(
+          'assets/images/mainicon.svg',
+          width: 80,
+          height: 80,
+        ),
+      ),
     );
   }
 }

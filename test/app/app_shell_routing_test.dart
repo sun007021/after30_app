@@ -86,4 +86,42 @@ void main() {
     final shellState = tester.state<AppShellState>(find.byType(AppShell));
     expect(shellState.currentIndex, AppShellTab.home);
   });
+
+  test(
+    '탭 로컬 라우트(/my-info)는 MaterialPageRoute라 iOS 푸시 전환/엣지 스와이프 백을 '
+    '그대로 받는다(N2)',
+    () {
+      // 이전에는 전환 시간이 0인 PageRouteBuilder를 썼는데, 그러면 플랫폼
+      // 기본 전환(iOS 푸시 애니메이션 + 엣지 스와이프 백)이 통째로
+      // 사라졌다. MaterialPageRoute는 앱 테마의 pageTransitionsTheme를
+      // 그대로 따르므로(iOS는 CupertinoPageTransitionsBuilder, Android는
+      // 기존 NoTransitions), 두 플랫폼 모두 원래 동작을 유지한다.
+      final route = generateTabRoute(const RouteSettings(name: '/my-info'));
+      expect(route, isA<MaterialPageRoute<void>>());
+    },
+  );
+
+  testWidgets(
+    "탭 안에서 rootNavigator 없이 셸을 벗어나는 라우트를 push하면 디버그에서 크게 실패한다(N4)",
+    (tester) async {
+      await pumpAppShell(tester, initialIndex: AppShellTab.home);
+      final tabContext = tester.element(find.textContaining('home:'));
+      // rootNavigator: true를 빠뜨린 실수 상황을 흉내 낸다.
+      Navigator.of(tabContext).pushNamed('/login');
+      await tester.pump();
+
+      expect(tester.takeException(), isA<FlutterError>());
+    },
+  );
+
+  testWidgets('탭 안에서 알 수 없는 라우트 이름을 push하면 디버그에서 크게 실패한다(N4)', (
+    tester,
+  ) async {
+    await pumpAppShell(tester, initialIndex: AppShellTab.home);
+    final tabContext = tester.element(find.textContaining('home:'));
+    Navigator.of(tabContext).pushNamed('/definitely-not-a-registered-route');
+    await tester.pump();
+
+    expect(tester.takeException(), isA<FlutterError>());
+  });
 }
