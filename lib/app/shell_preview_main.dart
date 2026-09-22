@@ -36,18 +36,69 @@ const _tabLabels = ['알람', '가족', '홈', '기록', '마이'];
 /// - 글래스 탭바 아래로 콘텐츠가 얼마나 스크롤되는지
 /// - 탭 전환 시 스크롤 위치가 유지되는지
 /// - 서브 페이지로 push했을 때 iOS 엣지 스와이프 백이 동작하는지
-/// 를 눈으로 확인하는 용도다.
-class _PreviewTabPage extends StatelessWidget {
+/// 를 눈으로 확인하는 용도다. 홈 탭(index==AppShellTab.home)에서는
+/// 시뮬레이터 스크린샷 검증을 손으로 탭하지 않고도 찍을 수 있도록 일정
+/// 시간 뒤 자동으로 스크롤하고 서브 페이지를 연다("서브 페이지 열기"
+/// 버튼으로 수동으로도 열 수 있다).
+class _PreviewTabPage extends StatefulWidget {
   const _PreviewTabPage({required this.index});
 
   final int index;
 
   @override
+  State<_PreviewTabPage> createState() => _PreviewTabPageState();
+}
+
+class _PreviewTabPageState extends State<_PreviewTabPage> {
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.index == AppShellTab.home) {
+      Future.delayed(const Duration(seconds: 6), () {
+        if (!mounted || !_scrollController.hasClients) return;
+        _scrollController.animateTo(
+          900,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+        );
+      });
+      Future.delayed(const Duration(seconds: 12), _openSubPage);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _openSubPage() {
+    if (!mounted) return;
+    final label = _tabLabels[widget.index];
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text('$label 서브 페이지')),
+          body: Center(
+            child: Text(
+              '엣지 스와이프로 뒤로 갈 수 있어야 합니다',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final label = _tabLabels[index];
+    final label = _tabLabels[widget.index];
     return Scaffold(
       appBar: AppBar(title: Text('$label 탭 프리뷰')),
       body: ListView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(vertical: 12),
         itemCount: 60,
         itemBuilder: (context, i) {
@@ -55,19 +106,7 @@ class _PreviewTabPage extends StatelessWidget {
             title: Text('$label 항목 $i'),
             trailing: i == 0
                 ? FilledButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => Scaffold(
-                          appBar: AppBar(title: Text('$label 서브 페이지')),
-                          body: Center(
-                            child: Text(
-                              '엣지 스와이프로 뒤로 갈 수 있어야 합니다',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    onPressed: _openSubPage,
                     child: const Text('서브 페이지 열기'),
                   )
                 : null,
