@@ -30,7 +30,15 @@ class AlarmBottomNavigation extends StatelessWidget {
     //   위에 띄우는 것 포함, M1)을 그대로 재사용할 수 있다.
     if (AppShell.isInside(context)) {
       if (isCupertino(context)) {
-        return SizedBox(height: AppTabBar.reservedBottomHeight(context));
+        // AppTabBar.reservedBottomHeight(context)를 여기서 다시 계산하면
+        // 안 된다(N1) — 이 context는 셸의 extendBody가 이미 부풀려 놓은
+        // MediaQuery.padding.bottom을 보고 있어서, 그 값을 다시 "원본
+        // 세이프 에어리어"로 착각해 실제보다 훨씬 큰 값을 반환한다. 셸이
+        // 자기 자신의(오염되지 않은) context로 미리 계산해 둔 값을 그대로
+        // 쓴다.
+        return SizedBox(
+          height: AppShell.maybeOf(context)?.reservedBottom ?? AppTabBar.reservedBottomHeight(context),
+        );
       }
       return const SizedBox.shrink();
     }

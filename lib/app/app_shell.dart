@@ -174,7 +174,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => AppShellState();
 }
 
-class AppShellState extends State<AppShell> {
+class AppShellState extends State<AppShell> with WidgetsBindingObserver {
   late int _currentIndex = widget.initialIndex;
   late final List<Object?> _tabArguments = List<Object?>.filled(AppShellTab.count, null);
   late final List<GlobalKey<NavigatorState>> _navigatorKeys = List.generate(
@@ -192,24 +192,73 @@ class AppShellState extends State<AppShell> {
   /// [ValueNotifier]는 쓰지 않는다(값이 그대로면 알림을 생략하기 때문).
   final _TabActivationNotifier _tabActivation = _TabActivationNotifier();
 
+  /// 마지막으로 확인한 "오늘" 날짜(자정을 넘겨 방치된 경우를 감지하는
+  /// 용도, N5).
+  DateTime? _lastKnownDate;
+
+  /// iOS 플로팅 탭바가 화면 하단에서 차지하는 실제 높이(N1). 셸의
+  /// Scaffold가 `extendBody: true`라 body 하위 위젯들이 보는
+  /// `MediaQuery.padding.bottom`은 이 값으로 부풀려진다(Scaffold의
+  /// 의도된 동작 — 콘텐츠가 알아서 탭바를 피하게 하기 위함). 그래서 탭바
+  /// 자신의 위치나 다른 화면의 `AlarmBottomNavigation`은 이 값을 "다시"
+  /// (부풀려진) MediaQuery에서 읽으면 안 되고, 셸이 자신의(오염되지 않은)
+  /// context에서 한 번만 계산해 둔 이 값을 그대로 써야 한다. 키보드가
+  /// 올라와 있는 동안은 탭바 자체를 숨기므로 0이다.
+  double _reservedBottom = 0;
+
   @override
   void initState() {
     super.initState();
     _tabArguments[_currentIndex] = widget.initialArguments;
+    _lastKnownDate = _today();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabActivation.dispose();
     super.dispose();
+  }
+
+  DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // 앱이 포그라운드로 돌아왔다는 사실 자체, 또는 그 사이 날짜가 바뀐
+    // 것(자정을 넘겨 방치된 경우)을 탭 재활성화와 같은 신호로 취급한다
+    // (N5) — 지금 활성 탭이 [AppShellTabAware]를 구현하고 있다면 이
+    // 알림을 받아 필요하면 데이터를 다시 불러온다. 날짜가 안 바뀐 단순
+    // 재개(resumed)에도 항상 알린다 — 백그라운드에 오래 있다가 돌아온
+    // 경우 최신 서버 데이터를 다시 불러오고 싶은 화면이 있을 수 있어서다.
+    _lastKnownDate = _today();
+    _tabActivation.notify();
   }
 
   /// 현재 활성 탭 인덱스.
   int get currentIndex => _currentIndex;
 
-  /// 탭이 활성화될 때(전환 또는 재탭)마다 알림을 보내는 [Listenable](M2).
-  /// [AppShellTabActivationListener]가 내부적으로 구독한다.
+  /// 탭이 활성화될 때(전환, 재탭, 앱 재개)마다 알림을 보내는
+  /// [Listenable](M2, N5). [AppShellTabActivationListener]가 내부적으로
+  /// 구독한다.
   Listenable get tabActivationListenable => _tabActivation;
+
+  /// 마지막으로 [onTabActivated] 계열 알림을 보낸 시점의 "오늘" 날짜(N5).
+  /// 활성화 훅을 받는 화면이 "그냥 재방문인지, 자정을 넘겨 날짜가 바뀐
+  /// 것까지 포함하는지"를 직접 구분하고 싶을 때 `DateTime.now()`와 비교해
+  /// 쓸 수 있다.
+  DateTime get lastKnownDate => _lastKnownDate ?? _today();
+
+  /// iOS 플로팅 탭바가 화면 하단에서 실제로 차지하는 높이(N1). 셸 안의
+  /// 다른 화면(`AlarmBottomNavigation` 등)은 이 값을 그대로 써야 하며,
+  /// [AppTabBar.reservedBottomHeight]를 자기 자신의 context로 다시
+  /// 계산하면 안 된다(이미 부풀려진 MediaQuery를 또 부풀리게 된다).
+  /// Android에서는 항상 0이다.
+  double get reservedBottom => _reservedBottom;
 
   /// 탭을 전환한다.
   ///
@@ -249,12 +298,31 @@ class AppShellState extends State<AppShell> {
         _rootRoute(index, arguments),
         (route) => false,
       );
-    } else if (isSameTab || popToRoot) {
+    } else if (isSameTab) {
+      // 재탭: 지금 화면에 보이는 탭이라 pop 애니메이션이 자연스럽게
+      // 재생된다.
       _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+    } else if (popToRoot) {
+      // 아직 화면에 보이지 않는(전환 직후에야 보이게 될) 탭을 정리하는
+      // 경우다. popUntil은 pop 애니메이션을 트리거하는데, 이 탭은
+      // TickerMode가 꺼져 있어(IndexedStack의 비활성 자식) 애니메이션이
+      // 끝까지 재생되지 못하고 멈춰 있다가, 나중에 이 탭으로 돌아오면
+      // 그제서야 멈춰 있던 애니메이션이 재생되며 화면이 잠깐 깜빡이는
+      // 문제가 있었다(N6). pushAndRemoveUntil은 제거될 화면들을 애니메이션
+      // 없이 즉시 들어내므로 이 문제가 없다.
+      _navigatorKeys[index].currentState?.pushAndRemoveUntil(
+        _rootRoute(index, _tabArguments[index]),
+        (route) => false,
+      );
     }
 
     if (popOriginToRoot && !isSameTab) {
-      _navigatorKeys[originIndex].currentState?.popUntil((route) => route.isFirst);
+      // 출발 탭도 전환 직후 화면에서 사라지므로(TickerMode 꺼짐) 위와 같은
+      // 이유로 popUntil 대신 pushAndRemoveUntil을 쓴다(N6).
+      _navigatorKeys[originIndex].currentState?.pushAndRemoveUntil(
+        _rootRoute(originIndex, _tabArguments[originIndex]),
+        (route) => false,
+      );
     }
 
     if (!isSameTab) {
@@ -314,6 +382,18 @@ class AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final cupertino = isCupertino(context);
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    // 이 context는 AppShellState 자신의 것으로, 아래에서 만드는 Scaffold의
+    // extendBody가 body 하위에 주입하는 부풀려진 padding.bottom보다 밖에
+    // 있다 — 즉 오염되지 않은 원본 세이프 에어리어 값이다(N1). 이 값을
+    // 한 번만 계산해서 셸 안 어디서나(탭바 위치, AlarmBottomNavigation
+    // 포함) 재사용한다.
+    final rawSafeBottom = MediaQuery.paddingOf(context).bottom;
+    final barReserve = cupertino
+        ? AppTabBar.computeReservedBottom(rawSafeBottom)
+        : 0.0;
+    // 키보드가 올라온 동안은 탭바를 숨기므로(바로 아래) 예약된 자리도
+    // 필요 없다 — 그대로 두면 키보드 위로 빈 틈이 남는다.
+    _reservedBottom = keyboardOpen ? 0 : barReserve;
 
     final tabStack = IndexedStack(
       index: _currentIndex,
@@ -358,8 +438,19 @@ class AppShellState extends State<AppShell> {
                       left: 0,
                       right: 0,
                       bottom: 0,
-                      child: SafeArea(
-                        top: false,
+                      // SafeArea가 아니라 명시적인 Padding을 쓴다(N1). 이
+                      // 위젯은 자신이 만드는 바로 이 body 서브트리 안에
+                      // 있어서, SafeArea로 감싸면 extendBody가 부풀려
+                      // 놓은 padding.bottom(barReserve, 위에서 계산한
+                      // rawSafeBottom보다 훨씬 큼)을 또 읽어 캡슐이 필요
+                      // 이상으로 높이 뜨는 문제가 있었다. 원본 세이프
+                      // 에어리어 + 캡슐과 세이프 에어리어 사이 여백만
+                      // 더한다(`_IosTabBar`는 더 이상 이 여백을 자체적으로
+                      // 넣지 않는다 — 이중 계산 방지).
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          bottom: rawSafeBottom + AppTabBar.bottomMargin,
+                        ),
                         child: AppTabBar(currentIndex: _currentIndex, onTap: _handleTabBarTap),
                       ),
                     ),
@@ -379,9 +470,7 @@ class AppShellState extends State<AppShell> {
         // 배치 로직이 탭바 위로 띄우게 만든다(extendBody와 함께 써도
         // body 자체는 줄어들지 않는다).
         bottomNavigationBar: cupertino
-            ? IgnorePointer(
-                child: SizedBox(height: AppTabBar.reservedBottomHeight(context)),
-              )
+            ? IgnorePointer(child: SizedBox(height: _reservedBottom))
             : AppTabBar(currentIndex: _currentIndex, onTap: _handleTabBarTap),
       ),
     );

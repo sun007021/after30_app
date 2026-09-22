@@ -29,16 +29,37 @@ class AppTabBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
+  /// 캡슐(글래스 표면) 자체의 높이. 마진은 포함하지 않는다.
+  static const double barHeight = _IosTabBar.barHeight;
+
+  /// 캡슐과 (세이프 에어리어를 뺀) 화면 하단 사이의 여백.
+  static const double bottomMargin = _IosTabBar.bottomMargin;
+
   /// iOS 플로팅 탭바가 화면 하단에서 차지하는 총 높이(콘텐츠가 가리지
   /// 않도록 탭 콘텐츠의 하단 패딩 계산에 쓰인다). Android는 0을 반환한다
   /// (Android는 `Scaffold.bottomNavigationBar`처럼 항상 차지하는 자리가
   /// 아니라 콘텐츠 위에 그려지므로, 기존 Android 화면들이 직접 계산하던
   /// 여백을 그대로 유지한다).
+  ///
+  /// ⚠️ [AppShell] 내부(탭 콘텐츠, `AlarmBottomNavigation` 등)에서는 이
+  /// 메서드를 직접 호출하지 말 것(N1). 셸의 Scaffold가 `extendBody: true`라
+  /// 아래 콘텐츠가 보는 `MediaQuery.padding.bottom`은 이미 이 값만큼
+  /// 부풀려져 있어서, 거기서 다시 이 메서드를 호출하면 부풀려진 값을
+  /// 안전 영역으로 착각해 훨씬 큰 값을 반환한다. 셸 안에서는
+  /// `AppShell.maybeOf(context)!.reservedBottom`처럼 셸이 원본(오염되지
+  /// 않은) 세이프 에어리어로 미리 계산해 둔 값을 그대로 써야 한다. 이
+  /// 메서드는 셸 바깥(예: 셸을 만들기 전)에서만 안전하다.
   static double reservedBottomHeight(BuildContext context) {
     if (!isCupertino(context)) return 0;
-    final bottomSafe = MediaQuery.of(context).padding.bottom;
-    return _IosTabBar.barHeight + _IosTabBar.bottomMargin + bottomSafe;
+    return computeReservedBottom(MediaQuery.paddingOf(context).bottom);
   }
+
+  /// [reservedBottomHeight]와 같은 계산을, 이미 알고 있는 "원본"(오염되지
+  /// 않은) 하단 세이프 에어리어 값으로 한다. 셸(`AppShell`)이 자기 자신의
+  /// (아직 `extendBody`로 부풀려지지 않은) context에서 딱 한 번 계산해
+  /// 재사용하는 용도다(N1).
+  static double computeReservedBottom(double rawSafeBottom) =>
+      barHeight + bottomMargin + rawSafeBottom;
 
   @override
   Widget build(BuildContext context) {
@@ -125,8 +146,13 @@ class _IosTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 세이프 에어리어 + bottomMargin만큼의 하단 여백은 이 위젯이 아니라
+    // 셸(`AppShellState.build`)이 이 위젯을 배치할 때 외부에서 더한다
+    // (N1) — 그래야 "원본" 세이프 에어리어 값 하나로만 계산되고, 이
+    // 위젯이 자기 자신을 감싸는(이미 부풀려져 있을 수 있는) MediaQuery를
+    // 또 읽어서 이중으로 계산하는 일이 없다.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(sideMargin, 0, sideMargin, bottomMargin),
+      padding: const EdgeInsets.symmetric(horizontal: sideMargin),
       child: SizedBox(
         height: barHeight,
         child: GlassSurface(

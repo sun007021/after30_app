@@ -124,6 +124,33 @@ class ScaffoldWithListPage extends StatelessWidget {
   }
 }
 
+/// N1 테스트용 스텁: `bottomNavigationBar`가 아예 없는 "서브 페이지"
+/// 흉내(예: `add_alarm.dart`처럼 원래 탭바가 없던 화면). 평범한 `SafeArea`
+/// 하나만 쓴다 — 셸 안에서든 밖에서든 특별한 처리를 하지 않는, 실제로
+/// 흔히 볼 수 있는 화면 모양이다. 이게 저절로 탭바/키보드를 피하는 이유는
+/// (특별한 로직이 있어서가 아니라) 키보드가 올라오면 iOS가
+/// `padding.bottom`을 0으로 보고하기 때문이다(홈 인디케이터 세이프
+/// 에어리어를 키보드가 대신 차지) — `SafeArea`가 그 값을 그대로 읽어서
+/// 자동으로 맞아떨어진다.
+class SubPageCtaNoBottomBar extends StatelessWidget {
+  const SubPageCtaNoBottomBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Expanded(child: SizedBox.shrink()),
+            const TextField(key: Key('sub-page-textfield')),
+            ElevatedButton(onPressed: () {}, child: const Text('sub-page-cta')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// 테스트용 탭 빌더 5개(순서는 [AppShellTab]과 같다). `arguments`가 오면
 /// 라벨에 그대로 반영해 `switchTab(arguments: ...)` 테스트에도 쓸 수 있다.
 List<AppShellPageBuilder> testPageBuilders() {
