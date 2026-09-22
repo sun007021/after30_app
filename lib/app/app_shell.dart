@@ -343,6 +343,10 @@ class AppShellState extends State<AppShell> {
         // 줄어들게 한다. iOS는 각 탭 안의 화면(Scaffold)이 스스로 키보드를
         // 처리하므로 셸 레벨에서는 손대지 않는다.
         resizeToAvoidBottomInset: !cupertino,
+        // iOS: 콘텐츠가 플로팅 탭바 아래까지 그대로 이어지게 한다(탭바는
+        // 콘텐츠 위로 뜬다). body 자체는 아래 bottomNavigationBar 자리
+        //때문에 줄어들지 않는다.
+        extendBody: cupertino,
         body: cupertino
             ? Stack(
                 children: [
@@ -363,11 +367,21 @@ class AppShellState extends State<AppShell> {
               )
             : tabStack,
         // Android: 탭바를 Scaffold의 bottomNavigationBar 슬롯에 그대로
-        // 꽂아서(오버레이가 아니라) 기존 화면들의 레이아웃/키보드 동작/
-        // SnackBar 위치가 예전과 같게 한다(B3). iOS는 콘텐츠 위로 떠 있는
-        // 글래스 캡슐이라 위 Stack에서 그린다.
+        // 꽂아서(오버레이가 아니라) 기존 화면들의 레이아웃/키보드 동작이
+        // 예전과 같게 한다(B3). iOS는 콘텐츠 위로 떠 있는 글래스 캡슐이라
+        // 실제로 보이는 탭바는 위 Stack에서 그리지만, 이 슬롯을 비워두면
+        // 안 된다: Flutter의 ScaffoldMessenger는 중첩된 Scaffold들 중
+        // "가장 바깥쪽(root)" 하나에서만 SnackBar를 보여주는데, 셸의 이
+        // Scaffold가 바로 그 루트다(각 화면 자신의 Scaffold가 아니다).
+        // 여기 bottomNavigationBar가 null이면 화면이 무엇을 설정했든 상관
+        // 없이 SnackBar가 탭바 아래로 깔린다(M1). 그래서 보이지 않는
+        // 자리표시자로 같은 높이를 예약해 Scaffold의 SnackBar/FAB 자동
+        // 배치 로직이 탭바 위로 띄우게 만든다(extendBody와 함께 써도
+        // body 자체는 줄어들지 않는다).
         bottomNavigationBar: cupertino
-            ? null
+            ? IgnorePointer(
+                child: SizedBox(height: AppTabBar.reservedBottomHeight(context)),
+              )
             : AppTabBar(currentIndex: _currentIndex, onTap: _handleTabBarTap),
       ),
     );
