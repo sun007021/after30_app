@@ -8,8 +8,8 @@ import 'package:after30/features/calendar/data/history_service.dart';
 import 'package:after30/features/common/page_title.dart';
 import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/family/models/family_dashboard.dart';
-import 'package:after30/features/family/ui/family_page.dart';
 import 'package:after30/features/family/ui/family_invite_group_select_page.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/features/home/ui/widgets/home_utils.dart';
 import 'package:after30/features/home/ui/widgets/home_date_header.dart';
 import 'package:after30/features/home/ui/widgets/empty_medicine_section.dart';
@@ -73,12 +73,12 @@ class _HomeContentState extends State<HomeContent> {
 
   Future<void> _openFamilyGroupForMember(MemberMedicationSummary member) async {
     final groupId = _userIdToGroupId[member.userId];
-    await Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        pageBuilder: (_, __, ___) => FamilyPage(initialGroupId: groupId),
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-      ),
+    // 앱 셸 안에서는 가족 탭으로 전환하며 해당 그룹을 바로 연다
+    // (plan §6 W10 5항).
+    AppShell.of(context).switchTab(
+      AppShellTab.family,
+      popToRoot: true,
+      arguments: groupId,
     );
   }
 

@@ -4,7 +4,7 @@ import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
 import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/family/data/phone_util.dart';
-import 'package:after30/features/family/ui/family_page.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/features/family/ui/widgets/invite_phone_lookup_error_popup.dart';
 import 'package:after30/features/my/data/user_service.dart';
 import 'package:after30/utils/responsive.dart';
@@ -204,13 +204,12 @@ class _FamilyInviteExistingGroupInvitePageState
   }
 
   void _navigateToFamilyMain(int groupId) {
-    Navigator.of(context).pushAndRemoveUntil(
-      PageRouteBuilder<void>(
-        pageBuilder: (_, __, ___) => FamilyPage(initialGroupId: groupId),
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-      ),
-      (route) => route.isFirst,
+    // 앱 셸 안에서는 가족 탭으로 전환하며 해당 그룹을 바로 연다
+    // (plan §6 W10 5항).
+    AppShell.of(context).switchTab(
+      AppShellTab.family,
+      popToRoot: true,
+      arguments: groupId,
     );
   }
 

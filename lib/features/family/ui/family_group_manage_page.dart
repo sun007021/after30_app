@@ -7,7 +7,7 @@ import 'package:after30/features/common/widgets/double_check_dialog.dart';
 import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/family/models/group_member.dart';
 import 'package:after30/features/family/ui/family_invite_existing_group_invite_page.dart';
-import 'package:after30/features/family/ui/family_page.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/utils/responsive.dart';
 
 class FamilyGroupManagePage extends StatefulWidget {
@@ -206,14 +206,8 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
     try {
       await _familyService.leaveGroup(widget.groupId);
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        PageRouteBuilder<void>(
-          pageBuilder: (_, __, ___) => const FamilyPage(),
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
-        ),
-        (route) => route.isFirst,
-      );
+      // 앱 셸 안에서는 가족 탭 루트로 되돌아간다(plan §6 W10 5항).
+      AppShell.of(context).switchTab(AppShellTab.family, popToRoot: true);
     } catch (_) {
       if (!mounted) return;
       await DoubleCheckDialog.showSingle(

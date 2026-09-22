@@ -18,9 +18,8 @@ import 'package:after30/features/family/ui/widgets/family_invitation_banner.dart
 import 'package:after30/features/family/ui/widgets/family_member_row.dart';
 import 'package:after30/features/common/widgets/phone_register_dialog.dart';
 import 'package:after30/core/storage/user_store.dart';
-import 'package:after30/features/home/ui/home.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
-import 'package:after30/features/my/my_page.dart';
 import 'package:after30/utils/responsive.dart';
 
 class FamilyPage extends StatefulWidget {
@@ -99,13 +98,9 @@ class _FamilyPageState extends State<FamilyPage> {
       navigator.pop();
       return;
     }
-    navigator.pushReplacement(
-      PageRouteBuilder<void>(
-        pageBuilder: (_, __, ___) => const HomePage(),
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-      ),
-    );
+    // 앱 셸 안에서는 다른 탭 화면으로 push하는 대신 홈 탭으로 전환한다
+    // (plan §6 W10 5/6항).
+    AppShell.of(context).switchTab(AppShellTab.home);
   }
 
   Future<void> _showPhoneRegisterPopup() async {
@@ -113,13 +108,8 @@ class _FamilyPageState extends State<FamilyPage> {
       context: context,
       onCancel: _leaveFamilyPage,
       onGoToMyPage: () {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder<void>(
-            pageBuilder: (_, __, ___) => const MyPage(),
-            transitionDuration: Duration.zero,
-            reverseTransitionDuration: Duration.zero,
-          ),
-        );
+        // 앱 셸 안에서는 마이페이지 탭으로 전환한다(plan §6 W10 5/6항).
+        AppShell.of(context).switchTab(AppShellTab.my);
       },
     );
   }
