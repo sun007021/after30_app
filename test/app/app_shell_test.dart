@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:after30/app/app_shell.dart';
 import 'package:after30/core/design/app_theme.dart';
@@ -63,6 +64,22 @@ void main() {
   });
 
   testWidgets('Android 뒤로 가기: 탭 안에서 pop → 홈 탭 → (홈 루트에서) 종료 시도', (tester) async {
+    // handleBackButton()의 3단계(홈 루트)에서 SystemNavigator.pop()을
+    // 호출하는데, 위젯 테스트 환경에는 이를 처리할 플랫폼이 없어 응답 없이
+    // 무한 대기할 수 있다. 'flutter/platform' 채널을 미리 목(mock)으로
+    // 등록해 즉시 응답하게 한다(실제 종료 여부는 검증 대상이 아니며,
+    // 예외 없이 호출이 끝나는지만 확인한다).
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => null,
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
     await pumpAppShell(
       tester,
       platform: TargetPlatform.android,
