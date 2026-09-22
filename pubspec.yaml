@@ -78,6 +78,7 @@ flutter:
   assets:
     - assets/images/
     - assets/images/navicon/
+    - assets/images/navicon/ios/
     - assets/images/signupicon/
     - assets/images/term/
     - assets/images/onboarding/onboarding1.png
