@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:after30/app/app_routes.dart';
@@ -75,34 +74,34 @@ class AppShellTabActivationListener extends StatefulWidget {
 }
 
 class _AppShellTabActivationListenerState extends State<AppShellTabActivationListener> {
-  ValueListenable<int>? _activeTab;
-  int? _lastNotifiedGeneration;
+  Listenable? _activation;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final activeTab = AppShell.maybeOf(context)?.activeTabIndexListenable;
-    if (!identical(activeTab, _activeTab)) {
-      _activeTab?.removeListener(_handleChanged);
-      _activeTab = activeTab;
-      _activeTab?.addListener(_handleChanged);
+    final activation = AppShell.maybeOf(context)?.tabActivationListenable;
+    if (!identical(activation, _activation)) {
+      _activation?.removeListener(_handleChanged);
+      _activation = activation;
+      _activation?.addListener(_handleChanged);
     }
   }
 
   @override
   void dispose() {
-    _activeTab?.removeListener(_handleChanged);
+    _activation?.removeListener(_handleChanged);
     super.dispose();
   }
 
   void _handleChanged() {
     final shellState = AppShell.maybeOf(context);
     if (shellState == null) return;
-    if (shellState.currentIndex != widget.tabIndex) return;
-    final generation = shellState.activationGeneration;
-    if (generation == _lastNotifiedGeneration) return;
-    _lastNotifiedGeneration = generation;
-    widget.onActivated();
+    // 셸은 탭 전환이든 재탭이든(같은 탭 재선택) switchTab 끝에서 항상
+    // 이 알림을 보낸다(ChangeNotifier라 값이 안 바뀌어도 울린다). 여기서는
+    // 그 알림이 "내 탭이 지금 활성 탭인가"만 걸러낸다.
+    if (shellState.currentIndex == widget.tabIndex) {
+      widget.onActivated();
+    }
   }
 
   @override
@@ -187,34 +186,30 @@ class AppShellState extends State<AppShell> {
   /// 않는다(B2). 방문한 탭은 계속 [IndexedStack]에 남아 상태를 유지한다.
   late final Set<int> _visitedTabs = <int>{_currentIndex};
 
-  final ValueNotifier<int> _activeTabIndexListenable = ValueNotifier<int>(0);
-
-  /// 탭이 (재선택 포함) 활성화될 때마다 증가하는 세대 값. 같은 탭 인덱스로
-  /// 값이 바뀌지 않아도 [AppShellTabActivationListener]가 재알림을 받을 수
-  /// 있게 한다(예: 재탭으로 루트 pop만 한 경우에도 새로고침하고 싶을 때).
-  int _activationGeneration = 0;
+  /// 탭이 (재선택 포함) 활성화될 때마다 알림을 보내는 [ChangeNotifier](M2).
+  /// 값 비교 없이 항상 알리는 게 핵심이다 — 같은 탭을 재탭해도(값이 바뀌지
+  /// 않아도) [AppShellTabActivationListener]가 알림을 받아야 하므로
+  /// [ValueNotifier]는 쓰지 않는다(값이 그대로면 알림을 생략하기 때문).
+  final _TabActivationNotifier _tabActivation = _TabActivationNotifier();
 
   @override
   void initState() {
     super.initState();
     _tabArguments[_currentIndex] = widget.initialArguments;
-    _activeTabIndexListenable.value = _currentIndex;
   }
 
   @override
   void dispose() {
-    _activeTabIndexListenable.dispose();
+    _tabActivation.dispose();
     super.dispose();
   }
 
   /// 현재 활성 탭 인덱스.
   int get currentIndex => _currentIndex;
 
-  /// 현재 활성 탭 인덱스를 관찰할 수 있는 [ValueListenable](M2).
-  ValueListenable<int> get activeTabIndexListenable => _activeTabIndexListenable;
-
-  /// [AppShellTabActivationListener]가 중복 알림을 걸러내는 데 쓰는 세대 값.
-  int get activationGeneration => _activationGeneration;
+  /// 탭이 활성화될 때(전환 또는 재탭)마다 알림을 보내는 [Listenable](M2).
+  /// [AppShellTabActivationListener]가 내부적으로 구독한다.
+  Listenable get tabActivationListenable => _tabActivation;
 
   /// 탭을 전환한다.
   ///
@@ -270,8 +265,7 @@ class AppShellState extends State<AppShell> {
     }
     // 재탭(같은 탭 재선택)이든 실제 전환이든, "활성화"로 취급해 M2 리스너에
     // 알린다.
-    _activationGeneration++;
-    _activeTabIndexListenable.value = index;
+    _tabActivation.notify();
   }
 
   PageRoute<void> _rootRoute(int index, Object? arguments) {
@@ -417,4 +411,11 @@ class _AppShellTabView extends StatelessWidget {
       onGenerateRoute: generateTabRoute,
     );
   }
+}
+
+/// `notifyListeners()`는 [ChangeNotifier] 서브클래스의 인스턴스 멤버에서만
+/// 호출할 수 있어서([AppShellState]는 [State]를 상속하므로 직접 상속할 수
+/// 없다), 값 비교 없이 매번 알리는 아주 작은 전용 알림자를 둔다(M2).
+class _TabActivationNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
 }
