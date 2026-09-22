@@ -207,7 +207,13 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
       await _familyService.leaveGroup(widget.groupId);
       if (!mounted) return;
       // 앱 셸 안에서는 가족 탭 루트로 되돌아간다(plan §6 W10 5항).
-      AppShell.of(context).switchTab(AppShellTab.family, popToRoot: true);
+      // popOriginToRoot: 이 화면은 항상 가족 탭 안에서만 열리므로 출발
+      // 탭이 곧 대상 탭이라 사실상 no-op이지만, 다른 진입 경로가 생겨도
+      // 안전하도록 다른 switchTab(popToRoot+arguments) 호출부와 동일하게
+      // 맞춰둔다(M3).
+      AppShell.of(
+        context,
+      ).switchTab(AppShellTab.family, popToRoot: true, popOriginToRoot: true);
     } catch (_) {
       if (!mounted) return;
       await DoubleCheckDialog.showSingle(

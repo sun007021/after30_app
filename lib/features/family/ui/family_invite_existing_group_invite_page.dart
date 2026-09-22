@@ -205,11 +205,15 @@ class _FamilyInviteExistingGroupInvitePageState
 
   void _navigateToFamilyMain(int groupId) {
     // 앱 셸 안에서는 가족 탭으로 전환하며 해당 그룹을 바로 연다
-    // (plan §6 W10 5항).
+    // (plan §6 W10 5항). 이 화면은 홈 탭에서 "그룹 만들기"로 진입했을 수도
+    // 있는데, 그때는 popOriginToRoot로 홈 탭에 쌓인 초대 플로우 화면들도
+    // 함께 정리한다(M3). 이미 가족 탭 안에서 호출된 경우(가족 탭 내
+    // 멤버 추가)에는 popToRoot가 같은 일을 하므로 영향이 없다.
     AppShell.of(context).switchTab(
       AppShellTab.family,
       popToRoot: true,
       arguments: groupId,
+      popOriginToRoot: true,
     );
   }
 

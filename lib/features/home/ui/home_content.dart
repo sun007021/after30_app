@@ -24,10 +24,12 @@ class HomeContent extends StatefulWidget {
   const HomeContent({super.key, required this.user});
 
   @override
-  State<HomeContent> createState() => _HomeContentState();
+  State<HomeContent> createState() => HomeContentState();
 }
 
-class _HomeContentState extends State<HomeContent> {
+/// `HomePage`(M2 탭 재활성화 훅)가 `GlobalKey<HomeContentState>`로 이
+/// 상태에 접근해 [reload]를 호출할 수 있도록 공개 타입으로 둔다.
+class HomeContentState extends State<HomeContent> {
   final FamilyService _familyService = FamilyService();
   final Set<String> _processingDoseKeys = <String>{};
 
@@ -74,12 +76,24 @@ class _HomeContentState extends State<HomeContent> {
   Future<void> _openFamilyGroupForMember(MemberMedicationSummary member) async {
     final groupId = _userIdToGroupId[member.userId];
     // 앱 셸 안에서는 가족 탭으로 전환하며 해당 그룹을 바로 연다
-    // (plan §6 W10 5항).
+    // (plan §6 W10 5항). groupId가 null일 수도 있는데(매핑을 못 찾은 경우),
+    // 이때도 가족 탭 루트를 다시 만들어 "그룹 미지정" 초기 상태로
+    // 되돌린다 — arguments만 넘기면 switchTab이 null 인자를 "새로 만들
+    // 필요 없음"으로 해석해 이전에 열어뒀던 다른 그룹이 그대로 남는
+    // 문제가 있었다(M6). resetArguments로 null이어도 강제로 다시 만든다.
     AppShell.of(context).switchTab(
       AppShellTab.family,
       popToRoot: true,
       arguments: groupId,
+      resetArguments: true,
     );
+  }
+
+  /// AppShell 탭 재활성화(M2) 훅에서 호출된다. 다른 탭에 있다가 홈 탭으로
+  /// 돌아왔을 때 최신 데이터를 다시 불러온다.
+  void reload() {
+    _loadDosesForDate(_selectedDate);
+    _loadFamilyDashboard();
   }
 
   Future<void> _openCreateGroup() async {
