@@ -41,6 +41,9 @@ class _BellButton extends StatelessWidget {
 Future<void> _showComingSoonSheet(BuildContext context) {
   return showModalBottomSheet(
     context: context,
+    // 셸의 탭 Navigator가 아니라 루트 내비게이터에 시트를 띄운다(M5).
+    // 그렇지 않으면 시트가 탭 안에 그려져 셸의 탭바 아래에 깔린다.
+    useRootNavigator: true,
     useSafeArea: true,
     isScrollControlled: true,
     backgroundColor: const Color(0xFFEBF0FF),
@@ -94,6 +97,10 @@ class _AndroidAlarmTopBar extends StatelessWidget {
             onTap: () async {
               await showModalBottomSheet(
                 context: context,
+                // 셸의 탭 Navigator가 아니라 루트 내비게이터에 시트를
+                // 띄운다(M5). 그렇지 않으면 시트가 탭 안에 그려져 셸의
+                // 탭바 아래에 깔린다.
+                useRootNavigator: true,
                 useSafeArea: true,
                 isScrollControlled: true,
                 backgroundColor: const Color(0xFFEBF0FF),

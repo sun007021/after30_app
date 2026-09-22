@@ -1,30 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/app/app_routes.dart';
 import 'package:after30/core/design/app_theme.dart';
-import 'package:after30/core/design/gallery/design_gallery_page.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/app/app_shell.dart';
-import 'package:after30/features/login/ui/login.dart';
-import 'package:after30/features/login/ui/signup_page.dart';
-import 'package:after30/features/login/ui/signup_intro.dart';
-import 'package:after30/features/login/ui/terms_agreement_page.dart';
-import 'package:after30/features/login/ui/email_login_page.dart';
-import 'package:after30/features/login/data/backend_auth_service.dart';
-import 'package:after30/features/family/ui/family_page.dart';
-import 'package:flutter/widgets.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
-import 'package:after30/features/my/my_page.dart';
-import 'package:after30/features/my/my_info_page.dart';
-import 'package:after30/features/my/my_info_edit_page.dart';
-import 'package:after30/core/storage/user_store.dart';
-import 'package:after30/core/storage/onboarding_store.dart';
-import 'package:after30/features/onboarding/ui/onboarding_page.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
-import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 
@@ -112,129 +93,9 @@ class _MyAppState extends State<MyApp> {
       supportedLocales: const [Locale('ko', 'KR')],
       locale: const Locale('ko', 'KR'),
       initialRoute: '/startup',
-      routes: {
-        '/startup': (context) => const StartupPage(),
-        '/onboarding': (context) => const OnboardingPage(),
-        '/login': (context) => const LoginPage(),
-        '/signup-intro': (context) => const SignupIntroPage(),
-        '/signup-terms': (context) => const TermsAgreementPage(),
-        '/email-login': (context) => const EmailLoginPage(),
-        '/signup': (context) => const SignupPage(),
-        // 알림/로그인 이후 '/home'으로 이동하는 기존 경로들은 앱 셸(AppShell)의
-        // 홈 탭으로 진입한다(plan §6 W10 4항). AppShell의 기본 탭이 홈이므로
-        // 별도 인자 없이 그대로 쓴다.
-        '/home': (context) => const AppShell(),
-        '/family': (context) => const FamilyPage(),
-        '/fullscreen_alarm': (context) => const FullscreenAlarmPlaceholder(),
-        '/my': (context) => const MyPage(),
-        '/my-info': (context) => const MyInfoPage(),
-        '/my-info-edit': (context) => const MyInfoEditPage(),
-        if (kDebugMode) '/dev/design-gallery': (context) => const DesignGalleryPage(),
-      },
-    );
-  }
-}
-
-// 전체화면 알림을 위한 플레이스홀더
-class FullscreenAlarmPlaceholder extends StatelessWidget {
-  const FullscreenAlarmPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // 실제로는 알람 데이터를 받아와서 FullscreenAlarm을 표시해야 합니다
-    return const Scaffold(body: Center(child: Text('전체화면 알림')));
-  }
-}
-
-class StartupPage extends StatefulWidget {
-  const StartupPage({super.key});
-  @override
-  State<StartupPage> createState() => _StartupPageState();
-}
-
-class _StartupPageState extends State<StartupPage> {
-  @override
-  void initState() {
-    super.initState();
-    _attemptRefresh();
-  }
-
-  Future<void> _attemptRefresh() async {
-    try {
-      // FullScreen Intent로 앱이 기동된 경우에만 풀스크린 라우트로 이동
-      try {
-        final initialAction = await AwesomeNotifications()
-            .getInitialNotificationAction();
-        if (initialAction != null) {
-          final payload = initialAction.payload ?? {};
-          final isFs = payload['fs'] == '1';
-          // 앱이 알림으로 콜드 스타트된 경우, 잠금이 풀려 있어도 풀스크린
-          // 알람 화면을 보여준다(잠금 여부와 무관하게 사용자가 알림으로
-          // 앱을 열었다는 사실 자체가 이동 의도를 나타낸다).
-          if (isFs) {
-            final alarmId = payload['alarmId'] ?? '';
-            final name = payload['medicineName'] ?? '약';
-            final timeStr = payload['time'] ?? '08:00';
-            final day = payload['day'] ?? '월';
-            final notifId = initialAction.id ?? 0;
-            final hour = int.tryParse(timeStr.split(':').first) ?? 8;
-            final minute = int.tryParse(timeStr.split(':').last) ?? 0;
-            if (!mounted) return;
-            AlarmService.showFullscreenAlarm(
-              context,
-              MedicineAlarm(
-                id: alarmId.isEmpty ? null : alarmId,
-                name: name,
-                times: [TimeOfDay(hour: hour, minute: minute)],
-                days: [day],
-              ),
-              TimeOfDay(hour: hour, minute: minute),
-              day,
-              notificationId: notifId,
-            );
-            return;
-          }
-        }
-      } catch (_) {}
-
-      final ok = await BackendAuthService().refreshSession();
-      if (!mounted) return;
-      if (ok) {
-        await OnboardingStore.setCompleted();
-        // 저장된 사용자 ID가 있다면 네임스페이스 설정 후 재스케줄
-        final userId = await UserStore.getCurrentUserId();
-        AlarmService.setCurrentUserId(userId);
-        await AlarmService().rescheduleAllActiveFromStorage();
-        if (!mounted) return;
-        Navigator.of(context).pushReplacementNamed('/home');
-      } else {
-        await _goToOnboardingOrLogin();
-      }
-    } catch (_) {
-      if (!mounted) return;
-      await _goToOnboardingOrLogin();
-    }
-  }
-
-  Future<void> _goToOnboardingOrLogin() async {
-    final seenOnboarding = await OnboardingStore.isCompleted();
-    if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushReplacementNamed(seenOnboarding ? '/login' : '/onboarding');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: SvgPicture.asset(
-          'assets/images/mainicon.svg',
-          width: 80,
-          height: 80,
-        ),
-      ),
+      // 라우트 이름 테이블은 lib/app/app_routes.dart에서 공유한다(PR #31
+      // B1). AppShell 탭 Navigator의 onGenerateRoute도 같은 맵을 쓴다.
+      routes: appRoutes,
     );
   }
 }

@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:after30/app/app_routes.dart';
 import 'package:after30/app/widgets/app_tab_bar.dart';
 import 'package:after30/core/design/app_platform.dart';
 import 'package:after30/core/design/tokens/app_haptics.dart';
@@ -27,6 +29,85 @@ class AppShellTab {
 /// `arguments`로 전달된 값이며(없으면 null), 탭이 처음 만들어질 때와
 /// arguments가 갱신될 때 다시 호출된다.
 typedef AppShellPageBuilder = Widget Function(BuildContext context, Object? arguments);
+
+/// 탭이 다시 활성화될 때(전환 또는 재탭) 알림을 받고 싶은 탭 루트 화면이
+/// 구현하는 믹스인(M2). 예: 홈 탭은 다른 탭에 있다가 돌아왔을 때 최신
+/// 데이터를 다시 불러와야 한다.
+///
+/// [AppShell]은 탭을 [IndexedStack]으로 유지해 상태를 보존하므로(§6 W10
+/// 1항), 탭 화면의 `initState`는 최초 방문 때 딱 한 번만 호출된다. 이
+/// 믹스인을 구현하고 [AppShellTabAware.wrap]으로 감싸면 재방문마다
+/// [onTabActivated]가 호출된다.
+///
+/// 사용 예:
+/// ```dart
+/// class _HomePageState extends State<HomePage> with AppShellTabAware {
+///   @override
+///   void onTabActivated() => _reload();
+/// }
+/// ```
+/// 그리고 `build()`가 반환하는 위젯 트리 최상단을
+/// `AppShellTabAware.wrap(context, this, child)`로 감싼다(자세한 배선은
+/// 각 탭 담당 위젯에서 한다 — W5/W7/W8/W9 참고).
+mixin AppShellTabAware<T extends StatefulWidget> on State<T> {
+  /// 이 탭이 (다른 탭에 있다가) 다시 활성화될 때 호출된다.
+  void onTabActivated();
+}
+
+/// [AppShellTabAware]를 [AppShell]의 탭 활성화 알림에 연결하는 도우미 위젯.
+/// 탭 화면의 `build()` 최상단에서 이 위젯으로 감싸면, 셸이 탭을 전환할
+/// 때마다 (같은 탭이 다시 활성화된 경우) [AppShellTabAware.onTabActivated]가
+/// 호출된다(M2).
+class AppShellTabActivationListener extends StatefulWidget {
+  const AppShellTabActivationListener({
+    super.key,
+    required this.tabIndex,
+    required this.onActivated,
+    required this.child,
+  });
+
+  final int tabIndex;
+  final VoidCallback onActivated;
+  final Widget child;
+
+  @override
+  State<AppShellTabActivationListener> createState() => _AppShellTabActivationListenerState();
+}
+
+class _AppShellTabActivationListenerState extends State<AppShellTabActivationListener> {
+  ValueListenable<int>? _activeTab;
+  int? _lastNotifiedGeneration;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final activeTab = AppShell.maybeOf(context)?.activeTabIndexListenable;
+    if (!identical(activeTab, _activeTab)) {
+      _activeTab?.removeListener(_handleChanged);
+      _activeTab = activeTab;
+      _activeTab?.addListener(_handleChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _activeTab?.removeListener(_handleChanged);
+    super.dispose();
+  }
+
+  void _handleChanged() {
+    final shellState = AppShell.maybeOf(context);
+    if (shellState == null) return;
+    if (shellState.currentIndex != widget.tabIndex) return;
+    final generation = shellState.activationGeneration;
+    if (generation == _lastNotifiedGeneration) return;
+    _lastNotifiedGeneration = generation;
+    widget.onActivated();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
 
 /// 앱 셸: 5개 탭을 [IndexedStack]으로 구성하고, 탭마다 독립된 [Navigator]를
 /// 둬서 화면 상태(스크롤 위치 등)를 유지한다(plan §6 W10 1항).
@@ -77,6 +158,13 @@ class AppShell extends StatefulWidget {
     return state!;
   }
 
+  /// [of]와 같지만 셸 밖에서 호출하면 null을 반환한다(m3). 셸 안팎에서 모두
+  /// 쓰일 수 있는 위젯이 "셸 안이면 셸 기능을 쓰고, 아니면 건너뛴다"를
+  /// 표현할 때 쓴다.
+  static AppShellState? maybeOf(BuildContext context) {
+    return context.findAncestorStateOfType<AppShellState>();
+  }
+
   /// 현재 위치가 [AppShell] 안인지 확인한다(예: `AlarmBottomNavigation`이
   /// 셸 안에서는 빈 위젯을 렌더링하기 위해 사용).
   static bool isInside(BuildContext context) {
@@ -95,14 +183,38 @@ class AppShellState extends State<AppShell> {
     (_) => GlobalKey<NavigatorState>(),
   );
 
+  /// 아직 한 번도 방문하지 않은 탭은 실제 화면(및 그 Navigator)을 만들지
+  /// 않는다(B2). 방문한 탭은 계속 [IndexedStack]에 남아 상태를 유지한다.
+  late final Set<int> _visitedTabs = <int>{_currentIndex};
+
+  final ValueNotifier<int> _activeTabIndexListenable = ValueNotifier<int>(0);
+
+  /// 탭이 (재선택 포함) 활성화될 때마다 증가하는 세대 값. 같은 탭 인덱스로
+  /// 값이 바뀌지 않아도 [AppShellTabActivationListener]가 재알림을 받을 수
+  /// 있게 한다(예: 재탭으로 루트 pop만 한 경우에도 새로고침하고 싶을 때).
+  int _activationGeneration = 0;
+
   @override
   void initState() {
     super.initState();
     _tabArguments[_currentIndex] = widget.initialArguments;
+    _activeTabIndexListenable.value = _currentIndex;
+  }
+
+  @override
+  void dispose() {
+    _activeTabIndexListenable.dispose();
+    super.dispose();
   }
 
   /// 현재 활성 탭 인덱스.
   int get currentIndex => _currentIndex;
+
+  /// 현재 활성 탭 인덱스를 관찰할 수 있는 [ValueListenable](M2).
+  ValueListenable<int> get activeTabIndexListenable => _activeTabIndexListenable;
+
+  /// [AppShellTabActivationListener]가 중복 알림을 걸러내는 데 쓰는 세대 값.
+  int get activationGeneration => _activationGeneration;
 
   /// 탭을 전환한다.
   ///
@@ -110,26 +222,56 @@ class AppShellState extends State<AppShell> {
   ///   루트까지 pop한다(iOS HIG의 "활성 탭 재탭 = 루트로" 동작, §4.3).
   /// - [popToRoot]가 true면 전환과 함께 대상 탭도 루트까지 pop한다.
   /// - [arguments]를 지정하면 대상 탭의 루트 화면을 새 인자로 다시 만든다
-  ///   (예: 특정 가족 그룹으로 이동). 화면 전체를 새로 만들므로 기존
-  ///   `pushReplacement(FamilyPage(initialGroupId: ...))` 호출과 동일하게
-  ///   해당 탭의 상태가 초기화된다.
-  void switchTab(int index, {bool popToRoot = false, Object? arguments}) {
+  ///   (예: 특정 가족 그룹으로 이동). [resetArguments]를 true로 주면
+  ///   [arguments]가 null이어도(예: 특정 그룹 없이 가족 탭을 초기 상태로
+  ///   되돌리는 경우, M6) 루트 화면을 다시 만든다. 화면 전체를 새로 만들기
+  ///   때문에 기존 `pushReplacement(FamilyPage(initialGroupId: ...))` 호출과
+  ///   동일하게 해당 탭의 상태가 초기화된다.
+  /// - [popOriginToRoot]가 true면 전환을 호출한 "출발 탭"(현재 탭)의 스택도
+  ///   함께 루트까지 pop한다(M3). 예: 홈 탭에서 가족 그룹 초대 플로우를 열고
+  ///   완료 후 가족 탭으로 전환할 때, 홈 탭에 초대 플로우 화면들이 그대로
+  ///   남아있지 않도록 한다.
+  void switchTab(
+    int index, {
+    bool popToRoot = false,
+    Object? arguments,
+    bool resetArguments = false,
+    bool popOriginToRoot = false,
+  }) {
     assert(index >= 0 && index < AppShellTab.count);
-    final isSameTab = index == _currentIndex;
+    final originIndex = _currentIndex;
+    final isSameTab = index == originIndex;
+    final replacingArguments = arguments != null || resetArguments;
 
-    if (arguments != null) {
+    if (replacingArguments) {
       _tabArguments[index] = arguments;
-      final navState = _navigatorKeys[index].currentState;
-      navState?.popUntil((route) => route.isFirst);
-      navState?.pushReplacement(_rootRoute(index, arguments));
+      // popUntil + pushReplacement 대신 pushAndRemoveUntil을 쓰면 중간에
+      // 쌓여있던 화면들이 각자의 pop 애니메이션 없이 즉시 제거되고, 새
+      // 루트 화면만 한 번 애니메이션된다(전환 시간이 0이므로 사실상
+      // 즉시 바뀐다). popUntil을 먼저 호출하면 쌓인 화면 수만큼 pop
+      // 트랜지션이 순차적으로 겹쳐 보이는 문제가 있었다(m5).
+      _navigatorKeys[index].currentState?.pushAndRemoveUntil(
+        _rootRoute(index, arguments),
+        (route) => false,
+      );
     } else if (isSameTab || popToRoot) {
       _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
     }
 
-    if (!isSameTab) {
-      AppHaptics.selection(context);
-      setState(() => _currentIndex = index);
+    if (popOriginToRoot && !isSameTab) {
+      _navigatorKeys[originIndex].currentState?.popUntil((route) => route.isFirst);
     }
+
+    if (!isSameTab) {
+      setState(() {
+        _currentIndex = index;
+        _visitedTabs.add(index);
+      });
+    }
+    // 재탭(같은 탭 재선택)이든 실제 전환이든, "활성화"로 취급해 M2 리스너에
+    // 알린다.
+    _activationGeneration++;
+    _activeTabIndexListenable.value = index;
   }
 
   PageRoute<void> _rootRoute(int index, Object? arguments) {
@@ -140,6 +282,16 @@ class AppShellState extends State<AppShell> {
     );
   }
 
+  /// 탭바 탭에서만 호출되는 래퍼(m2). 프로그래밍적인 [switchTab] 호출
+  /// (예: 홈 화면에서 가족 그룹으로 바로 이동)에서는 선택 햅틱을 울리지
+  /// 않고, 사용자가 실제로 탭바를 터치했을 때만 울린다.
+  void _handleTabBarTap(int index) {
+    if (index != _currentIndex) {
+      AppHaptics.selection(context);
+    }
+    switchTab(index);
+  }
+
   /// Android 뒤로 가기 처리(plan §6 W10 1항): 현재 탭 안에서 pop → 홈 탭으로
   /// 이동 → (홈 탭 루트에서) 앱 종료.
   ///
@@ -148,8 +300,9 @@ class AppShellState extends State<AppShell> {
   @visibleForTesting
   Future<void> handleBackButton() async {
     final navState = _navigatorKeys[_currentIndex].currentState;
-    if (navState != null && navState.canPop()) {
-      navState.pop();
+    // pop() 대신 maybePop()을 써서, 서브 페이지가 PopScope로 뒤로 가기를
+    // 가로채고 있으면(예: 저장 확인 다이얼로그) 그 의사를 존중한다(m1).
+    if (navState != null && await navState.maybePop()) {
       return;
     }
     if (_currentIndex != AppShellTab.home) {
@@ -166,7 +319,24 @@ class AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final cupertino = isCupertino(context);
-    final reservedBottom = cupertino ? AppTabBar.reservedBottomHeight(context) : 0.0;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+
+    final tabStack = IndexedStack(
+      index: _currentIndex,
+      children: List.generate(AppShellTab.count, (i) {
+        // 방문한 적 없는 탭은 실제 화면을 만들지 않는다(B2). 예를 들어
+        // 가족 탭의 FamilyPage.initState는 전화번호 등록 팝업을 예약할 수
+        // 있는데, IndexedStack이 모든 탭을 한꺼번에 만들면 로그인 직후
+        // 홈 화면 위에 그 팝업이 떠 버린다.
+        if (!_visitedTabs.contains(i)) return const SizedBox.shrink();
+        return _AppShellTabView(
+          key: ValueKey('app-shell-tab-$i'),
+          navigatorKey: _navigatorKeys[i],
+          builder: widget.pageBuilders[i],
+          initialArguments: _tabArguments[i],
+        );
+      }),
+    );
 
     return PopScope(
       canPop: false,
@@ -175,39 +345,36 @@ class AppShellState extends State<AppShell> {
         handleBackButton();
       },
       child: Scaffold(
-        body: Stack(
-          children: [
-            IndexedStack(
-              index: _currentIndex,
-              children: List.generate(AppShellTab.count, (i) {
-                return _AppShellTabView(
-                  key: ValueKey('app-shell-tab-$i'),
-                  navigatorKey: _navigatorKeys[i],
-                  builder: widget.pageBuilders[i],
-                  initialArguments: _tabArguments[i],
-                  reservedBottom: reservedBottom,
-                );
-              }),
-            ),
-            if (!cupertino)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: AppTabBar(currentIndex: _currentIndex, onTap: switchTab),
-              ),
-            if (cupertino)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: SafeArea(
-                  top: false,
-                  child: AppTabBar(currentIndex: _currentIndex, onTap: switchTab),
-                ),
-              ),
-          ],
-        ),
+        // Android는 기존 화면들처럼 키보드가 올라오면 body가 그만큼
+        // 줄어들게 한다. iOS는 각 탭 안의 화면(Scaffold)이 스스로 키보드를
+        // 처리하므로 셸 레벨에서는 손대지 않는다.
+        resizeToAvoidBottomInset: !cupertino,
+        body: cupertino
+            ? Stack(
+                children: [
+                  Positioned.fill(child: tabStack),
+                  // 키보드가 올라와 있는 동안은 플로팅 탭바를 숨긴다(키보드
+                  // 위에 떠 있는 게 더 어색하다).
+                  if (!keyboardOpen)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: SafeArea(
+                        top: false,
+                        child: AppTabBar(currentIndex: _currentIndex, onTap: _handleTabBarTap),
+                      ),
+                    ),
+                ],
+              )
+            : tabStack,
+        // Android: 탭바를 Scaffold의 bottomNavigationBar 슬롯에 그대로
+        // 꽂아서(오버레이가 아니라) 기존 화면들의 레이아웃/키보드 동작/
+        // SnackBar 위치가 예전과 같게 한다(B3). iOS는 콘텐츠 위로 떠 있는
+        // 글래스 캡슐이라 위 Stack에서 그린다.
+        bottomNavigationBar: cupertino
+            ? null
+            : AppTabBar(currentIndex: _currentIndex, onTap: _handleTabBarTap),
       ),
     );
   }
@@ -216,27 +383,27 @@ class AppShellState extends State<AppShell> {
 /// 탭 하나를 위한 독립된 [Navigator] 컨테이너.
 ///
 /// [IndexedStack]이 비활성 탭도 트리에서 유지하므로, 각 탭의 [Navigator]는
-/// 계속 살아있고 스크롤 위치/입력 상태가 보존된다. iOS에서는 플로팅 탭바에
-/// 콘텐츠가 가리지 않도록 [reservedBottom]만큼 [MediaQuery] 하단 패딩을
-/// 늘려서 내려보낸다(기존 화면들이 `MediaQuery.viewPadding.bottom`을 읽어
-/// 여백을 계산하던 방식을 그대로 활용).
+/// 계속 살아있고 스크롤 위치/입력 상태가 보존된다.
+///
+/// `onGenerateRoute`(공유 [generateTabRoute])를 둬서, 탭 안에서
+/// `Navigator.of(context).pushNamed(...)`를 호출해도(예: 마이 탭의
+/// `/my-info`) "onGenerateRoute was null"로 죽지 않는다(B1). 탭에 남으면 안
+/// 되는 라우트는 [generateTabRoute]가 알아서 루트 내비게이터로 넘긴다.
 class _AppShellTabView extends StatelessWidget {
   const _AppShellTabView({
     super.key,
     required this.navigatorKey,
     required this.builder,
     required this.initialArguments,
-    required this.reservedBottom,
   });
 
   final GlobalKey<NavigatorState> navigatorKey;
   final AppShellPageBuilder builder;
   final Object? initialArguments;
-  final double reservedBottom;
 
   @override
   Widget build(BuildContext context) {
-    final navigator = Navigator(
+    return Navigator(
       key: navigatorKey,
       onGenerateInitialRoutes: (navigatorState, initialRoute) {
         return [
@@ -247,21 +414,7 @@ class _AppShellTabView extends StatelessWidget {
           ),
         ];
       },
-    );
-
-    if (reservedBottom <= 0) return navigator;
-
-    final mediaQuery = MediaQuery.of(context);
-    final effectiveBottom = reservedBottom > mediaQuery.padding.bottom
-        ? reservedBottom
-        : mediaQuery.padding.bottom;
-
-    return MediaQuery(
-      data: mediaQuery.copyWith(
-        padding: mediaQuery.padding.copyWith(bottom: effectiveBottom),
-        viewPadding: mediaQuery.viewPadding.copyWith(bottom: effectiveBottom),
-      ),
-      child: navigator,
+      onGenerateRoute: generateTabRoute,
     );
   }
 }

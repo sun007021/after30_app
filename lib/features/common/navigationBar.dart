@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:after30/app/app_shell.dart';
+import 'package:after30/app/widgets/app_tab_bar.dart';
+import 'package:after30/core/design/app_platform.dart';
 import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/alarm/ui/alarm_list.dart';
 import 'package:after30/features/calendar/ui/calendar_page.dart';
@@ -15,10 +17,21 @@ class AlarmBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 앱 셸(AppShell) 안에서는 셸 자체의 탭바가 대신 그려지므로 이 위젯은
-    // 아무것도 그리지 않는다(plan §6 W10 3항). 각 화면이 여전히
-    // `bottomNavigationBar: AlarmBottomNavigation(...)`을 쓰고 있어도
-    // 호환되도록, 실제 제거는 화면 담당 에이전트가 한다.
+    // 실제 탭바를 그리지 않는다(plan §6 W10 3항). 각 화면이 여전히
+    // `bottomNavigationBar: AlarmBottomNavigation(...)`을 그대로 쓴다는
+    // 점을 이용해, Scaffold가 알아서 자리를 예약하게 만든다(B3):
+    // - Android: 셸이 진짜 탭바를 자신의 Scaffold.bottomNavigationBar
+    //   슬롯에 꽂으므로, 화면별로는 자리를 또 예약할 필요가 없다(중복
+    //   방지) — 높이 0.
+    // - iOS: 플로팅 글래스 캡슐이 콘텐츠 위로 떠 있어야 하므로, 화면은
+    //   그 높이만큼 "빈 자리"만 예약해 body/스크롤 뷰포트가 그 위에서
+    //   끝나게 한다. 실제로 보이는 캡슐은 셸이 Stack으로 그 위에 그린다.
+    //   이렇게 하면 Scaffold의 기본 동작(SnackBar를 bottomNavigationBar
+    //   위에 띄우는 것 포함, M1)을 그대로 재사용할 수 있다.
     if (AppShell.isInside(context)) {
+      if (isCupertino(context)) {
+        return SizedBox(height: AppTabBar.reservedBottomHeight(context));
+      }
       return const SizedBox.shrink();
     }
 
