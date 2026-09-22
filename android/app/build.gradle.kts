@@ -41,18 +41,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // key.properties가 없는 환경(CI, 새 clone, 에이전트 워크트리)에서도 debug 빌드가
+    // 되도록 release 서명 설정은 파일이 있을 때만 만든다. 파일이 없으면 release
+    // 빌드는 서명되지 않은 채로 나오므로 스토어 업로드용으로 쓸 수 없다.
     signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
