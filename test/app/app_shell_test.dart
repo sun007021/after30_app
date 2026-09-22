@@ -156,4 +156,120 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('popOriginToRoot: true면 출발 탭의 스택도 함께 루트로 정리된다(M3)', (tester) async {
+    await pumpAppShell(tester, initialIndex: AppShellTab.home);
+
+    // 홈 탭에서 서브 페이지를 연다(예: 홈에서 가족 그룹 초대 플로우를
+    // 여는 것에 대응).
+    await tester.tap(find.text('push sub'));
+    await tester.pumpAndSettle();
+    expect(find.text('home-sub-page'), findsOneWidget);
+
+    final shellState = tester.state<AppShellState>(find.byType(AppShell));
+    shellState.switchTab(AppShellTab.family, popOriginToRoot: true);
+    await tester.pumpAndSettle();
+    expect(shellState.currentIndex, AppShellTab.family);
+
+    // 홈 탭으로 되돌아가면(재탭이 아니라 그냥 전환) 서브 페이지가 남아있지
+    // 않아야 한다 — popOriginToRoot가 출발 탭도 정리했다는 뜻이다.
+    shellState.switchTab(AppShellTab.home);
+    await tester.pumpAndSettle();
+    expect(find.text('home-sub-page'), findsNothing);
+    expect(find.textContaining('home:'), findsOneWidget);
+  });
+
+  testWidgets('resetArguments: true면 arguments가 null이어도 루트 화면을 다시 만든다(M6)', (
+    tester,
+  ) async {
+    await pumpAppShell(tester, initialIndex: AppShellTab.home);
+    final shellState = tester.state<AppShellState>(find.byType(AppShell));
+
+    shellState.switchTab(AppShellTab.family, arguments: 7);
+    await tester.pump();
+    expect(find.text('family-7:0'), findsOneWidget);
+    shellState.switchTab(AppShellTab.home);
+    await tester.pump();
+
+    // arguments 없이(null) popToRoot만 하면 이전에 열어둔 그룹(7)이 그대로
+    // 남아있다 — 애초에 루트를 다시 만들 필요가 없다고 해석되기 때문.
+    shellState.switchTab(AppShellTab.family, popToRoot: true);
+    await tester.pump();
+    expect(find.text('family-7:0'), findsOneWidget);
+    shellState.switchTab(AppShellTab.home);
+    await tester.pump();
+
+    // resetArguments: true를 주면 인자가 null이어도 루트를 강제로 다시
+    // 만들어, 이전 그룹이 남아있지 않고 "그룹 미지정" 초기 상태가 된다.
+    shellState.switchTab(AppShellTab.family, popToRoot: true, resetArguments: true);
+    await tester.pump();
+    expect(find.text('family-7:0'), findsNothing);
+    expect(find.text('family:0'), findsOneWidget);
+  });
+
+  testWidgets('탭이 재활성화되면(전환 또는 재탭) AppShellTabAware 훅이 호출된다(M2)', (
+    tester,
+  ) async {
+    var activations = 0;
+    final builders = testPageBuilders();
+    builders[AppShellTab.home] = (context, args) => AppShellTabActivationListener(
+      tabIndex: AppShellTab.home,
+      onActivated: () => activations++,
+      child: const CounterStubPage(tag: 'home-aware'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.build(), home: AppShell(pageBuilders: builders)),
+    );
+    await tester.pump();
+    expect(activations, 0); // 최초 진입은 "재"활성화가 아니므로 훅 대상이 아니다.
+
+    final shellState = tester.state<AppShellState>(find.byType(AppShell));
+    shellState.switchTab(AppShellTab.alarm);
+    await tester.pump();
+    expect(activations, 0); // 아직 홈 탭으로 돌아오지 않았다.
+
+    shellState.switchTab(AppShellTab.home);
+    await tester.pump();
+    expect(activations, 1);
+
+    // 재탭(같은 탭 재선택)도 활성화로 취급된다.
+    shellState.switchTab(AppShellTab.home);
+    await tester.pump();
+    expect(activations, 2);
+  });
+
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    final label = platform == TargetPlatform.iOS ? 'iOS' : 'Android';
+
+    testWidgets('$label: 탭바를 직접 탭하면 전환되고, 다시 탭하면(재탭) 루트로 pop한다(m7)', (
+      tester,
+    ) async {
+      await pumpAppShell(tester, platform: platform, initialIndex: AppShellTab.home);
+
+      Finder familyTabFinder() {
+        if (platform == TargetPlatform.iOS) return find.text('가족');
+        return find.byWidgetPredicate((widget) {
+          if (widget is! SvgPicture) return false;
+          final loader = widget.bytesLoader;
+          return loader is SvgAssetLoader &&
+              loader.assetName.contains('navicon/fam_');
+        });
+      }
+
+      await tester.tap(familyTabFinder());
+      await tester.pump();
+      expect(find.textContaining('family:'), findsOneWidget);
+
+      await tester.tap(find.text('push sub'));
+      await tester.pumpAndSettle();
+      expect(find.text('family-sub-page'), findsOneWidget);
+
+      // 같은 탭을 다시 탭하면(재탭) 서브 페이지가 닫히고 루트로 돌아간다.
+      await tester.tap(familyTabFinder());
+      await tester.pumpAndSettle();
+      expect(find.text('family-sub-page'), findsNothing);
+      expect(find.textContaining('family:'), findsOneWidget);
+    });
+  }
 }
