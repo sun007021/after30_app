@@ -239,6 +239,35 @@ void main() {
     expect(activations, 2);
   });
 
+  testWidgets('앱이 포그라운드로 재개되면(resumed) 현재 탭의 AppShellTabAware 훅도 호출된다(N5)', (
+    tester,
+  ) async {
+    var activations = 0;
+    final builders = testPageBuilders();
+    builders[AppShellTab.home] = (context, args) => AppShellTabActivationListener(
+      tabIndex: AppShellTab.home,
+      onActivated: () => activations++,
+      child: const CounterStubPage(tag: 'home-aware'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.build(), home: AppShell(pageBuilders: builders)),
+    );
+    await tester.pump();
+    expect(activations, 0);
+
+    // 탭 전환 없이, 앱이 백그라운드에 갔다가(paused) 다시 포그라운드로
+    // 돌아온(resumed) 상황만 흉내 낸다. 지금 활성 탭인 홈이 이 신호를
+    // 받아야 한다 — 다른 탭에 있다가 돌아왔을 때와 마찬가지로 최신
+    // 데이터를 다시 불러올 기회를 준다.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(activations, 1);
+  });
+
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
     final label = platform == TargetPlatform.iOS ? 'iOS' : 'Android';
 
