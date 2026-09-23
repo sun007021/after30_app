@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:after30/features/alarm/data/alarmkit_reminder_scheduler.dart';
@@ -25,19 +26,28 @@ class ReminderSchedulerSelector implements ReminderScheduler {
   ReminderSchedulerSelector({
     required AwesomeReminderScheduler local,
     AlarmKitReminderScheduler? alarmKit,
+    @visibleForTesting bool? forceIOS,
   }) : _local = local,
-       _alarmKit = alarmKit ?? (Platform.isIOS ? AlarmKitReminderScheduler() : null);
+       _isIOS = forceIOS ?? Platform.isIOS,
+       _alarmKit =
+           alarmKit ?? ((forceIOS ?? Platform.isIOS) ? AlarmKitReminderScheduler() : null);
 
   static const String _lastStrategyKey = 'reminder_last_strategy';
 
   final AwesomeReminderScheduler _local;
   final AlarmKitReminderScheduler? _alarmKit;
 
+  /// 실제로는 `Platform.isIOS`를 쓰지만, `dart:io`의 `Platform`은 단위
+  /// 테스트에서 항상 호스트 OS를 보고하기 때문에(예: macOS에서
+  /// `flutter test`를 돌리면 iOS도 Android도 아니다) 테스트에서만
+  /// [forceIOS]로 덮어쓸 수 있게 열어 둔다.
+  final bool _isIOS;
+
   AlarmKitReminderScheduler? get alarmKit => _alarmKit;
   AwesomeReminderScheduler get local => _local;
 
   Future<ReminderStrategy> currentStrategy() async {
-    if (!Platform.isIOS) return ReminderStrategy.android;
+    if (!_isIOS) return ReminderStrategy.android;
     final alarmKit = _alarmKit;
     if (alarmKit == null) return ReminderStrategy.iosLocalNotification;
     final status = await alarmKit.authorizationStatus();

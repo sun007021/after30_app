@@ -206,11 +206,6 @@ class AwesomeReminderScheduler implements ReminderScheduler {
     );
   }
 
-  int _dayIndex(String day) {
-    const dayMap = {'월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7};
-    return dayMap[day] ?? 1;
-  }
-
   // ---------------------------------------------------------------------
   // Android: 기존 로직 그대로(동작 변화 없음)
   // ---------------------------------------------------------------------
@@ -235,31 +230,14 @@ class AwesomeReminderScheduler implements ReminderScheduler {
             ? existingIds[idIndex]
             : await _allocateNextNotificationId();
         await AwesomeNotifications().createNotification(
-          content: NotificationContent(
-            id: notificationId,
-            channelKey: 'medicine_alarms',
-            title: '약 복용 알람',
-            body: '${alarm.name} 복용 시간입니다!',
-            notificationLayout: NotificationLayout.Default,
-            wakeUpScreen: true,
-            fullScreenIntent: true,
-            autoDismissible: false,
-            locked: true,
-            category: NotificationCategory.Alarm,
-            displayOnBackground: true,
-            displayOnForeground: true,
-            payload: _payloadFor(alarm, day, time, notificationId),
+          content: buildAndroidNotificationContent(
+            alarm: alarm,
+            day: day,
+            time: time,
+            notificationId: notificationId,
           ),
-          actionButtons: _actionButtons(),
-          schedule: NotificationCalendar(
-            weekday: _dayIndex(day),
-            hour: time.hour,
-            minute: time.minute,
-            second: 0,
-            repeats: true,
-            preciseAlarm: true,
-            allowWhileIdle: true,
-          ),
+          actionButtons: buildReminderActionButtons(),
+          schedule: buildAndroidNotificationCalendar(day: day, time: time),
         );
         notificationIds.add(notificationId);
         idIndex++;
@@ -303,27 +281,14 @@ class AwesomeReminderScheduler implements ReminderScheduler {
         for (final time in alarm.times) {
           final id = await _allocateNextNotificationId();
           await AwesomeNotifications().createNotification(
-            content: NotificationContent(
-              id: id,
-              channelKey: 'medicine_alarms',
-              title: '약 복용 알람',
-              body: '${alarm.name} 복용 시간입니다!',
-              notificationLayout: NotificationLayout.Default,
-              autoDismissible: false,
-              category: NotificationCategory.Alarm,
-              displayOnBackground: true,
-              displayOnForeground: true,
-              payload: _payloadFor(alarm, day ?? alarm.days.first, time, id),
+            content: buildIosNotificationContent(
+              alarm: alarm,
+              day: day ?? alarm.days.first,
+              time: time,
+              notificationId: id,
             ),
-            actionButtons: _actionButtons(),
-            schedule: NotificationCalendar(
-              weekday: day == null ? null : _dayIndex(day),
-              hour: time.hour,
-              minute: time.minute,
-              second: 0,
-              repeats: true,
-              allowWhileIdle: true,
-            ),
+            actionButtons: buildReminderActionButtons(),
+            schedule: buildIosNotificationCalendar(day: day, time: time),
           );
           ids.add(id);
         }
@@ -341,27 +306,11 @@ class AwesomeReminderScheduler implements ReminderScheduler {
     for (final occurrence in occurrences) {
       final id = await _allocateNextNotificationId();
       await AwesomeNotifications().createNotification(
-        content: NotificationContent(
-          id: id,
-          channelKey: 'medicine_alarms',
-          title: '약 복용 알람',
-          body: '${occurrence.medicineName} 복용 시간입니다!',
-          notificationLayout: NotificationLayout.Default,
-          autoDismissible: false,
-          category: NotificationCategory.Alarm,
-          displayOnBackground: true,
-          displayOnForeground: true,
-          payload: {
-            'alarmId': occurrence.alarmId,
-            'medicineName': occurrence.medicineName,
-            'time':
-                '${occurrence.hour.toString().padLeft(2, '0')}:${occurrence.minute.toString().padLeft(2, '0')}',
-            'day': occurrence.dayKor,
-            'notificationId': '$id',
-            'fs': '1',
-          },
+        content: buildIosOccurrenceNotificationContent(
+          occurrence: occurrence,
+          notificationId: id,
         ),
-        actionButtons: _actionButtons(),
+        actionButtons: buildReminderActionButtons(),
         // 예산 초과 시에는 1회성(specific date)으로 예약하고, 다음 앱
         // 포그라운드 진입 때 다시 이 계산을 돌려 창을 앞으로 굴린다.
         schedule: NotificationCalendar.fromDate(date: occurrence.nextFireAt),
@@ -377,25 +326,163 @@ class AwesomeReminderScheduler implements ReminderScheduler {
     );
   }
 
-  Map<String, String> _payloadFor(MedicineAlarm alarm, String day, TimeOfDay time, int id) {
-    return {
-      'alarmId': alarm.id,
-      'medicineName': alarm.name,
-      'time': '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
-      'day': day,
-      'notificationId': '$id',
-      'fs': '1',
-    };
-  }
+}
 
-  List<NotificationActionButton> _actionButtons() {
-    return [
-      NotificationActionButton(
-        key: actionKeyMarkTaken,
-        label: '복용 완료',
-        actionType: ActionType.SilentAction,
-      ),
-      NotificationActionButton(key: actionKeyCheckOthers, label: '이외 약 체크'),
-    ];
-  }
+/// 알림 payload(알람 탭/액션 처리 시 `AlarmService._onNotificationTapped`가
+/// 읽는 필드). Android/iOS 공용이며 순수 함수라 플랫폼 채널 없이
+/// 단위 테스트할 수 있다.
+@visibleForTesting
+Map<String, String> buildReminderPayload({
+  required String alarmId,
+  required String medicineName,
+  required String day,
+  required TimeOfDay time,
+  required int notificationId,
+}) {
+  return {
+    'alarmId': alarmId,
+    'medicineName': medicineName,
+    'time': '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+    'day': day,
+    'notificationId': '$notificationId',
+    'fs': '1',
+  };
+}
+
+/// "복용 완료"(백그라운드)/"이외 약 체크"(포그라운드) 액션 버튼. Android/iOS
+/// 공용이며, 순수 값 객체 생성이라 플랫폼 채널 없이 `.toMap()`으로 검증할
+/// 수 있다.
+@visibleForTesting
+List<NotificationActionButton> buildReminderActionButtons() {
+  return [
+    NotificationActionButton(
+      key: AwesomeReminderScheduler.actionKeyMarkTaken,
+      label: '복용 완료',
+      actionType: ActionType.SilentAction,
+    ),
+    NotificationActionButton(
+      key: AwesomeReminderScheduler.actionKeyCheckOthers,
+      label: '이외 약 체크',
+    ),
+  ];
+}
+
+/// Android 알림 콘텐츠(기존 동작 그대로: 풀스크린/웨이크업/잠금화면 위 표시).
+@visibleForTesting
+NotificationContent buildAndroidNotificationContent({
+  required MedicineAlarm alarm,
+  required String day,
+  required TimeOfDay time,
+  required int notificationId,
+}) {
+  return NotificationContent(
+    id: notificationId,
+    channelKey: 'medicine_alarms',
+    title: '약 복용 알람',
+    body: '${alarm.name} 복용 시간입니다!',
+    notificationLayout: NotificationLayout.Default,
+    wakeUpScreen: true,
+    fullScreenIntent: true,
+    autoDismissible: false,
+    locked: true,
+    category: NotificationCategory.Alarm,
+    displayOnBackground: true,
+    displayOnForeground: true,
+    payload: buildReminderPayload(
+      alarmId: alarm.id,
+      medicineName: alarm.name,
+      day: day,
+      time: time,
+      notificationId: notificationId,
+    ),
+  );
+}
+
+/// Android 반복 예약(요일×시간마다 1건, 기존 동작 그대로).
+@visibleForTesting
+NotificationCalendar buildAndroidNotificationCalendar({
+  required String day,
+  required TimeOfDay time,
+}) {
+  return NotificationCalendar(
+    weekday: kKoreanDayToIsoWeekday[day] ?? 1,
+    hour: time.hour,
+    minute: time.minute,
+    second: 0,
+    repeats: true,
+    preciseAlarm: true,
+    allowWhileIdle: true,
+  );
+}
+
+/// iOS 알림 콘텐츠(예산 이내: fullScreenIntent/wakeUpScreen/locked 없음 —
+/// Android 전용 플래그를 무시한다).
+@visibleForTesting
+NotificationContent buildIosNotificationContent({
+  required MedicineAlarm alarm,
+  required String day,
+  required TimeOfDay time,
+  required int notificationId,
+}) {
+  return NotificationContent(
+    id: notificationId,
+    channelKey: 'medicine_alarms',
+    title: '약 복용 알람',
+    body: '${alarm.name} 복용 시간입니다!',
+    notificationLayout: NotificationLayout.Default,
+    autoDismissible: false,
+    category: NotificationCategory.Alarm,
+    displayOnBackground: true,
+    displayOnForeground: true,
+    payload: buildReminderPayload(
+      alarmId: alarm.id,
+      medicineName: alarm.name,
+      day: day,
+      time: time,
+      notificationId: notificationId,
+    ),
+  );
+}
+
+/// iOS 반복 예약. `day`가 null이면 7일 전체 선택을 매일 반복 1건으로 합친
+/// 것이다(weekday 조건 없음).
+@visibleForTesting
+NotificationCalendar buildIosNotificationCalendar({
+  required String? day,
+  required TimeOfDay time,
+}) {
+  return NotificationCalendar(
+    weekday: day == null ? null : (kKoreanDayToIsoWeekday[day] ?? 1),
+    hour: time.hour,
+    minute: time.minute,
+    second: 0,
+    repeats: true,
+    allowWhileIdle: true,
+  );
+}
+
+/// 64개 예산 초과 시 1회성으로 예약하는 iOS 알림 콘텐츠.
+@visibleForTesting
+NotificationContent buildIosOccurrenceNotificationContent({
+  required ReminderOccurrence occurrence,
+  required int notificationId,
+}) {
+  return NotificationContent(
+    id: notificationId,
+    channelKey: 'medicine_alarms',
+    title: '약 복용 알람',
+    body: '${occurrence.medicineName} 복용 시간입니다!',
+    notificationLayout: NotificationLayout.Default,
+    autoDismissible: false,
+    category: NotificationCategory.Alarm,
+    displayOnBackground: true,
+    displayOnForeground: true,
+    payload: buildReminderPayload(
+      alarmId: occurrence.alarmId,
+      medicineName: occurrence.medicineName,
+      day: occurrence.dayKor,
+      time: TimeOfDay(hour: occurrence.hour, minute: occurrence.minute),
+      notificationId: notificationId,
+    ),
+  );
 }
