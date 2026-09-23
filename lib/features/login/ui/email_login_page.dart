@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:after30/features/login/data/backend_auth_service.dart';
-import 'package:after30/core/auth/current_user_resolver.dart';
-import 'package:after30/core/storage/user_store.dart';
-import 'package:after30/features/alarm/data/alarm_service.dart';
-import 'package:after30/app/app_shell.dart';
-import 'package:after30/services/notifications/fcm_service.dart';
+import 'package:after30/core/auth/auth_provider_client.dart';
+import 'package:after30/core/auth/session_bootstrapper.dart';
 import 'package:after30/utils/responsive.dart';
 
 class EmailLoginPage extends StatefulWidget {
@@ -343,24 +339,13 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
       _submitting = true;
     });
     try {
-      await BackendAuthService().loginWithEmail(
-        email: email,
-        password: password,
-      );
-      final userId = await CurrentUserResolver.resolveUserId();
-      await UserStore.setCurrentUserId(
-        userId?.toString() ?? email,
-      );
-      AlarmService.setCurrentUserId(userId?.toString() ?? email);
-      // 사용자 네임스페이스 설정 이후, 저장된 활성 알람을 기기에 재예약
-      await AlarmService().rescheduleAllActiveFromStorage();
-      // 로그인 성공 시 FCM 토큰을 백엔드로 동기화
-      await FcmService.syncTokenToBackend();
-      if (!mounted) return;
-      // 로그인 성공 후에는 앱 셸(홈 탭)로 진입한다(plan §6 W10 4/6항, D11).
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AppShell()),
-        (route) => false,
+      // 토큰 저장 → 사용자 ID 통합(구 카카오ID/이메일 폴백 → 백엔드 ID) →
+      // 알람 네임스페이스 마이그레이션 → 재스케줄 → FCM 동기화 → 셸
+      // 진입까지는 SessionBootstrapper가 공통으로 처리한다(plan §6 W3a
+      // 1항).
+      await SessionBootstrapper.completeLogin(
+        context,
+        EmailAuthProviderClient(email: email, password: password),
       );
     } catch (e) {
       if (!mounted) return;
