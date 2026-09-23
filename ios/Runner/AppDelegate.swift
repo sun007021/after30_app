@@ -29,6 +29,16 @@ import shared_preferences_foundation
       assertionFailure("NativeChannel 등록 실패: FlutterViewController 또는 registrar를 찾을 수 없음")
     }
 
+    // iOS 26+ AlarmKit 브리지(W4). iOS 16~25에서는 채널 메서드가
+    // "notSupported"류 응답만 반환하고 실제로는 아무 것도 하지 않는다.
+    if let controller = window?.rootViewController as? FlutterViewController,
+      let registrar = controller.registrar(forPlugin: "AlarmKitBridge")
+    {
+      AlarmKitBridge.register(with: registrar)
+    } else {
+      assertionFailure("AlarmKitBridge 등록 실패: FlutterViewController 또는 registrar를 찾을 수 없음")
+    }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }
