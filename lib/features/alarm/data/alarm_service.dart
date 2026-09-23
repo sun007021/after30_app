@@ -9,6 +9,7 @@ import 'package:after30/features/calendar/data/history_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
 import 'package:after30/features/alarm/data/awesome_reminder_scheduler.dart';
 import 'package:after30/features/alarm/data/alarmkit_reminder_scheduler.dart';
+import 'package:after30/features/alarm/data/reminder_scheduler.dart';
 import 'package:after30/features/alarm/data/reminder_scheduler_selector.dart';
 import 'package:after30/features/alarm/ui/fullscreen_alarm_page.dart';
 import 'package:after30/features/my/settings_store.dart';
@@ -53,6 +54,9 @@ class AlarmService {
   /// AlarmKit 권한/기기 알람 설정 화면(W9 `DeviceAlarmSettings`)이 재사용할
   /// 수 있게 AlarmKit 스케줄러를 노출한다.
   static AlarmKitReminderScheduler? get alarmKitScheduler => _scheduler.alarmKit;
+
+  /// 현재 대기 중인 iOS 로컬 알림 예산 상태(디버그 하네스/설정 화면용).
+  static Future<ReminderBudgetStatus> pendingBudget() => _scheduler.pendingBudget();
 
   final _AlarmServiceLifecycleObserver _lifecycleObserver = _AlarmServiceLifecycleObserver();
 
