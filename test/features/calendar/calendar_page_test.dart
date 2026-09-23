@@ -1,0 +1,98 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:after30/features/calendar/ui/calendar_page.dart';
+
+import '../../core/design/design_test_utils.dart';
+import 'calendar_test_utils.dart';
+
+void main() {
+  Material sheetMaterial(WidgetTester tester) {
+    return tester.widget<Material>(
+      find.byWidgetPredicate(
+        (w) => w is Material && w.clipBehavior == Clip.antiAlias && w.color == Colors.white,
+      ),
+    );
+  }
+
+  testWidgets('Android 기록 시트는 기존 사각 곡률(20)과 헤어라인 테두리를 유지한다', (tester) async {
+    final fetcher = CountingFetcher();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.android,
+      CalendarPage(fetchMedications: fetcher.call),
+    );
+    await tester.pumpAndSettle();
+
+    final shape = sheetMaterial(tester).shape as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.vertical(top: Radius.circular(20)));
+    expect(shape.side.width, 1);
+  });
+
+  testWidgets('iOS 기록 시트는 토큰 상단 곡률(AppRadius.xl, 연속 곡률)을 테두리 없이 쓴다', (tester) async {
+    final fetcher = CountingFetcher();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      CalendarPage(fetchMedications: fetcher.call),
+    );
+    await tester.pumpAndSettle();
+
+    final shape = sheetMaterial(tester).shape as RoundedSuperellipseBorder;
+    expect(shape.borderRadius, BorderRadius.vertical(top: Radius.circular(28)));
+    expect(shape.side, BorderSide.none);
+  });
+
+  testWidgets('월 제목을 탭하면 연/월 점프 피커가 뜬다(iOS: 휠 피커)', (tester) async {
+    final fetcher = CountingFetcher();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      CalendarPage(fetchMedications: fetcher.call),
+    );
+    await tester.pumpAndSettle();
+
+    final now = DateTime.now();
+    final title = '${now.year}년 ${now.month.toString().padLeft(2, '0')}월';
+    await tester.tap(find.text(title));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CupertinoDatePicker), findsOneWidget);
+
+    await tester.tap(find.text('완료'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CupertinoDatePicker), findsNothing);
+  });
+
+  testWidgets('월 제목을 탭하면 연/월 점프 피커가 뜬다(Android: Material 날짜 선택기)', (tester) async {
+    final fetcher = CountingFetcher();
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.android,
+      CalendarPage(fetchMedications: fetcher.call),
+    );
+    await tester.pumpAndSettle();
+
+    final now = DateTime.now();
+    final title = '${now.year}년 ${now.month.toString().padLeft(2, '0')}월';
+    await tester.tap(find.text(title));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+  });
+
+  testWidgets('fetchMedications를 주입하면 실제 네트워크 대신 그 함수를 쓴다', (tester) async {
+    final fetcher = CountingFetcher(
+      () => [fakeMedication(time: '09:00', date: DateTime.now())],
+    );
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      CalendarPage(fetchMedications: fetcher.call),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fetcher.callCount, greaterThanOrEqualTo(1));
+  });
+}
