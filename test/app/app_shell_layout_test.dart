@@ -264,5 +264,64 @@ void main() {
         }
       });
     }
+
+    // N8: 키보드가 올라와 있는 동안 push된 화면은 그 순간의 예약 높이(0)를
+    // 읽는데, 키보드를 내려도 다시 빌드되지 않으면 하단이 글래스 캡슐에
+    // 영구히 가린다. 실제 경로는 "가족 그룹 이름 입력 → 키보드를 띄운 채
+    // '다음' → 초대 화면(하단 CTA + AlarmBottomNavigation)"이다.
+    testWidgets('iOS: 키보드가 떠 있는 동안 push된 화면도 키보드를 내리면 CTA가 탭바 위에 있다(N8)', (
+      tester,
+    ) async {
+      applyRealisticSafeArea(tester);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build().copyWith(platform: TargetPlatform.iOS),
+          home: AppShell(
+            initialIndex: AppShellTab.family,
+            pageBuilders: testPageBuilders(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 1) 키보드를 올린다(iOS는 이때 padding.bottom을 0으로 보고한다).
+      const keyboardHeight = 336.0;
+      tester.view.viewInsets = const FakeViewPadding(
+        bottom: keyboardHeight * devicePixelRatio,
+      );
+      tester.view.padding = const FakeViewPadding(
+        top: logicalTopSafeArea * devicePixelRatio,
+        bottom: 0,
+      );
+      await tester.pumpAndSettle();
+
+      // 2) 키보드가 올라와 있는 그 프레임에 하위 화면을 push한다.
+      final tabNavigator = tester.state<NavigatorState>(find.byType(Navigator).at(1));
+      tabNavigator.push(
+        MaterialPageRoute<void>(builder: (_) => const SubPageCtaWithBottomBar()),
+      );
+      await tester.pumpAndSettle();
+
+      // 3) 키보드를 내린다 — 예약 높이가 다시 커지므로 그 화면도 새 값으로
+      // 다시 빌드돼야 한다.
+      tester.view.viewInsets = FakeViewPadding.zero;
+      tester.view.padding = const FakeViewPadding(
+        top: logicalTopSafeArea * devicePixelRatio,
+        bottom: logicalBottomSafeArea * devicePixelRatio,
+      );
+      await tester.pumpAndSettle();
+
+      final cta = _globalRect(
+        tester,
+        find.widgetWithText(ElevatedButton, 'bottombar-sub-page-cta'),
+      );
+      final barTop = _globalRect(tester, find.byType(GlassSurface)).top;
+      expect(
+        cta.bottom,
+        lessThanOrEqualTo(barTop + 0.5),
+        reason: '키보드를 내린 뒤에도 CTA가 탭바 위에서 끝나야 한다(예약 높이 재구독)',
+      );
+    });
   });
 }

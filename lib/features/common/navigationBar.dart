@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:after30/app/app_shell.dart';
-import 'package:after30/app/widgets/app_tab_bar.dart';
 import 'package:after30/core/design/app_platform.dart';
 import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/alarm/ui/alarm_list.dart';
@@ -30,15 +29,21 @@ class AlarmBottomNavigation extends StatelessWidget {
     //   위에 띄우는 것 포함, M1)을 그대로 재사용할 수 있다.
     if (AppShell.isInside(context)) {
       if (isCupertino(context)) {
-        // AppTabBar.reservedBottomHeight(context)를 여기서 다시 계산하면
-        // 안 된다(N1) — 이 context는 셸의 extendBody가 이미 부풀려 놓은
-        // MediaQuery.padding.bottom을 보고 있어서, 그 값을 다시 "원본
-        // 세이프 에어리어"로 착각해 실제보다 훨씬 큰 값을 반환한다. 셸이
-        // 자기 자신의(오염되지 않은) context로 미리 계산해 둔 값을 그대로
-        // 쓴다.
-        return SizedBox(
-          height: AppShell.maybeOf(context)?.reservedBottom ?? AppTabBar.reservedBottomHeight(context),
-        );
+        // 셸이 예약해 둔 높이를 그대로 읽는다. 이 context는 셸 body 안이고,
+        // 셸 Scaffold는 `extendBody: true` + 같은 높이의 자리표시자를
+        // bottomNavigationBar에 꽂아 두므로, 여기서 보이는
+        // `padding.bottom`이 곧 셸의 예약 높이다(키보드가 올라와 탭바가
+        // 숨는 동안은 0).
+        //
+        // AppTabBar.reservedBottomHeight(context)로 다시 계산하면 안 된다
+        // (N1) — 이미 부풀려진 값을 "원본 세이프 에어리어"로 착각해 실제보다
+        // 훨씬 큰 값이 나온다. 셸 State의 `reservedBottom`을 읽는 것도 안
+        // 된다(N8) — findAncestorStateOfType은 의존 관계를 만들지 않아서,
+        // 키보드가 올라온 프레임에 push된 화면이 0을 읽고 나면 키보드가
+        // 내려가도 다시 빌드되지 않아 하단이 캡슐에 영구히 가린다.
+        // MediaQuery는 의존 관계가 생기므로 값이 바뀌면 자동으로 다시
+        // 빌드된다.
+        return SizedBox(height: MediaQuery.paddingOf(context).bottom);
       }
       return const SizedBox.shrink();
     }

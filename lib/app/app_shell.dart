@@ -192,9 +192,12 @@ class AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// [ValueNotifier]는 쓰지 않는다(값이 그대로면 알림을 생략하기 때문).
   final _TabActivationNotifier _tabActivation = _TabActivationNotifier();
 
-  /// 마지막으로 확인한 "오늘" 날짜(자정을 넘겨 방치된 경우를 감지하는
-  /// 용도, N5).
+  /// 마지막으로 활성화 알림을 보낸 시점의 "오늘" 날짜(자정을 넘겨 방치된
+  /// 경우를 감지하는 용도, N5).
   DateTime? _lastKnownDate;
+
+  /// 직전 활성화 알림이 날짜가 바뀐 상태에서 발생했는지(N10).
+  bool _dateChangedOnLastActivation = false;
 
   /// iOS 플로팅 탭바가 화면 하단에서 차지하는 실제 높이(N1). 셸의
   /// Scaffold가 `extendBody: true`라 body 하위 위젯들이 보는
@@ -235,7 +238,14 @@ class AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // 알림을 받아 필요하면 데이터를 다시 불러온다. 날짜가 안 바뀐 단순
     // 재개(resumed)에도 항상 알린다 — 백그라운드에 오래 있다가 돌아온
     // 경우 최신 서버 데이터를 다시 불러오고 싶은 화면이 있을 수 있어서다.
-    _lastKnownDate = _today();
+    _notifyTabActivated();
+  }
+
+  /// 활성화 알림을 보내기 전에 날짜 변경 여부를 계산해 둔다(N10).
+  void _notifyTabActivated() {
+    final today = _today();
+    _dateChangedOnLastActivation = _lastKnownDate != null && _lastKnownDate != today;
+    _lastKnownDate = today;
     _tabActivation.notify();
   }
 
@@ -247,17 +257,32 @@ class AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// 구독한다.
   Listenable get tabActivationListenable => _tabActivation;
 
-  /// 마지막으로 [onTabActivated] 계열 알림을 보낸 시점의 "오늘" 날짜(N5).
-  /// 활성화 훅을 받는 화면이 "그냥 재방문인지, 자정을 넘겨 날짜가 바뀐
-  /// 것까지 포함하는지"를 직접 구분하고 싶을 때 `DateTime.now()`와 비교해
-  /// 쓸 수 있다.
-  DateTime get lastKnownDate => _lastKnownDate ?? _today();
+  /// 직전 활성화 알림이 "자정을 넘겨 날짜가 바뀐" 경우였는지(N5).
+  ///
+  /// 활성화 훅([AppShellTabAware.onTabActivated])을 받은 화면이 "그냥
+  /// 재방문"과 "날짜가 바뀐 재방문"을 구분할 때 쓴다. 예를 들어 홈의 오늘
+  /// 복약 목록은 날짜가 바뀌었으면 기준 날짜부터 다시 잡아야 한다.
+  ///
+  /// 알림을 보내기 직전에 [_lastKnownDate]를 갱신하므로, 훅 안에서
+  /// `DateTime.now()`와 [_lastKnownDate]를 비교하는 방식으로는 변화를
+  /// 감지할 수 없다(항상 같다) — 그래서 셸이 미리 계산해 이 플래그로
+  /// 알려준다(N10).
+  bool get dateChangedOnLastActivation => _dateChangedOnLastActivation;
 
-  /// iOS 플로팅 탭바가 화면 하단에서 실제로 차지하는 높이(N1). 셸 안의
-  /// 다른 화면(`AlarmBottomNavigation` 등)은 이 값을 그대로 써야 하며,
-  /// [AppTabBar.reservedBottomHeight]를 자기 자신의 context로 다시
-  /// 계산하면 안 된다(이미 부풀려진 MediaQuery를 또 부풀리게 된다).
+  /// iOS 플로팅 탭바가 화면 하단에서 실제로 차지하는 높이(N1).
   /// Android에서는 항상 0이다.
+  ///
+  /// **화면 레이아웃에는 이 getter를 쓰지 말 것(N8).** [AppShell.maybeOf]는
+  /// `findAncestorStateOfType` 기반이라 의존 관계를 만들지 않는다. 키보드가
+  /// 올라와 이 값이 0인 프레임에 만들어진 화면은 값이 다시 커져도 리빌드되지
+  /// 않아 하단이 탭바에 영구히 가린다. 셸 body 안에서는 같은 값이
+  /// `MediaQuery.paddingOf(context).bottom`으로 내려오고(셸 Scaffold의
+  /// `extendBody` + 같은 높이의 자리표시자), MediaQuery는 의존 관계가
+  /// 생기므로 값이 바뀌면 자동으로 다시 빌드된다 — 그쪽을 쓴다.
+  /// [AppTabBar.reservedBottomHeight]를 화면 자신의 context로 다시 계산하는
+  /// 것도 안 된다(이미 부풀려진 MediaQuery를 또 부풀린다).
+  ///
+  /// 이 getter는 셸 자신의 배치와 테스트에서 기대값을 확인할 때만 쓴다.
   double get reservedBottom => _reservedBottom;
 
   /// 탭을 전환한다.
@@ -310,19 +335,13 @@ class AppShellState extends State<AppShell> with WidgetsBindingObserver {
       // 그제서야 멈춰 있던 애니메이션이 재생되며 화면이 잠깐 깜빡이는
       // 문제가 있었다(N6). pushAndRemoveUntil은 제거될 화면들을 애니메이션
       // 없이 즉시 들어내므로 이 문제가 없다.
-      _navigatorKeys[index].currentState?.pushAndRemoveUntil(
-        _rootRoute(index, _tabArguments[index]),
-        (route) => false,
-      );
+      _replaceHiddenTabWithRoot(index);
     }
 
     if (popOriginToRoot && !isSameTab) {
       // 출발 탭도 전환 직후 화면에서 사라지므로(TickerMode 꺼짐) 위와 같은
       // 이유로 popUntil 대신 pushAndRemoveUntil을 쓴다(N6).
-      _navigatorKeys[originIndex].currentState?.pushAndRemoveUntil(
-        _rootRoute(originIndex, _tabArguments[originIndex]),
-        (route) => false,
-      );
+      _replaceHiddenTabWithRoot(originIndex);
     }
 
     if (!isSameTab) {
@@ -333,7 +352,21 @@ class AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
     // 재탭(같은 탭 재선택)이든 실제 전환이든, "활성화"로 취급해 M2 리스너에
     // 알린다.
-    _tabActivation.notify();
+    _notifyTabActivated();
+  }
+
+  /// 지금 화면에 보이지 않는 탭의 스택을 루트 하나만 남기고 정리한다(N6).
+  ///
+  /// 쌓인 하위 화면이 없으면 아무것도 하지 않는다(N9) — 그대로
+  /// `pushAndRemoveUntil`을 호출하면 멀쩡한 탭 루트를 새로 만들어 스크롤
+  /// 위치나 입력 중이던 내용을 버리게 된다.
+  void _replaceHiddenTabWithRoot(int index) {
+    final navState = _navigatorKeys[index].currentState;
+    if (navState == null || !navState.canPop()) return;
+    navState.pushAndRemoveUntil(
+      _rootRoute(index, _tabArguments[index]),
+      (route) => false,
+    );
   }
 
   PageRoute<void> _rootRoute(int index, Object? arguments) {

@@ -151,6 +151,34 @@ class SubPageCtaNoBottomBar extends StatelessWidget {
   }
 }
 
+/// N8 테스트용 스텁: `bottomNavigationBar: AlarmBottomNavigation(...)`과
+/// 하단 CTA를 함께 가진 "서브 페이지". 실제 예는
+/// `family_invite_existing_group_invite_page.dart`로, 그룹 이름 입력 화면에서
+/// 키보드가 올라온 채로 넘어오는 화면이다.
+class SubPageCtaWithBottomBar extends StatelessWidget {
+  const SubPageCtaWithBottomBar({super.key, this.currentIndex = 1});
+
+  final int currentIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      bottomNavigationBar: AlarmBottomNavigation(currentIndex: currentIndex),
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Expanded(child: SizedBox.shrink()),
+            ElevatedButton(
+              onPressed: () {},
+              child: const Text('bottombar-sub-page-cta'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// 테스트용 탭 빌더 5개(순서는 [AppShellTab]과 같다). `arguments`가 오면
 /// 라벨에 그대로 반영해 `switchTab(arguments: ...)` 테스트에도 쓸 수 있다.
 List<AppShellPageBuilder> testPageBuilders() {
