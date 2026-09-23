@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/calendar/ui/widgets/medication_sheet_header.dart';
 import 'package:after30/features/calendar/ui/widgets/medication_tile.dart';
@@ -48,13 +49,20 @@ class MedicationRecordSheetContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // iOS: 그래버 + 상단 곡률 xl(연속 곡률), 테두리 없이 불투명(§6 W7).
+    // Android는 기존 값(20, 사각 곡률 + 헤어라인 테두리)을 그대로 유지한다.
+    final shape = isCupertino(context)
+        ? const RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+          )
+        : const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            side: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+          );
     return Material(
       color: Colors.white,
       clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        side: BorderSide(color: Color(0xFFE5E7EB), width: 1),
-      ),
+      shape: shape,
       child: CustomScrollView(
         controller: scrollController,
         slivers: [
@@ -136,7 +144,7 @@ class MedicationRecordSheetContent extends StatelessWidget {
           if (isLoading)
             const SliverFillRemaining(
               hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: AppActivityIndicator()),
             )
           else if (medications.isEmpty)
             SliverFillRemaining(

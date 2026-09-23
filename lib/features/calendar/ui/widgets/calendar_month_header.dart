@@ -8,12 +8,18 @@ class CalendarMonthHeader extends StatelessWidget {
   final VoidCallback onNextMonth;
   final GlobalKey? monthHeaderKey;
 
+  /// 제목(연/월 텍스트)을 탭했을 때 호출된다. 지정하면 연/월 점프 피커를
+  /// 띄우는 용도로 쓸 수 있다(§6 W7). 지정하지 않으면 탭해도 아무 일도
+  /// 일어나지 않는다(기존 동작).
+  final VoidCallback? onTitleTap;
+
   const CalendarMonthHeader({
     super.key,
     required this.focusedDay,
     required this.onPreviousMonth,
     required this.onNextMonth,
     this.monthHeaderKey,
+    this.onTitleTap,
   });
 
   @override
@@ -29,10 +35,14 @@ class CalendarMonthHeader extends StatelessWidget {
           ),
           onPressed: onPreviousMonth,
         ),
-        Text(
-          '${focusedDay.year}년 ${focusedDay.month.toString().padLeft(2, '0')}월',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-          key: monthHeaderKey,
+        GestureDetector(
+          onTap: onTitleTap,
+          behavior: HitTestBehavior.opaque,
+          child: Text(
+            '${focusedDay.year}년 ${focusedDay.month.toString().padLeft(2, '0')}월',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            key: monthHeaderKey,
+          ),
         ),
         IconButton(
           icon: Transform(

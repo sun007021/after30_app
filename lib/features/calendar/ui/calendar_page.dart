@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:after30/app/app_shell.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/common/navigationBar.dart';
@@ -12,14 +14,26 @@ import 'package:after30/features/calendar/ui/widgets/calendar_month_header.dart'
 import 'package:after30/features/calendar/ui/widgets/medication_sheet_header.dart';
 import 'package:after30/utils/responsive.dart';
 
+/// 특정 기간의 복약 목록을 가져오는 함수 시그니처(홈 화면과 동일한 계약).
+/// 테스트/디버그 프리뷰에서 네트워크 호출 없이 가짜 데이터를 주입할 수
+/// 있도록 열어 둔다.
+typedef FetchMedicationsFn = Future<List<Medication>> Function(DateTime start, DateTime end);
+
 class CalendarPage extends StatefulWidget {
-  const CalendarPage({super.key});
+  /// 복약 목록 조회 함수 주입 지점(테스트/디버그 프리뷰용). 지정하지 않으면
+  /// 실제 서비스([MedicationService.fetchMedications])를 사용한다.
+  final FetchMedicationsFn? fetchMedications;
+
+  const CalendarPage({super.key, this.fetchMedications});
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
 }
 
 class _CalendarPageState extends State<CalendarPage> {
+  late final FetchMedicationsFn _fetchMedications =
+      widget.fetchMedications ?? MedicationService.fetchMedications;
+
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   final Map<DateTime, int> _totalByDay = {};
@@ -90,14 +104,27 @@ class _CalendarPageState extends State<CalendarPage> {
     super.dispose();
   }
 
+  /// AppShell 탭 재활성화(M2) 훅에서 호출된다(§6 W7 — 예: 홈 탭에서 복용
+  /// 완료로 기록한 뒤 기록 탭으로 돌아오면 최신 상태가 반영돼야 한다).
+  /// 마지막 활성화 이후 날짜가 바뀐 경우(N5/N10)에는 선택 날짜를 오늘로
+  /// 되돌린다.
+  Future<void> reload() async {
+    final dateChanged = AppShell.maybeOf(context)?.dateChangedOnLastActivation ?? false;
+    if (dateChanged) {
+      final today = DateTime.now();
+      setState(() {
+        _focusedDay = today;
+        _selectedDay = dateKey(today);
+      });
+    }
+    await _loadMonth(_focusedDay);
+  }
+
   Future<void> _loadMonth(DateTime anyDayInMonth) async {
     final first = DateTime(anyDayInMonth.year, anyDayInMonth.month, 1);
     final last = DateTime(anyDayInMonth.year, anyDayInMonth.month + 1, 0);
     try {
-      final List<Medication> meds = await MedicationService.fetchMedications(
-        first,
-        last,
-      );
+      final List<Medication> meds = await _fetchMedications(first, last);
       final totalsByDay = <DateTime, int>{};
       final completedByDay = <DateTime, int>{};
       final medsByDay = <DateTime, List<Medication>>{};
@@ -175,6 +202,40 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  /// iOS 전용 "오늘" 셀(§6 W7): 다 완료했으면 채워진 원, 아니면 브랜드
+  /// 컬러 아웃라인 원으로 항상 "오늘"임을 표시한다(iOS 캘린더 느낌).
+  /// Android는 이 빌더를 쓰지 않고 기존 [TableCalendar] 기본 스타일을
+  /// 그대로 유지한다.
+  Widget _buildTodayDayIOS(DateTime day, Color primaryBlue) {
+    final key = dateKey(day);
+    final total = _totalByDay[key] ?? 0;
+    final done = _doneByDay[key] ?? 0;
+    final text = day.day.toString();
+    if (total > 0 && done >= total) {
+      return FilledDay(text: text, bg: primaryBlue, fg: Colors.white);
+    }
+    return OutlinedDay(text: text, color: primaryBlue);
+  }
+
+  /// 월 제목을 탭하면 연/월 휠 피커로 바로 점프한다(§6 W7). 기존 캘린더
+  /// 이동 범위(2000~2100)를 그대로 따른다.
+  Future<void> _jumpToMonth() async {
+    final picked = await showAppDatePicker(
+      context: context,
+      initial: _focusedDay,
+      min: DateTime(2000),
+      max: DateTime(2100, 12, 31),
+      mode: AppDatePickerMode.monthYear,
+    );
+    if (picked == null) return;
+    final next = DateTime(picked.year, picked.month, 1);
+    setState(() => _focusedDay = next);
+    _loadMonth(next);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_sheetVisible) _recalculateSheetFractions();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     const primaryBlue = Color(0xFF235DFF);
@@ -186,7 +247,12 @@ class _CalendarPageState extends State<CalendarPage> {
       return _medsByDay[key] ?? const [];
     }
 
-    return Scaffold(
+    final cupertino = isCupertino(context);
+
+    return AppShellTabActivationListener(
+      tabIndex: AppShellTab.history,
+      onActivated: reload,
+      child: Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         bottom: false,
@@ -218,6 +284,7 @@ class _CalendarPageState extends State<CalendarPage> {
                         CalendarMonthHeader(
                           focusedDay: _focusedDay,
                           monthHeaderKey: _monthHeaderKey,
+                          onTitleTap: _jumpToMonth,
                           onPreviousMonth: () {
                             final prev = DateTime(
                               _focusedDay.year,
@@ -321,6 +388,14 @@ class _CalendarPageState extends State<CalendarPage> {
                             defaultBuilder: (context, day, focusedDay) {
                               return _buildBaseDay(day, primaryBlue);
                             },
+                            // iOS 전용: "오늘"을 항상 브랜드 컬러 원(채움/
+                            // 아웃라인)으로 표시한다(§6 W7). Android는 이
+                            // 빌더를 넘기지 않아 기존 TableCalendar 기본
+                            // 스타일을 그대로 유지한다.
+                            todayBuilder: isCupertino(context)
+                                ? (context, day, focusedDay) =>
+                                    _buildTodayDayIOS(day, primaryBlue)
+                                : null,
                           ),
                         ),
                       ],
@@ -347,15 +422,21 @@ class _CalendarPageState extends State<CalendarPage> {
                 initialChildSize: (_minInitialSheetFraction ?? 0.43),
                 maxChildSize: 1.0,
                 builder: (context, scrollController) {
+                  // iOS: 그래버 + 상단 곡률 xl(연속 곡률), 테두리 없이
+                  // 불투명(§6 W7). Android는 기존 값(20, 사각 곡률 +
+                  // 헤어라인 테두리)을 그대로 유지한다.
+                  final sheetShape = cupertino
+                      ? const RoundedSuperellipseBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+                        )
+                      : const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          side: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+                        );
                   return Material(
                     color: Colors.white,
                     clipBehavior: Clip.antiAlias,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                      side: BorderSide(color: Color(0xFFE5E7EB), width: 1),
-                    ),
+                    shape: sheetShape,
                     child: CustomScrollView(
                       controller: scrollController,
                       slivers: [
@@ -525,6 +606,7 @@ class _CalendarPageState extends State<CalendarPage> {
         ),
       ),
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 3),
+      ),
     );
   }
 }
