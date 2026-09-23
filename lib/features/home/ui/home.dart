@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/app/app_shell.dart';
+import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/home/ui/home_content.dart';
 import 'package:after30/features/common/navigationBar.dart';
 
@@ -14,7 +15,17 @@ class HomePage extends StatefulWidget {
   @Deprecated('로그인 직후 전화번호 팝업은 제거됨(D11). 가족 기능에서 유도한다.')
   final bool checkPhoneRegistration;
 
-  const HomePage({super.key, this.checkPhoneRegistration = false});
+  /// [HomeContent]로 그대로 전달되는 테스트/디버그 프리뷰용 주입 지점.
+  /// 지정하지 않으면 실제 서비스를 사용한다.
+  final FetchMedicationsFn? fetchMedications;
+  final FamilyService? familyService;
+
+  const HomePage({
+    super.key,
+    this.checkPhoneRegistration = false,
+    this.fetchMedications,
+    this.familyService,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -59,7 +70,12 @@ class _HomePageState extends State<HomePage> {
       body: AppShellTabActivationListener(
         tabIndex: AppShellTab.home,
         onActivated: () => _contentKey.currentState?.reload(),
-        child: HomeContent(key: _contentKey, user: _user),
+        child: HomeContent(
+          key: _contentKey,
+          user: _user,
+          fetchMedications: widget.fetchMedications,
+          familyService: widget.familyService,
+        ),
       ),
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 2),
     );

@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/alarm/ui/add_alarm.dart';
@@ -18,10 +20,28 @@ import 'package:after30/features/home/ui/widgets/home_family_gauge_row.dart';
 import 'package:after30/features/home/ui/widgets/medication_dose_tile.dart';
 import 'package:after30/utils/responsive.dart';
 
+/// 특정 기간의 복약 목록을 가져오는 함수 시그니처. 기본값은
+/// [MedicationService.fetchMedications]이며, 테스트/프리뷰에서 네트워크 호출
+/// 없이 가짜 데이터를 주입할 수 있도록 열어 둔다.
+typedef FetchMedicationsFn = Future<List<Medication>> Function(DateTime start, DateTime end);
+
 class HomeContent extends StatefulWidget {
   final User? user;
 
-  const HomeContent({super.key, required this.user});
+  /// 복약 목록 조회 함수 주입 지점(테스트/디버그 프리뷰용). 지정하지 않으면
+  /// 실제 서비스([MedicationService.fetchMedications])를 사용한다.
+  final FetchMedicationsFn? fetchMedications;
+
+  /// 가족 대시보드 조회 서비스 주입 지점(테스트/디버그 프리뷰용). 지정하지
+  /// 않으면 실제 [FamilyService]를 사용한다.
+  final FamilyService? familyService;
+
+  const HomeContent({
+    super.key,
+    required this.user,
+    this.fetchMedications,
+    this.familyService,
+  });
 
   @override
   State<HomeContent> createState() => HomeContentState();
@@ -30,7 +50,9 @@ class HomeContent extends StatefulWidget {
 /// `HomePage`(M2 탭 재활성화 훅)가 `GlobalKey<HomeContentState>`로 이
 /// 상태에 접근해 [reload]를 호출할 수 있도록 공개 타입으로 둔다.
 class HomeContentState extends State<HomeContent> {
-  final FamilyService _familyService = FamilyService();
+  late final FamilyService _familyService = widget.familyService ?? FamilyService();
+  late final FetchMedicationsFn _fetchMedications =
+      widget.fetchMedications ?? MedicationService.fetchMedications;
   final Set<String> _processingDoseKeys = <String>{};
 
   // 캘린더(calendar_page.dart)의 firstDay/lastDay 와 동일한 기준을 사용한다.
@@ -91,9 +113,22 @@ class HomeContentState extends State<HomeContent> {
 
   /// AppShell 탭 재활성화(M2) 훅에서 호출된다. 다른 탭에 있다가 홈 탭으로
   /// 돌아왔을 때 최신 데이터를 다시 불러온다.
-  void reload() {
-    _loadDosesForDate(_selectedDate);
-    _loadFamilyDashboard();
+  ///
+  /// 마지막 활성화 이후 자정이 지나 날짜가 바뀐 경우(N5/N10, 예: 탭을
+  /// 전환한 채로 자정을 넘기거나 앱을 백그라운드에 오래 두고 돌아온 경우)에는
+  /// 선택된 날짜를 오늘로 되돌린 뒤 다시 불러온다.
+  ///
+  /// [Future]를 반환해 iOS `CupertinoSliverRefreshControl`/Android
+  /// `RefreshIndicator`의 당겨서 새로고침 콜백으로도 그대로 쓸 수 있다.
+  Future<void> reload() async {
+    final dateChanged = AppShell.maybeOf(context)?.dateChangedOnLastActivation ?? false;
+    if (dateChanged) {
+      _selectedDate = DateTime.now();
+    }
+    await Future.wait([
+      _loadDosesForDate(_selectedDate),
+      _loadFamilyDashboard(),
+    ]);
   }
 
   Future<void> _openCreateGroup() async {
@@ -109,7 +144,7 @@ class HomeContentState extends State<HomeContent> {
     });
 
     try {
-      final items = await MedicationService.fetchMedications(date, date);
+      final items = await _fetchMedications(date, date);
       setState(() {
         _medications = items
             .where(
@@ -219,9 +254,7 @@ class HomeContentState extends State<HomeContent> {
       return true;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_extractErrorMessage(e))),
-        );
+        AppToast.show(context, _extractErrorMessage(e), type: AppToastType.error);
       }
       return false;
     } finally {
@@ -270,9 +303,7 @@ class HomeContentState extends State<HomeContent> {
       await _loadDosesForDate(_selectedDate);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_extractErrorMessage(e))),
-        );
+        AppToast.show(context, _extractErrorMessage(e), type: AppToastType.error);
       }
     } finally {
       if (mounted) {
@@ -281,134 +312,177 @@ class HomeContentState extends State<HomeContent> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final List<Medication> dayMeds = [..._medications]
-      ..sort((a, b) => a.time.compareTo(b.time));
-    final double bottomSafe = MediaQuery.of(context).padding.bottom;
-    const skyBlue = Color(0xFFEBF0FF);
+  /// 상단 가족 게이지 행(흰 배경). Android는 자체 [SafeArea]로 상단 여백을
+  /// 확보하고, iOS는 [AppSliverNavBar]가 이미 상단 안전 영역을 처리하므로
+  /// [topSafeArea]를 false로 받아 중복 여백을 만들지 않는다.
+  Widget _buildFamilyGaugeSection(BuildContext context, {required bool topSafeArea}) {
+    return Container(
+      color: Colors.white,
+      child: SafeArea(
+        top: topSafeArea,
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: Responsive.responsiveHeight(context, 8)),
+            HomeFamilyGaugeRow(
+              members: _familyMembers,
+              onMemberTap: _openFamilyGroupForMember,
+              onAddTap: _openCreateGroup,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
+  /// 하단 하늘색 배경 + 복약 체크리스트(제목 + 흰 카드). 두 플랫폼 모두
+  /// 동일한 내용을 쓰되, iOS 카드 곡률/그림자는 [MedicationDoseTile]과
+  /// [EmptyMedicineSection] 내부에서 각각 토큰으로 분기한다.
+  Widget _buildChecklistSection(
+    BuildContext context,
+    List<Medication> dayMeds,
+    double bottomSafe,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(
+            left: Responsive.responsiveValue(context, 22),
+            right: Responsive.responsiveValue(context, 16),
+            top: Responsive.responsiveValue(context, 8),
+            bottom: Responsive.responsiveValue(context, 5),
+          ),
+          child: const PageTitle(
+            title: '나의 복약 체크 리스트',
+            margin: EdgeInsets.zero,
+          ),
+        ),
+        SizedBox(height: Responsive.responsiveHeight(context, 12)),
+        Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(32),
+              topRight: Radius.circular(32),
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              Responsive.responsiveValue(context, 16),
+              Responsive.responsiveValue(context, 24),
+              Responsive.responsiveValue(context, 16),
+              Responsive.responsiveValue(context, 24) + bottomSafe,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                HomeDateHeader(
+                  selectedDate: _selectedDate,
+                  onPreviousDay: _canGoPreviousDay ? () => _changeDate(-1) : null,
+                  onNextDay: _canGoNextDay ? () => _changeDate(1) : null,
+                ),
+                SizedBox(height: Responsive.responsiveHeight(context, 8)),
+                if (_isLoading)
+                  Padding(
+                    padding: EdgeInsets.all(Responsive.responsiveValue(context, 24)),
+                    child: const Center(child: AppActivityIndicator()),
+                  )
+                else if (dayMeds.isEmpty)
+                  EmptyMedicineSection(onAdd: _goToRegister)
+                else ...[
+                  ...dayMeds.map((m) {
+                    final doseKey =
+                        '${m.scheduleId ?? m.id}_${yyyymmdd(_selectedDate)}_${m.time}';
+                    return MedicationDoseTile(
+                      medication: m,
+                      selectedDate: _selectedDate,
+                      doseKey: doseKey,
+                      isProcessing: _processingDoseKeys.contains(doseKey),
+                      onMarkCompleted: _markCompleted,
+                      onMarkUncompleted: _markUncompleted,
+                    );
+                  }),
+                  SizedBox(height: Responsive.responsiveHeight(context, 8)),
+                  AddMedicineTile(onAdd: _goToRegister),
+                  SizedBox(height: Responsive.responsiveHeight(context, 10)),
+                ],
+              ],
+            ),
+          ),
+        ),
+        Container(height: 120 + bottomSafe, color: Colors.white),
+      ],
+    );
+  }
+
+  /// Android: 기존 화면 그대로(Column + SafeArea + SingleChildScrollView).
+  /// 당겨서 새로고침만 [RefreshIndicator]로 추가한다(정지 상태 외형은
+  /// 그대로다 — Responsive.md.6 참고).
+  Widget _buildAndroid(
+    BuildContext context,
+    List<Medication> dayMeds,
+    double bottomSafe,
+  ) {
+    const skyBlue = Color(0xFFEBF0FF);
     return Scaffold(
       backgroundColor: skyBlue,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 상단: 흰 배경 (가족 게이지)
-          Container(
-            color: Colors.white,
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(height: Responsive.responsiveHeight(context, 8)),
-                  HomeFamilyGaugeRow(
-                    members: _familyMembers,
-                    onMemberTap: _openFamilyGroupForMember,
-                    onAddTap: _openCreateGroup,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // 하단: 하늘색 배경 + 복약 체크리스트
+          _buildFamilyGaugeSection(context, topSafeArea: true),
           Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.zero,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: Responsive.responsiveValue(context, 22),
-                      right: Responsive.responsiveValue(context, 16),
-                      top: Responsive.responsiveValue(context, 8),
-                      bottom: Responsive.responsiveValue(context, 5),
-                    ),
-                    child: const PageTitle(
-                      title: '나의 복약 체크 리스트',
-                      margin: EdgeInsets.zero,
-                    ),
-                  ),
-                  SizedBox(height: Responsive.responsiveHeight(context, 12)),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(32),
-                        topRight: Radius.circular(32),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        Responsive.responsiveValue(context, 16),
-                        Responsive.responsiveValue(context, 24),
-                        Responsive.responsiveValue(context, 16),
-                        Responsive.responsiveValue(context, 24) + bottomSafe,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          HomeDateHeader(
-                            selectedDate: _selectedDate,
-                            onPreviousDay: _canGoPreviousDay
-                                ? () => _changeDate(-1)
-                                : null,
-                            onNextDay: _canGoNextDay
-                                ? () => _changeDate(1)
-                                : null,
-                          ),
-                          SizedBox(
-                            height: Responsive.responsiveHeight(context, 8),
-                          ),
-                          if (_isLoading)
-                            Padding(
-                              padding: EdgeInsets.all(
-                                Responsive.responsiveValue(context, 24),
-                              ),
-                              child: const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            )
-                          else if (dayMeds.isEmpty)
-                            EmptyMedicineSection(onAdd: _goToRegister)
-                          else ...[
-                            ...dayMeds.map((m) {
-                              final doseKey =
-                                  '${m.scheduleId ?? m.id}_${yyyymmdd(_selectedDate)}_${m.time}';
-                              return MedicationDoseTile(
-                                medication: m,
-                                selectedDate: _selectedDate,
-                                doseKey: doseKey,
-                                isProcessing: _processingDoseKeys.contains(
-                                  doseKey,
-                                ),
-                                onMarkCompleted: _markCompleted,
-                                onMarkUncompleted: _markUncompleted,
-                              );
-                            }),
-                            SizedBox(
-                              height: Responsive.responsiveHeight(context, 8),
-                            ),
-                            AddMedicineTile(onAdd: _goToRegister),
-                            SizedBox(
-                              height: Responsive.responsiveHeight(context, 10),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  Container(
-                    height: 120 + bottomSafe,
-                    color: Colors.white,
-                  ),
-                ],
+            child: RefreshIndicator(
+              onRefresh: reload,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.zero,
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: _buildChecklistSection(context, dayMeds, bottomSafe),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// iOS: [AppSliverNavBar]로 선택한 날짜를 큰 제목으로 보여주고,
+  /// [CupertinoSliverRefreshControl]로 당겨서 새로고침을 지원한다(§6 W7).
+  Widget _buildIOS(
+    BuildContext context,
+    List<Medication> dayMeds,
+    double bottomSafe,
+  ) {
+    const skyBlue = Color(0xFFEBF0FF);
+    final now = DateTime.now();
+    final isToday =
+        _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
+    final title = isToday ? '오늘' : formatKoreanDate(_selectedDate);
+
+    return Scaffold(
+      backgroundColor: skyBlue,
+      body: CustomScrollView(
+        slivers: [
+          AppSliverNavBar(title: title, showBackButton: false),
+          CupertinoSliverRefreshControl(onRefresh: reload),
+          SliverToBoxAdapter(child: _buildFamilyGaugeSection(context, topSafeArea: false)),
+          SliverToBoxAdapter(child: _buildChecklistSection(context, dayMeds, bottomSafe)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Medication> dayMeds = [..._medications]
+      ..sort((a, b) => a.time.compareTo(b.time));
+    final double bottomSafe = MediaQuery.of(context).padding.bottom;
+
+    return isCupertino(context)
+        ? _buildIOS(context, dayMeds, bottomSafe)
+        : _buildAndroid(context, dayMeds, bottomSafe);
   }
 }

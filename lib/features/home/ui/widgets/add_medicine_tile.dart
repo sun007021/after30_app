@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:dotted_border/dotted_border.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/utils/responsive.dart';
 
 /// 약 추가 타일 위젯
@@ -10,21 +11,24 @@ class AddMedicineTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // iOS는 곡률 토큰(AppRadius.md)을, Android는 기존 값(12)을 그대로 쓴다.
+    final radius = isCupertino(context)
+        ? AppRadius.md
+        : Responsive.responsiveValue(context, 12);
+
     return Container(
       margin: EdgeInsets.symmetric(
         horizontal: Responsive.responsiveValue(context, 12),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(
-          Responsive.responsiveValue(context, 12),
-        ),
+        borderRadius: BorderRadius.circular(radius),
         onTap: onAdd,
         child: DottedBorder(
           color: const Color(0xFFBDBDBD),
           strokeWidth: 1.5,
           dashPattern: const [6, 4],
           borderType: BorderType.RRect,
-          radius: Radius.circular(Responsive.responsiveValue(context, 12)),
+          radius: Radius.circular(radius),
           child: Container(
             decoration: const BoxDecoration(color: Colors.white),
             padding: EdgeInsets.symmetric(
