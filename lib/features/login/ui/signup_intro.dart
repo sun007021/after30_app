@@ -5,7 +5,7 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
-import 'package:after30/features/home/ui/home.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
 import 'package:after30/utils/responsive.dart';
 
@@ -47,10 +47,9 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
       // 로그인 성공 시 FCM 토큰을 백엔드로 동기화
       await FcmService.syncTokenToBackend();
 
+      // 로그인 성공 후에는 앱 셸(홈 탭)로 진입한다(plan §6 W10 4/6항, D11).
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => const HomePage(checkPhoneRegistration: true),
-        ),
+        MaterialPageRoute(builder: (context) => const AppShell()),
       );
     } catch (e) {
       if (!mounted) return;

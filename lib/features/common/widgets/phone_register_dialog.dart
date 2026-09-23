@@ -1,17 +1,9 @@
 import 'package:after30/features/family/ui/widgets/family_phone_register_popup.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
-import 'package:after30/features/my/my_page.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:flutter/material.dart';
 
 class PhoneRegisterDialog {
-  static PageRouteBuilder<void> _noAnimRoute(Widget page) {
-    return PageRouteBuilder<void>(
-      pageBuilder: (_, __, ___) => page,
-      transitionDuration: Duration.zero,
-      reverseTransitionDuration: Duration.zero,
-    );
-  }
-
   static Future<void> show({
     required BuildContext context,
     required VoidCallback onCancel,
@@ -51,7 +43,8 @@ class PhoneRegisterDialog {
           context: context,
           onCancel: () {},
           onGoToMyPage: () {
-            Navigator.of(context).pushReplacement(_noAnimRoute(const MyPage()));
+            // 앱 셸 안에서는 마이페이지 탭으로 전환한다(plan §6 W10 5항).
+            AppShell.of(context).switchTab(AppShellTab.my);
           },
         );
       });

@@ -1,30 +1,17 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/app/app_routes.dart';
 import 'package:after30/core/design/app_theme.dart';
-import 'package:after30/core/design/gallery/design_gallery_page.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/features/login/ui/login.dart';
-import 'package:after30/features/login/ui/signup_page.dart';
-import 'package:after30/features/login/ui/signup_intro.dart';
-import 'package:after30/features/login/ui/terms_agreement_page.dart';
-import 'package:after30/features/login/ui/email_login_page.dart';
-import 'package:after30/features/home/ui/home.dart';
-import 'package:after30/features/login/data/backend_auth_service.dart';
-import 'package:after30/features/family/ui/family_page.dart';
-import 'package:flutter/widgets.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
-import 'package:after30/features/my/my_page.dart';
-import 'package:after30/features/my/my_info_page.dart';
-import 'package:after30/features/my/my_info_edit_page.dart';
-import 'package:after30/core/storage/user_store.dart';
+import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/core/storage/onboarding_store.dart';
-import 'package:after30/features/onboarding/ui/onboarding_page.dart';
+import 'package:after30/core/storage/user_store.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 
@@ -112,22 +99,14 @@ class _MyAppState extends State<MyApp> {
       supportedLocales: const [Locale('ko', 'KR')],
       locale: const Locale('ko', 'KR'),
       initialRoute: '/startup',
-      routes: {
-        '/startup': (context) => const StartupPage(),
-        '/onboarding': (context) => const OnboardingPage(),
-        '/login': (context) => const LoginPage(),
-        '/signup-intro': (context) => const SignupIntroPage(),
-        '/signup-terms': (context) => const TermsAgreementPage(),
-        '/email-login': (context) => const EmailLoginPage(),
-        '/signup': (context) => const SignupPage(),
-        '/home': (context) => const HomePage(),
-        '/family': (context) => const FamilyPage(),
-        '/fullscreen_alarm': (context) => const FullscreenAlarmPlaceholder(),
-        '/my': (context) => const MyPage(),
-        '/my-info': (context) => const MyInfoPage(),
-        '/my-info-edit': (context) => const MyInfoEditPage(),
-        if (kDebugMode) '/dev/design-gallery': (context) => const DesignGalleryPage(),
-      },
+      // 대부분의 라우트 이름 테이블은 lib/app/app_routes.dart에서
+      // 공유한다(PR #31 B1). AppShell 탭 Navigator의 onGenerateRoute도
+      // 같은 맵을 쓴다. `/startup`, `/fullscreen_alarm`은 이 파일이
+      // 소유한 위젯(W3/W4가 계속 작업 중)이라 여기서 직접 넘긴다(N3).
+      routes: buildAppRoutes(
+        startup: (context) => const StartupPage(),
+        fullscreenAlarm: (context) => const FullscreenAlarmPlaceholder(),
+      ),
     );
   }
 }
