@@ -157,6 +157,10 @@ class HomeContentState extends State<HomeContent> {
   /// 당겨서 새로고침 전용(리뷰 M2). 현재 선택된 날짜의 데이터만 조용히
   /// 다시 불러올 뿐, 날짜를 바꾸거나 자정 롤오버를 검사하지 않는다.
   Future<void> refresh() async {
+    // 사용자가 직접 새로고침했다는 것은 지금 날짜를 인지했다는 뜻이다.
+    // 이후 탭 재활성화에서 이미 지난 자정을 이유로 사용자가 고른 날짜를
+    // 되돌리지 않도록 기준 날짜를 갱신한다(재검토 m7').
+    _lastSeenDay = _dateOnly(_now());
     await Future.wait([
       _loadDosesForDate(_selectedDate, showSpinner: false),
       _loadFamilyDashboard(),
@@ -179,6 +183,9 @@ class HomeContentState extends State<HomeContent> {
   Future<void> _loadDosesForDate(DateTime date, {bool showSpinner = true}) async {
     final req = ++_loadSeq;
     if (showSpinner) {
+      // 복용 처리/등록 화면에서 돌아온 뒤 await 이후 호출되므로 그 사이
+      // 화면이 사라졌을 수 있다.
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
       });
@@ -231,8 +238,14 @@ class HomeContentState extends State<HomeContent> {
         candidateOnly.isAfter(_maxSelectableDate)) {
       return;
     }
+    // 사용자가 직접 날짜를 옮겼으므로 자정 판단 기준을 갱신한다(재검토 m7').
+    _lastSeenDay = _dateOnly(_now());
     setState(() {
       _selectedDate = candidate;
+      // 이전 날짜의 약 목록을 비운다. 새 날짜 조회가 실패하면 헤더는 새
+      // 날짜인데 목록은 이전 날짜로 남고, 그 상태에서 "복용 완료"를 누르면
+      // 다른 날짜로 기록된다(재검토 m3').
+      _medications = [];
     });
     _loadDosesForDate(_selectedDate);
   }
