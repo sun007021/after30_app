@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/home/ui/widgets/home_utils.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
@@ -82,10 +83,11 @@ class MedicationDoseTile extends StatelessWidget {
     if (!confirmed) return;
     final success = await onMarkCompleted(doseKey);
     if (success && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('오늘도 해내셨네요! 복약 완료로 기록했어요.'),
-        ),
+      AppHaptics.success(context);
+      AppToast.show(
+        context,
+        '오늘도 해내셨네요! 복약 완료로 기록했어요.',
+        type: AppToastType.success,
       );
     }
   }
@@ -115,24 +117,39 @@ class MedicationDoseTile extends StatelessWidget {
         selectedDate.month == nowDate.month &&
         selectedDate.day == nowDate.day;
 
+    final fillColor = isCompleted
+        ? lightBlueBg
+        : (isMissed ? lightRedBg : lightGreyBg);
+    final borderColor = isCompleted
+        ? primaryBlue
+        : (isMissed ? lightRedBorder : greyBorder);
+    final cupertino = isCupertino(context);
+
     return Container(
       margin: EdgeInsets.symmetric(
         vertical: Responsive.responsiveValue(context, 6),
       ),
-      decoration: BoxDecoration(
-        color: isCompleted
-            ? lightBlueBg
-            : (isMissed ? lightRedBg : lightGreyBg),
-        borderRadius: BorderRadius.circular(
-          Responsive.responsiveValue(context, 16),
-        ),
-        border: Border.all(
-          color: isCompleted
-              ? primaryBlue
-              : (isMissed ? lightRedBorder : greyBorder),
-          width: 1.5,
-        ),
-      ),
+      // iOS: 카드 곡률/그림자를 토큰(AppRadius.lg, 연속 곡률)으로 올리고
+      // 은은한 그림자를 더한다. Android는 기존 값(16, 사각 곡률, 그림자
+      // 없음)을 그대로 유지한다(§3 원칙 2).
+      decoration: cupertino
+          ? ShapeDecoration(
+              color: fillColor,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                side: BorderSide(color: borderColor, width: 1.5),
+              ),
+              shadows: const [
+                BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 4)),
+              ],
+            )
+          : BoxDecoration(
+              color: fillColor,
+              borderRadius: BorderRadius.circular(
+                Responsive.responsiveValue(context, 16),
+              ),
+              border: Border.all(color: borderColor, width: 1.5),
+            ),
       child: Padding(
         padding: Responsive.responsivePaddingLTRB(context, 20, 20, 20, 12),
         child: Column(
@@ -323,20 +340,7 @@ class MedicationDoseTile extends StatelessWidget {
                         ),
                       ),
                       child: isProcessing
-                          ? SizedBox(
-                              width: Responsive.responsiveIconSize(
-                                context,
-                                16,
-                              ),
-                              height: Responsive.responsiveIconSize(
-                                context,
-                                16,
-                              ),
-                              child: const CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
+                          ? const AppActivityIndicator(color: Colors.white, radius: 8)
                           : Text(
                               '복용 완료',
                               style: TextStyle(
