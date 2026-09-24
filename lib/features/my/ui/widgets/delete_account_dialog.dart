@@ -78,6 +78,7 @@ class DeleteAccountDialog {
       hasKakaoSession = false;
     }
 
+    if (!context.mounted) return;
     if (hasKakaoSession) {
       await _showKakaoDeleteDialog(context);
     } else {
