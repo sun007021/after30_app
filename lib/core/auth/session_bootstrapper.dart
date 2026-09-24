@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:after30/core/auth/alarm_namespace_migrator.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
@@ -12,9 +14,6 @@ import 'package:after30/services/notifications/fcm_service.dart';
 /// `email_login_page.dart`, `signup_intro.dart`, `main.dart`(StartupPage)에
 /// 각각 조금씩 다르게(그리고 제공자마다 다른 값을 "현재 사용자 ID"로
 /// 취급하며) 중복돼 있었다.
-///
-/// 순서가 중요하다: 사용자 ID를 새 값으로 덮어쓰기 *전에* 이전 ID를 먼저
-/// 읽어야 [AlarmNamespaceMigrator]가 옮길 대상을 알 수 있다.
 class SessionBootstrapper {
   SessionBootstrapper._();
 
@@ -28,7 +27,30 @@ class SessionBootstrapper {
     final result = await providerClient.signIn();
     if (result == null) return; // 사용자가 로그인을 취소함
 
-    await _afterAuthSuccess(fallbackUserId: result.fallbackUserId);
+    final resolved = await CurrentUserResolver.resolveUserId();
+    final newUserId = resolved?.toString() ?? result.fallbackUserId;
+
+    if (newUserId != null) {
+      // 리뷰 M2/M3: 마이그레이션 소스는 UserStore(로그아웃 시 비워지고,
+      // 다른 계정이 남겨둔 값일 수도 있다)가 아니라 "이번에 로그인한 계정
+      // 자신의" 예전 식별자 후보([AuthSignInResult.legacyUserIds])여야
+      // 한다. 후보가 여러 개일 수 있어(현재는 provider당 1개) 모두
+      // 시도한다 — 이미 다른 ID로 옮겨졌거나 데이터가 없는 후보는
+      // [AlarmNamespaceMigrator]가 스스로 건너뛴다.
+      for (final legacyId in result.legacyUserIds) {
+        await AlarmNamespaceMigrator.migrateIfNeeded(
+          oldUserId: legacyId,
+          newUserId: newUserId,
+        );
+      }
+      await UserStore.setCurrentUserId(newUserId);
+      AlarmService.setCurrentUserId(newUserId);
+    }
+
+    // 사용자 네임스페이스가 정리된 뒤 저장된 활성 알람을 기기에 재예약한다.
+    await AlarmService().rescheduleAllActiveFromStorage();
+    // 로그인 성공 시 FCM 토큰을 백엔드로 동기화한다(홈 진입 전에 완료).
+    await FcmService.syncTokenToBackend();
 
     if (!context.mounted) return;
     _enterShell(context);
@@ -40,30 +62,33 @@ class SessionBootstrapper {
   static Future<bool> restore() async {
     final refreshed = await BackendAuthService().refreshSession();
     if (!refreshed) return false;
-    await _afterAuthSuccess();
-    return true;
-  }
 
-  static Future<void> _afterAuthSuccess({String? fallbackUserId}) async {
-    // 마이그레이션 대상을 정하려면 "새 ID로 덮어쓰기 전" 이전 ID가 필요하다.
+    // 세션 복원은 로그아웃 없이 이어지는 "같은 세션"이므로(리뷰 M2 설명과
+    // 대비되는 지점), UserStore에 남은 값을 그대로 이전 ID로 써도 안전하다
+    // — completeLogin처럼 다른 계정의 값을 잘못 물려받을 위험이 없다.
     final oldUserId = await UserStore.getCurrentUserId();
-
     final resolved = await CurrentUserResolver.resolveUserId();
-    final newUserId = resolved?.toString() ?? fallbackUserId;
+    // 리뷰 M5: JWT 파싱도 실패하고 폴백도 없으면 최소한 oldUserId라도 써서
+    // AlarmService 네임스페이스가 null로 남아 알람이 전혀 재예약되지 않는
+    // 상황을 막는다.
+    final newUserId = resolved?.toString() ?? oldUserId;
 
     if (newUserId != null) {
-      await AlarmNamespaceMigrator.migrateIfNeeded(
-        oldUserId: oldUserId,
-        newUserId: newUserId,
-      );
+      if (oldUserId != null) {
+        await AlarmNamespaceMigrator.migrateIfNeeded(
+          oldUserId: oldUserId,
+          newUserId: newUserId,
+        );
+      }
       await UserStore.setCurrentUserId(newUserId);
       AlarmService.setCurrentUserId(newUserId);
     }
 
-    // 사용자 네임스페이스가 정리된 뒤 저장된 활성 알람을 기기에 재예약한다.
     await AlarmService().rescheduleAllActiveFromStorage();
-    // 로그인/세션 복원 성공 시 FCM 토큰을 백엔드로 동기화한다.
-    await FcmService.syncTokenToBackend();
+    // 리뷰 M6: 스플래시 화면이 네트워크 응답을 기다리지 않게 한다(로그인
+    // 흐름과 달리 세션 복원은 사용자를 최대한 빨리 홈으로 보내야 한다).
+    unawaited(FcmService.syncTokenToBackend());
+    return true;
   }
 
   static void _enterShell(BuildContext context) {

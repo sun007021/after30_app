@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 로그인 사용자 ID가 바뀌었을 때 로컬 알람 저장소(SharedPreferences)의
@@ -7,8 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 값을 "현재 사용자 ID"로 저장했다 — 카카오 로그인은 카카오 회원 ID,
 /// 이메일 로그인은 JWT에서 뽑은 백엔드 ID(실패 시 이메일 문자열)를
 /// 저장했다. `AlarmService`는 이 값으로 `medicine_alarms_<id>`,
-/// `notification_ids_<id>_<alarmId>` 키를 네임스페이스하므로, 같은
-/// 사용자가 로그인 방식에 따라 다른 키 아래에 알람이 흩어질 수 있었다.
+/// `notification_ids_<id>_<alarmId>`, `inactive_since_<id>_<alarmId>` 키를
+/// 네임스페이스하므로, 같은 사용자가 로그인 방식에 따라 다른 키 아래에
+/// 알람이 흩어질 수 있었다.
 ///
 /// 이제 모든 로그인 경로가 백엔드 사용자 ID로 통일되므로([SessionBootstrapper]
 /// 참고), 기존에 다른 ID로 저장돼 있던 사용자가 새 ID로 처음 로그인할 때
@@ -27,11 +30,26 @@ class AlarmNamespaceMigrator {
   static String _notificationIdsPrefixFor(String userId) =>
       'notification_ids_${userId}_';
 
-  /// [oldUserId]에 저장된 알람/알림 ID 데이터를 [newUserId] 키로 옮긴다.
+  static String _inactiveSincePrefixFor(String userId) =>
+      'inactive_since_${userId}_';
+
+  /// 리뷰 M3: 한 번 다른 ID로 옮겨진(또는 옮길 데이터가 없다고 확인된)
+  /// 예전 ID는 다시 마이그레이션 소스로 쓰지 않는다. 이 플래그가 없으면,
+  /// 예를 들어 부모 폰에서 자녀 계정이 로그인해 있다가 부모가 다시
+  /// 로그인했을 때 서로 다른 두 백엔드 계정 사이에서 데이터가 잘못
+  /// 오가는 경로가 생길 수 있다.
+  static String _claimedFlagKeyFor(String legacyUserId) =>
+      'user_id_unified_v1_$legacyUserId';
+
+  /// [oldUserId]에 저장된 알람/알림 ID/비활성 기록을 [newUserId] 키로
+  /// 옮긴다(둘 다에 데이터가 있으면 알람 ID 기준으로 병합한다).
   ///
   /// - [oldUserId]가 null이거나 [newUserId]와 같으면(최초 로그인이거나 이미
   ///   같은 ID로 저장돼 있으면) 아무 것도 하지 않는다(멱등).
-  /// - 옮길 데이터가 없으면(알람을 등록한 적 없는 사용자) 조용히 끝난다.
+  /// - [oldUserId]가 이미 다른 ID로 마이그레이션된 적이 있으면(M3) 아무
+  ///   것도 하지 않는다.
+  /// - 옮길 데이터가 없으면(알람을 등록한 적 없는 사용자) 플래그만 남기고
+  ///   조용히 끝난다.
   static Future<void> migrateIfNeeded({
     required String? oldUserId,
     required String newUserId,
@@ -40,33 +58,115 @@ class AlarmNamespaceMigrator {
 
     final prefs = await SharedPreferences.getInstance();
 
-    // 1) medicine_alarms_<old> -> medicine_alarms_<new>
+    final claimedFlagKey = _claimedFlagKeyFor(oldUserId);
+    if (prefs.getBool(claimedFlagKey) ?? false) return;
+
+    // 1) medicine_alarms_<old> -> medicine_alarms_<new> (알람 id 기준 병합)
     final oldAlarmsKey = _alarmsKeyFor(oldUserId);
     final newAlarmsKey = _alarmsKeyFor(newUserId);
     final oldAlarmsJson = prefs.getString(oldAlarmsKey);
     if (oldAlarmsJson != null) {
-      // 새 키에 이미 데이터가 있으면(드문 경우, 예: 동시 로그인) 덮어쓰지
-      // 않고 이전 키만 정리한다.
-      if (prefs.getString(newAlarmsKey) == null) {
-        await prefs.setString(newAlarmsKey, oldAlarmsJson);
+      final newAlarmsJson = prefs.getString(newAlarmsKey);
+      final merged = _mergeAlarmListsJson(newAlarmsJson, oldAlarmsJson);
+      if (merged != null) {
+        await prefs.setString(newAlarmsKey, merged);
       }
       await prefs.remove(oldAlarmsKey);
     }
 
     // 2) notification_ids_<old>_<alarmId> -> notification_ids_<new>_<alarmId>
-    final oldPrefix = _notificationIdsPrefixFor(oldUserId);
-    final newPrefix = _notificationIdsPrefixFor(newUserId);
-    final oldNotificationKeys = prefs
+    await _moveKeyedByAlarmIdStringList(
+      prefs: prefs,
+      oldPrefix: _notificationIdsPrefixFor(oldUserId),
+      newPrefix: _notificationIdsPrefixFor(newUserId),
+    );
+
+    // 3) inactive_since_<old>_<alarmId> -> inactive_since_<new>_<alarmId>
+    await _moveKeyedByAlarmIdString(
+      prefs: prefs,
+      oldPrefix: _inactiveSincePrefixFor(oldUserId),
+      newPrefix: _inactiveSincePrefixFor(newUserId),
+    );
+
+    await prefs.setBool(claimedFlagKey, true);
+  }
+
+  /// 알람 목록 두 개(JSON 배열 문자열)를 알람 `id` 기준으로 병합한다.
+  /// 같은 id가 양쪽에 있으면(드문 경우) 새 계정 쪽 값을 우선한다. 병합할
+  /// 게 없으면(둘 다 비었거나 파싱 실패) null을 반환해 호출부가 기존 값을
+  /// 그대로 두게 한다.
+  static String? _mergeAlarmListsJson(String? newJson, String oldJson) {
+    try {
+      final byId = <String, Map<String, dynamic>>{};
+
+      final oldList = (json.decode(oldJson) as List).cast<Map<String, dynamic>>();
+      for (final alarm in oldList) {
+        final id = alarm['id']?.toString();
+        if (id != null) byId[id] = alarm;
+      }
+
+      if (newJson != null) {
+        final newList = (json.decode(newJson) as List).cast<Map<String, dynamic>>();
+        for (final alarm in newList) {
+          // 새 계정에 이미 있는 항목이 우선한다(같은 id가 있다면 최신 데이터).
+          final id = alarm['id']?.toString();
+          if (id != null) byId[id] = alarm;
+        }
+      }
+
+      return json.encode(byId.values.toList());
+    } catch (_) {
+      // 파싱에 실패하면 손대지 않는다 — 호출부가 기존 값을 그대로 둔다.
+      return newJson;
+    }
+  }
+
+  /// `<prefix><alarmId>` 형태의 문자열 리스트 키들을 옮긴다. 새 쪽에 이미
+  /// 값이 있으면(같은 alarmId) 새 값을 유지하고 이전 값은 버린다 — 알람
+  /// id는 사실상 유일하므로 충돌은 "같은 알람이 이미 처리됨"을 뜻한다.
+  static Future<void> _moveKeyedByAlarmIdStringList({
+    required SharedPreferences prefs,
+    required String oldPrefix,
+    required String newPrefix,
+  }) async {
+    final oldKeys = prefs
         .getKeys()
         .where((key) => key.startsWith(oldPrefix))
         .toList(growable: false);
 
-    for (final oldKey in oldNotificationKeys) {
+    for (final oldKey in oldKeys) {
       final alarmId = oldKey.substring(oldPrefix.length);
       final newKey = '$newPrefix$alarmId';
-      final ids = prefs.getStringList(oldKey);
-      if (ids != null && prefs.getStringList(newKey) == null) {
-        await prefs.setStringList(newKey, ids);
+      if (prefs.getStringList(newKey) == null) {
+        final ids = prefs.getStringList(oldKey);
+        if (ids != null) {
+          await prefs.setStringList(newKey, ids);
+        }
+      }
+      await prefs.remove(oldKey);
+    }
+  }
+
+  /// [_moveKeyedByAlarmIdStringList]와 같지만 값이 단일 문자열인 키(예:
+  /// `inactive_since_<id>_<alarmId>`)용이다.
+  static Future<void> _moveKeyedByAlarmIdString({
+    required SharedPreferences prefs,
+    required String oldPrefix,
+    required String newPrefix,
+  }) async {
+    final oldKeys = prefs
+        .getKeys()
+        .where((key) => key.startsWith(oldPrefix))
+        .toList(growable: false);
+
+    for (final oldKey in oldKeys) {
+      final alarmId = oldKey.substring(oldPrefix.length);
+      final newKey = '$newPrefix$alarmId';
+      if (prefs.getString(newKey) == null) {
+        final value = prefs.getString(oldKey);
+        if (value != null) {
+          await prefs.setString(newKey, value);
+        }
       }
       await prefs.remove(oldKey);
     }

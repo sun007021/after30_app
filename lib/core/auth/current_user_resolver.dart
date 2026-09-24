@@ -29,6 +29,15 @@ class CurrentUserResolver {
     return null;
   }
 
+  /// 현재 사용자의 백엔드 ID를 알아낸다(읽기 전용, 리뷰 M4).
+  ///
+  /// 예전에는 이 메서드가 알아낸 값을 곧바로 [UserStore]에 써 버렸다. 이
+  /// 메서드는 `family_group_manage_page.dart`처럼 로그인 흐름과 무관한
+  /// 화면에서도 호출되는데, 그때 이미 값을 써 버리면 이후 `SessionBootstrapper`
+  /// 가 "이전 ID"를 읽을 때 이미 새 ID로 바뀐 뒤라 마이그레이션이 필요
+  /// 없다고 오판하고 영구히 건너뛴다(예: 알림으로 콜드 스타트한 뒤 가족 →
+  /// 그룹 관리 화면을 열었을 때). 이제 이 메서드는 값을 읽기만 하고,
+  /// [UserStore]에 쓰는 것은 오직 `SessionBootstrapper`만 한다.
   static Future<int?> resolveUserId({List<GroupMember>? members}) async {
     // JWT를 최우선으로 신뢰한다. 과거에는 저장된 값(카카오 로그인 시
     // 저장된 카카오 회원 ID 등)을 먼저 신뢰했는데, 제공자마다 저장하는
@@ -38,10 +47,7 @@ class CurrentUserResolver {
     final token = await TokenStore.getAccessToken();
     if (token != null) {
       final fromJwt = parseUserIdFromJwt(token);
-      if (fromJwt != null) {
-        await UserStore.setCurrentUserId(fromJwt.toString());
-        return fromJwt;
-      }
+      if (fromJwt != null) return fromJwt;
     }
 
     final stored = await UserStore.getCurrentUserId();
@@ -60,13 +66,11 @@ class CurrentUserResolver {
               memberName != null &&
               memberName.isNotEmpty &&
               profileName == memberName) {
-            await UserStore.setCurrentUserId(member.userId.toString());
             return member.userId;
           }
         }
 
         if (members.length == 1) {
-          await UserStore.setCurrentUserId(members.first.userId.toString());
           return members.first.userId;
         }
       } catch (_) {}

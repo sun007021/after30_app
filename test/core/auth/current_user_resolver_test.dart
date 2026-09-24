@@ -9,7 +9,7 @@ import 'package:after30/core/storage/token_store.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/family/models/group_member.dart';
 
-import '../storage/fake_secure_storage.dart';
+import '../../support/fake_secure_storage.dart';
 
 /// [parseUserIdFromJwt]는 페이로드(두 번째 세그먼트)만 읽으므로, 헤더/서명은
 /// 아무 문자열이나 넣어도 된다.
@@ -90,8 +90,28 @@ void main() {
       final resolved = await CurrentUserResolver.resolveUserId();
 
       expect(resolved, 42);
-      // 부수효과로 UserStore도 새 값으로 갱신돼야 한다.
-      expect(await UserStore.getCurrentUserId(), '42');
+    });
+
+    test('리뷰 M4: 읽기 전용이다 — UserStore를 스스로 덮어쓰지 않는다', () async {
+      // 예전에는 이 메서드가 알아낸 값을 곧바로 UserStore에 썼다. 그러면
+      // (예: 알림으로 콜드 스타트한 뒤 로그인 흐름 밖에서 이 메서드가 먼저
+      // 호출되는 가족 화면 등에서) SessionBootstrapper가 나중에 "이전 ID"를
+      // 읽을 때 이미 새 값으로 바뀐 뒤라 마이그레이션이 필요 없다고 오판해
+      // 영구히 건너뛰게 된다.
+      await UserStore.setCurrentUserId('1234567');
+      await TokenStore.saveTokens(
+        accessToken: _fakeJwt({'sub': 42}),
+        refreshToken: 'r',
+        accessExpiresIn: 3600,
+        refreshExpiresIn: 86400,
+      );
+
+      final resolved = await CurrentUserResolver.resolveUserId();
+
+      expect(resolved, 42);
+      // UserStore는 그대로 예전 값이어야 한다 — 쓰기는 SessionBootstrapper만
+      // 한다.
+      expect(await UserStore.getCurrentUserId(), '1234567');
     });
 
     test('토큰이 없으면 저장된 값으로 폴백한다', () async {

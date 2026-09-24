@@ -28,10 +28,11 @@ class DeleteAccountDialog {
     try {
       final profile = await MyProfileService().getMyProfile();
       provider = profile.provider;
-    } catch (e) {
-      if (!context.mounted) return;
-      _showErrorDialog(context, '계정 정보를 불러오지 못했습니다: $e');
-      return;
+    } catch (_) {
+      // 리뷰: 프로필 조회 실패로 탈퇴 자체를 막지 않는다(App Store
+      // 5.1.1(v) 위험) — 아래 default 분기가 예전 방식(카카오 세션 유무)
+      // 으로 판단하게 둔다.
+      provider = null;
     }
 
     if (!context.mounted) return;
@@ -50,10 +51,30 @@ class DeleteAccountDialog {
         await _showUnsupportedProviderDialog(context, 'Apple');
         break;
       default:
-        await _showUnsupportedProviderDialog(
-          context,
-          MyProfile.providerDisplayNameFor(provider),
-        );
+        // provider를 못 받았거나(네트워크 실패 등) 인식할 수 없는 값이면
+        // 예전 방식대로 판단한다: 카카오 세션이 있으면 카카오 흐름, 없으면
+        // 이메일 흐름. 탈퇴를 막는 것보다 안전하다(App Store 5.1.1(v)).
+        await _showLegacyDetectedDeleteDialog(context);
+    }
+  }
+
+  /// provider를 알 수 없을 때(네트워크 실패, 알 수 없는 값)의 폴백. W3a
+  /// 이전 방식 그대로 카카오 세션 존재 여부로 판단한다.
+  static Future<void> _showLegacyDetectedDeleteDialog(
+    BuildContext context,
+  ) async {
+    bool hasKakaoSession = false;
+    try {
+      await UserApi.instance.accessTokenInfo();
+      hasKakaoSession = true;
+    } catch (_) {
+      hasKakaoSession = false;
+    }
+
+    if (hasKakaoSession) {
+      await _showKakaoDeleteDialog(context);
+    } else {
+      await _showEmailDeleteDialog(context);
     }
   }
 

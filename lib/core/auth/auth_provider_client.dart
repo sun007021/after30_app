@@ -25,7 +25,11 @@ abstract class AuthProviderClient {
 
 /// 로그인 성공 결과.
 class AuthSignInResult {
-  const AuthSignInResult({required this.tokens, this.fallbackUserId});
+  const AuthSignInResult({
+    required this.tokens,
+    this.fallbackUserId,
+    this.legacyUserIds = const [],
+  });
 
   /// 백엔드가 내려준 토큰 페이로드.
   final KakaoLoginResponse tokens;
@@ -33,6 +37,19 @@ class AuthSignInResult {
   /// JWT에서 사용자 ID를 파싱하지 못했을 때 대신 쓸 식별자(이메일 로그인의
   /// 경우 이메일 주소). 대부분의 경우 JWT 파싱이 성공하므로 쓰이지 않는다.
   final String? fallbackUserId;
+
+  /// 예전 버전이 "현재 사용자 ID"로 저장했던, **이번에 로그인한 계정 자신의**
+  /// 식별자 후보들(리뷰 M2/M3). `SessionBootstrapper`가 이 값들에서만
+  /// 로컬 알람 데이터를 새 백엔드 ID로 옮긴다.
+  ///
+  /// `UserStore`에 남아있는 "이전 사용자 ID"를 그대로 마이그레이션 소스로
+  /// 쓰면 안 된다 — 로그아웃 시 `UserStore`는 비워지므로 재로그인 시
+  /// 이전 값을 잃어버리고(알람이 옛 네임스페이스에 갇힘), 반대로 다른
+  /// 계정이 로그아웃하지 않은 채 남겨둔 값이 있으면(예: 부모 폰에 자녀가
+  /// 로그인) 그 계정의 알람을 엉뚱하게 새 계정으로 옮겨버릴 수 있다. 이
+  /// 후보 목록은 오직 지금 로그인에 성공한 계정 자신의 예전 식별자만
+  /// 담는다.
+  final List<String> legacyUserIds;
 }
 
 /// 카카오 로그인 클라이언트. 카카오톡 앱이 설치돼 있으면 앱 로그인을 먼저
@@ -62,7 +79,21 @@ class KakaoAuthProviderClient implements AuthProviderClient {
     final tokens = await BackendAuthService().loginWithKakaoAccessToken(
       kakaoToken.accessToken,
     );
-    return AuthSignInResult(tokens: tokens);
+
+    // 예전 버전은 카카오 회원 ID를 "현재 사용자 ID"로 저장했다(plan §1.5).
+    // 그 시절 데이터를 옮기기 위한 마이그레이션 후보로만 쓴다 — 최선을
+    // 다해 조회하고, 실패해도 로그인 자체는 계속 진행한다.
+    String? kakaoUserId;
+    try {
+      final me = await UserApi.instance.me();
+      kakaoUserId = me.id.toString();
+    } catch (_) {}
+
+    return AuthSignInResult(
+      tokens: tokens,
+      fallbackUserId: kakaoUserId,
+      legacyUserIds: kakaoUserId != null ? [kakaoUserId] : const [],
+    );
   }
 }
 
@@ -83,7 +114,12 @@ class EmailAuthProviderClient implements AuthProviderClient {
       password: password,
     );
     // JWT 파싱이 실패하는 드문 경우를 대비해 이메일을 대체 식별자로 둔다
-    // (기존 email_login_page.dart 동작 유지).
-    return AuthSignInResult(tokens: tokens, fallbackUserId: email);
+    // (기존 email_login_page.dart 동작 유지). 예전 버전은 이메일 자체를
+    // "현재 사용자 ID"로 저장했으므로 마이그레이션 후보이기도 하다.
+    return AuthSignInResult(
+      tokens: tokens,
+      fallbackUserId: email,
+      legacyUserIds: [email],
+    );
   }
 }

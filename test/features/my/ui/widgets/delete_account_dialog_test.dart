@@ -9,7 +9,7 @@ import 'package:after30/core/network/api_client.dart';
 import 'package:after30/core/storage/token_store.dart';
 import 'package:after30/features/my/ui/widgets/delete_account_dialog.dart';
 
-import '../../../../core/storage/fake_secure_storage.dart';
+import '../../../../support/fake_secure_storage.dart';
 
 /// `DeleteAccountDialog`는 카카오 세션 유무가 아니라 `/users/me`의
 /// `provider`로 탈퇴 방식을 분기한다(plan §6 W3a 3항). 이 테스트는 그

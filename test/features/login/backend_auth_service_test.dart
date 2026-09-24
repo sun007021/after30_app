@@ -5,7 +5,7 @@ import 'package:after30/core/network/api_client.dart';
 import 'package:after30/core/storage/token_store.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 
-import '../../core/storage/fake_secure_storage.dart';
+import '../../support/fake_secure_storage.dart';
 
 /// 백엔드 로그인/가입/리프레시 API를 dio 인터셉터로 목킹해 실제 네트워크
 /// 없이 검증한다(plan §6 W3a 완료 조건).
