@@ -28,10 +28,18 @@ AlarmKitAuthorizationStatus _parseAuthStatus(Object? raw) {
 /// 없다(plan §7) — 그래서 [pendingBudget]은 항상
 /// [ReminderBudgetStatus.unlimited]를 반환한다.
 class AlarmKitReminderScheduler implements ReminderScheduler {
-  AlarmKitReminderScheduler({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('after30/alarmkit');
+  AlarmKitReminderScheduler({
+    MethodChannel? channel,
+    Future<bool> Function()? deviceNotificationsAllowed,
+  }) : _channel = channel ?? const MethodChannel('after30/alarmkit'),
+       _deviceNotificationsAllowed = deviceNotificationsAllowed ?? (() async => true);
 
   final MethodChannel _channel;
+
+  /// 사용자가 "디바이스 알람"을 꺼뒀는지(리뷰 M5 — AlarmKit도 로컬 알림과
+  /// 동일하게 이 설정을 존중해야 한다. 그렇지 않으면 다음 앱 포그라운드
+  /// 진입 때 재등록돼 버린다).
+  final Future<bool> Function() _deviceNotificationsAllowed;
 
   Future<AlarmKitAuthorizationStatus> authorizationStatus() async {
     try {
@@ -54,6 +62,11 @@ class AlarmKitReminderScheduler implements ReminderScheduler {
   @override
   Future<bool> schedule(MedicineAlarm alarm) async {
     if (!alarm.isActive || alarm.times.isEmpty || alarm.days.isEmpty) {
+      await cancel(alarm.id);
+      return true;
+    }
+    final allowed = await _deviceNotificationsAllowed();
+    if (!allowed) {
       await cancel(alarm.id);
       return true;
     }
@@ -123,15 +136,29 @@ class AlarmKitReminderScheduler implements ReminderScheduler {
     }
   }
 
-  /// 백그라운드 "복용 완료" 인텐트가 기록해 둔 완료 항목을 모두 꺼내온다
-  /// (호출과 동시에 네이티브 쪽 저장소를 비운다).
-  Future<List<Map<String, Object?>>> drainCompletions() async {
+  /// 백그라운드 "복용 완료" 인텐트가 기록해 둔 완료 항목을 읽기만 한다
+  /// (지우지 않음 — 리뷰 M8). 각 항목을 처리한 뒤 성공한 것만
+  /// [ackCompletion]으로 지운다.
+  Future<List<Map<String, Object?>>> peekCompletions() async {
     try {
-      final raw = await _channel.invokeListMethod<Map<Object?, Object?>>('drainCompletions');
+      final raw = await _channel.invokeListMethod<Map<Object?, Object?>>('peekCompletions');
       if (raw == null) return const [];
       return raw.map((m) => m.cast<String, Object?>()).toList();
     } catch (_) {
       return const [];
+    }
+  }
+
+  /// [peekCompletions]로 읽은 완료 항목 중 서버 반영에 성공한 것만
+  /// 지운다. 실패하면(오프라인 등) 다음 폴링에서 다시 시도할 수 있도록
+  /// 기록을 남겨 둔다(리뷰 M8).
+  Future<bool> ackCompletion(String id) async {
+    try {
+      final ok = await _channel.invokeMethod<bool>('ackCompletion', {'id': id});
+      return ok ?? false;
+    } catch (e) {
+      print('AlarmKit 완료 기록 확인 실패: $e');
+      return false;
     }
   }
 

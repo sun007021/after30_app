@@ -33,16 +33,27 @@ class AwesomeReminderScheduler implements ReminderScheduler {
 
   /// iOS 64개 예산을 초과해 일부 알람이 잘렸을 때 1회성으로 알리는 콜백
   /// (plan §6 W4 2항 "안내 토스트"). UI(W5)가 `AlarmService`를 통해
-  /// 구독해 `AppToast`로 보여준다.
+  /// 구독해 `AppToast`로 보여준다. 예산 초과 "상태가 바뀔 때"만
+  /// 호출한다(리뷰 M4 — 매 포그라운드 복귀마다 반복 알리지 않는다).
   final void Function(String message)? onBudgetWarning;
 
   static const String actionKeyMarkTaken = 'SNOOZE_10';
   static const String actionKeyCheckOthers = 'CHECK_OTHERS';
   static const String _nextNotificationIdKey = 'alarm_next_notification_id';
   static const int _maxNotificationId = 2000000; // 32비트 정수 범위 내 안전 상한
+  static const String _medicineAlarmsChannelKey = 'medicine_alarms';
 
   int _nextNotificationId = 1;
-  bool _idCounterRestored = false;
+
+  /// 카운터 복원 작업 자체를 메모이즈한다(단순 bool 플래그가 아니라
+  /// Future를 캐싱) — bool 플래그는 await 이전에 true로 설정되면 동시에
+  /// 들어온 두 번째 호출이 복원이 끝나기 전에 카운터를 읽어 같은 값을
+  /// 할당해 버릴 수 있다(리뷰 M3 "counter restore" 경쟁 상태).
+  Future<void>? _restoreFuture;
+
+  /// iOS에서 마지막으로 계산한 예산 초과 여부. 이 값이 바뀔 때만
+  /// [onBudgetWarning]을 호출한다(리뷰 M4).
+  bool _lastIosOverBudget = false;
 
   bool get _isIos => Platform.isIOS;
 
@@ -81,6 +92,11 @@ class AwesomeReminderScheduler implements ReminderScheduler {
   /// 감싼 것). 생성 이후에 지정할 수 있게 세터로 둔다(순환 의존 방지).
   Future<List<MedicineAlarm>> Function()? activeAlarmsProvider;
 
+  /// 알람 하나를 완전히 제거한다(표시된 알림 dismiss + 예약 취소 +
+  /// 저장된 id 목록도 비움). 삭제/비활성화/전략 전환처럼 "이 알람은 이제
+  /// 정말로 없다"는 경우에만 쓴다. 내부 재스케줄링에서 "다시 등록할
+  /// 예정이니 id는 재사용하겠다"는 경우에는 [_cancelSchedulesOnly]를
+  /// 대신 쓴다(리뷰 M1).
   @override
   Future<void> cancel(String alarmId) async {
     try {
@@ -137,9 +153,11 @@ class AwesomeReminderScheduler implements ReminderScheduler {
   // 알림 ID 카운터(awesome_notifications 정수 ID 발급/영속화)
   // ---------------------------------------------------------------------
 
-  Future<void> _ensureIdCounterRestored() async {
-    if (_idCounterRestored) return;
-    _idCounterRestored = true;
+  Future<void> _ensureIdCounterRestored() {
+    return _restoreFuture ??= _restoreIdCounter();
+  }
+
+  Future<void> _restoreIdCounter() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getInt(_nextNotificationIdKey);
@@ -206,12 +224,30 @@ class AwesomeReminderScheduler implements ReminderScheduler {
     );
   }
 
+  /// 예약만 취소하고(표시된 알림은 건드리지 않고) 저장된 id 목록은
+  /// 그대로 둔다 — 재스케줄링 직전에 "곧 같은 id로 다시 만들 것"이라는
+  /// 전제로 쓴다(리뷰 M1). `dismiss`가 아니라 `cancelSchedule`만 호출하므로
+  /// 잠금화면/알림 센터에 이미 전달된 알림은 지워지지 않는다(M4).
+  Future<void> _cancelSchedulesOnly(List<int> ids) async {
+    for (final id in ids) {
+      try {
+        await AwesomeNotifications().cancelSchedule(id);
+      } catch (e) {
+        print('알림 예약 취소 실패(id=$id): $e');
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------
-  // Android: 기존 로직 그대로(동작 변화 없음)
+  // Android: 기존 로직 그대로(동작 변화 없음) + id 재사용 버그 수정(M1)
   // ---------------------------------------------------------------------
 
   Future<void> _scheduleAndroid(MedicineAlarm alarm) async {
-    await cancel(alarm.id);
+    // 기존 id를 재사용해야 하므로 취소 "전에" 먼저 읽는다(리뷰 M1 —
+    // 이전에는 `cancel()`이 저장된 목록을 `[]`로 지운 "다음에" 읽어서
+    // 항상 새 id가 발급되고 있었다).
+    final existingIds = await _existingIdsFor(alarm.id);
+    await _cancelSchedulesOnly(existingIds);
 
     final allowed = await deviceNotificationsAllowed();
     if (!allowed) {
@@ -220,7 +256,6 @@ class AwesomeReminderScheduler implements ReminderScheduler {
       return;
     }
 
-    final existingIds = await _existingIdsFor(alarm.id);
     final notificationIds = <int>[];
     var idIndex = 0;
 
@@ -255,20 +290,48 @@ class AwesomeReminderScheduler implements ReminderScheduler {
   Future<void> _rescheduleIos(List<MedicineAlarm> allAlarms) async {
     final active = allAlarms.where((a) => a.isActive).toList();
 
-    // 이전에 등록했던 모든 예약을 정리하고 처음부터 다시 계산한다(예산은
-    // 알람 전체에 걸쳐 있어 알람 하나만 부분적으로 갱신할 수 없다).
-    for (final alarm in allAlarms) {
-      await cancel(alarm.id);
+    // 예산은 알람 전체에 걸쳐 있어 알람 하나만 부분적으로 갱신할 수
+    // 없다 — 채널 전체의 "예약"만 한 번에 취소한다(리뷰 M3: 알람별로
+    // 저장된 id만 취소하면 동시 호출/드리프트로 추적되지 않는 예약이
+    // 남을 수 있다). `cancelSchedulesByChannelKey`는 예약만 지우고
+    // 이미 표시(전달)된 알림은 건드리지 않는다(리뷰 M4 — 매 포그라운드
+    // 복귀마다 잠금화면/알림 센터의 알림이 사라지는 문제 방지).
+    try {
+      await AwesomeNotifications().cancelSchedulesByChannelKey(_medicineAlarmsChannelKey);
+    } catch (e) {
+      print('iOS 알림 재계산 취소 실패: $e');
     }
 
     final allowed = await deviceNotificationsAllowed();
-    if (!allowed) return;
+    if (!allowed) {
+      for (final alarm in allAlarms) {
+        await _saveIdsFor(alarm.id, const []);
+      }
+      return;
+    }
 
     final totalCost = ReminderBudgetPlanner.totalRequestCost(active);
-    if (totalCost <= ReminderBudgetPlanner.iosPendingLimit) {
+    final isOverBudget = totalCost > ReminderBudgetPlanner.iosPendingLimit;
+    if (!isOverBudget) {
       await _scheduleIosWithinBudget(active);
     } else {
       await _scheduleIosBudgeted(active);
+      if (!_lastIosOverBudget) {
+        onBudgetWarning?.call(
+          '알람이 너무 많아 iOS 알림 ${ReminderBudgetPlanner.iosPendingLimit}건 한도에 맞춰 '
+          '가까운 일정만 예약했어요. 오래된 알림이 지나면 자동으로 다음 일정이 채워집니다.',
+        );
+      }
+    }
+    _lastIosOverBudget = isOverBudget;
+
+    // 활성 목록에서 빠진(방금 비활성화/삭제된) 알람의 저장된 id 목록도
+    // 비운다 — 스케줄 자체는 위에서 채널 단위로 이미 전부 취소했다.
+    final activeIds = active.map((a) => a.id).toSet();
+    for (final alarm in allAlarms) {
+      if (!activeIds.contains(alarm.id)) {
+        await _saveIdsFor(alarm.id, const []);
+      }
     }
   }
 
@@ -283,7 +346,9 @@ class AwesomeReminderScheduler implements ReminderScheduler {
           await AwesomeNotifications().createNotification(
             content: buildIosNotificationContent(
               alarm: alarm,
-              day: day ?? alarm.days.first,
+              // 매일 반복(요일 없음)은 특정 요일 하나로 표시하면 실제
+              // 발생 요일과 어긋날 수 있어 '매일'로 표시한다(리뷰 m7).
+              day: day ?? '매일',
               time: time,
               notificationId: id,
             ),
@@ -320,12 +385,7 @@ class AwesomeReminderScheduler implements ReminderScheduler {
     for (final alarm in alarms) {
       await _saveIdsFor(alarm.id, idsByAlarm[alarm.id] ?? const []);
     }
-    onBudgetWarning?.call(
-      '알람이 너무 많아 iOS 알림 ${ReminderBudgetPlanner.iosPendingLimit}건 한도에 맞춰 '
-      '가까운 일정만 예약했어요. 오래된 알림이 지나면 자동으로 다음 일정이 채워집니다.',
-    );
   }
-
 }
 
 /// 알림 payload(알람 탭/액션 처리 시 `AlarmService._onNotificationTapped`가
