@@ -84,13 +84,16 @@ DateTime nextOccurrenceOf({
   required int minute,
 }) {
   final targetWeekday = kKoreanDayToIsoWeekday[dayKor] ?? DateTime.monday;
-  var candidate = DateTime(now.year, now.month, now.day, hour, minute);
   final todayWeekday = now.weekday;
   var dayDelta = targetWeekday - todayWeekday;
   if (dayDelta < 0) dayDelta += 7;
-  candidate = candidate.add(Duration(days: dayDelta));
+  // 리뷰 m8: `DateTime.add(Duration(days: n))`는 정확히 24n시간을
+  // 더하는 것이라 서머타임이 있는 시간대에서는 날짜가 하루 어긋날 수
+  // 있다. `DateTime(y, m, d + n, h, mi)`는 달력 날짜를 직접 계산해
+  // 월/연도 초과까지 알아서 정규화하므로 이 문제가 없다.
+  var candidate = DateTime(now.year, now.month, now.day + dayDelta, hour, minute);
   if (!candidate.isAfter(now)) {
-    candidate = candidate.add(const Duration(days: 7));
+    candidate = DateTime(candidate.year, candidate.month, candidate.day + 7, hour, minute);
   }
   return candidate;
 }
@@ -137,7 +140,14 @@ List<ReminderOccurrence> buildBudgetedOccurrences({
               nextFireAt: nextFireAt,
             ),
           );
-          nextFireAt = nextFireAt.add(const Duration(days: 7));
+          // m8과 같은 이유로 Duration 덧셈 대신 달력 날짜 계산을 쓴다.
+          nextFireAt = DateTime(
+            nextFireAt.year,
+            nextFireAt.month,
+            nextFireAt.day + 7,
+            nextFireAt.hour,
+            nextFireAt.minute,
+          );
         }
       }
     }

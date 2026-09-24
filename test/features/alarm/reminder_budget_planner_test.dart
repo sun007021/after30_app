@@ -111,6 +111,13 @@ void main() {
       final result = nextOccurrenceOf(now: now, dayKor: '금', hour: 8, minute: 0);
       expect(result, DateTime(2026, 9, 25, 8, 0));
     });
+
+    test('월 경계를 넘어가도 달력 날짜로 정확히 계산한다 (m8)', () {
+      // 2026-09-30은 수요일, 다음 목요일은 10월로 넘어간다.
+      final now = DateTime(2026, 9, 30, 9, 0);
+      final result = nextOccurrenceOf(now: now, dayKor: '목', hour: 8, minute: 0);
+      expect(result, DateTime(2026, 10, 1, 8, 0));
+    });
   });
 
   group('buildBudgetedOccurrences', () {
