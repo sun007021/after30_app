@@ -103,10 +103,11 @@ void main() {
     expect(fetcher.callCount, greaterThanOrEqualTo(1));
   });
 
-  testWidgets('iOS: 미완료여도 선택한 날짜(오늘)는 브랜드 색 채움 원으로 표시한다(리뷰 m6)', (tester) async {
-    // 완료율이 100% 미만이면 기본은 게이지/테두리 원이지만, iOS에서는
-    // "선택됨"이 완료 여부보다 우선한다 — 오늘은 초기값으로 이미
-    // 선택돼 있으므로 별도로 탭하지 않아도 채움 원이어야 한다.
+  testWidgets('iOS: 미완료인 선택 날짜는 채움 원이 아니라 테두리 원이다(완료 표시와 구분)', (tester) async {
+    // 꽉 찬 파란 원은 "그날 약을 모두 복용"이라는 뜻이다. 선택만으로
+    // 채우면 반만 복용한 날이 완료처럼 보이므로, iOS도 미완료 선택일은
+    // 테두리 원이어야 한다(2026-09-25 결정). 오늘은 초기값으로 이미
+    // 선택돼 있다.
     final fetcher = CountingFetcher(
       () => [
         fakeMedication(time: '09:00', date: DateTime.now(), status: 'pending'),
@@ -119,7 +120,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(FilledDay), findsWidgets);
+    expect(find.byType(FilledDay), findsNothing);
+    expect(find.byType(OutlinedDay), findsWidgets);
   });
 
   testWidgets('Android: 미완료인 선택 날짜는 기존처럼 테두리 원으로 남는다(리뷰 m6 대조군)', (tester) async {

@@ -360,6 +360,9 @@ class _CalendarPageState extends State<CalendarPage> {
                               d.month == _selectedDay!.month &&
                               d.day == _selectedDay!.day,
                           onDaySelected: (selectedDay, focusedDay) {
+                            // 사용자가 직접 날짜를 골랐으므로 자정 판단
+                            // 기준을 갱신한다(재검토 m7').
+                            _lastSeenDay = dateKey(_now());
                             setState(() {
                               _selectedDay = dateKey(selectedDay);
                               _focusedDay = focusedDay;
@@ -405,17 +408,11 @@ class _CalendarPageState extends State<CalendarPage> {
                               );
                             },
                             selectedBuilder: (context, day, focusedDay) {
-                              // iOS(리뷰 m6, §6 W7): 선택된 날짜는 완료 여부와
-                              // 무관하게 항상 브랜드 컬러로 꽉 찬 원이다.
-                              if (cupertino) {
-                                return FilledDay(
-                                  text: day.day.toString(),
-                                  bg: primaryBlue,
-                                  fg: Colors.white,
-                                );
-                              }
-                              // Android: 기존 로직 그대로(모두 완료면 꽉 찬
-                              // 파란 원, 아니면 테두리만) — 외형 변경 없음.
+                              // 선택 표시는 iOS/Android 모두 기존 로직을 쓴다
+                              // (모두 완료면 꽉 찬 파란 원, 아니면 테두리 원).
+                              // 이 앱에서 꽉 찬 파란 원은 "그날 약을 모두
+                              // 복용"이라는 뜻이라, 선택만으로 채우면 반만
+                              // 복용한 날이 완료처럼 보인다(2026-09-25 결정).
                               final key = dateKey(day);
                               final total = _totalByDay[key] ?? 0;
                               final done = _doneByDay[key] ?? 0;

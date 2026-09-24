@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:after30/core/design/app_platform.dart';
 import 'package:after30/features/calendar/ui/widgets/calendar_day_widgets.dart';
 import 'package:after30/features/calendar/ui/widgets/calendar_utils.dart';
 
@@ -77,8 +76,6 @@ class WeekStrip extends StatelessWidget {
     final startOfWeek = sel.subtract(Duration(days: (sel.weekday % 7)));
     final days = List.generate(7, (i) => startOfWeek.add(Duration(days: i)));
 
-    final cupertino = isCupertino(context);
-
     Widget dayItem(DateTime d) {
       final isSelected =
           selectedDay != null && dateKey(d) == dateKey(selectedDay!);
@@ -96,9 +93,10 @@ class WeekStrip extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             if (isSelected)
-              // iOS(리뷰 m6, §6 W7): 선택된 날짜는 완료 여부와 무관하게
-              // 항상 브랜드 컬러로 꽉 찬 원. Android는 기존 로직 그대로.
-              (cupertino || (total > 0 && done >= total))
+              // 선택 표시는 iOS/Android 모두 기존 로직: 모두 완료면 꽉 찬
+              // 원, 아니면 테두리 원. 꽉 찬 파란 원은 "모두 복용"이라는
+              // 뜻이라 선택만으로 채우지 않는다(2026-09-25 결정).
+              (total > 0 && done >= total)
                   ? FilledDay(
                       text: d.day.toString(),
                       bg: primaryBlue,
