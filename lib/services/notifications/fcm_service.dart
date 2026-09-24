@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -80,8 +81,11 @@ class FcmService {
       debugPrint('FCM onMessageOpenedApp: ${message.messageId}');
     });
 
-    // 토큰 로깅 및 갱신 구독
-    await logToken();
+    // 토큰 로깅 및 갱신 구독. iOS는 APNs 토큰이 준비될 때까지 최대
+    // 16.5초(300ms*(1+..+10)) 재시도하는데(`_waitForApnsTokenIfNeeded`),
+    // 이걸 기다리면 콜드 런치가 그만큼 늦어진다(리뷰 M7) — 로깅용일
+    // 뿐이니 기다리지 않는다.
+    unawaited(logToken());
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       debugPrint('FCM 토큰 갱신: $newToken');
       final allowPush = await MySettingsStore.getAllowPushNotifications();

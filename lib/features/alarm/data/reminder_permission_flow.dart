@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -73,7 +74,9 @@ class ReminderPermissionFlow {
             settings.authorizationStatus == AuthorizationStatus.authorized ||
             settings.authorizationStatus == AuthorizationStatus.provisional;
         await AwesomeNotifications().requestPermissionToSendNotifications();
-        await FcmService.syncTokenToBackend();
+        // APNs 토큰을 기다리느라 이 화면 흐름을 막지 않는다(리뷰 M7).
+        // 백엔드 동기화는 실패해도 다음 토큰 갱신/재시도 때 다시 된다.
+        unawaited(FcmService.syncTokenToBackend());
       } catch (_) {
         granted = false;
       }
