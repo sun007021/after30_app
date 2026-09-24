@@ -113,10 +113,61 @@ void main() {
     expect(merged.map((a) => a['id']), containsAll(['old', 'new']));
     expect(merged, hasLength(2));
     expect(prefs.getString('medicine_alarms_1234567'), isNull);
-    // notification_ids는 알람 id별 키라서, 같은 키 이름이 이미 새 계정에
-    // 있으면(=사실상 같은 알람) 새 값을 유지한다.
-    expect(prefs.getStringList('notification_ids_42_a1'), ['999']);
+    // 같은 알람의 notification_ids가 양쪽에 있으면 합친다(새 쪽 ID가 앞).
+    // 이전 ID를 버리면 그 ID로 이미 예약된 OS 알림을 아무도 취소할 수 없다.
+    expect(prefs.getStringList('notification_ids_42_a1'), ['999', '100']);
     expect(prefs.getStringList('notification_ids_1234567_a1'), isNull);
+  });
+
+  test('notification_ids가 겹치면 중복 없이 합친다(리뷰 재검토 P10)', () async {
+    SharedPreferences.setMockInitialValues({
+      'notification_ids_1234567_a1': ['100', '101', '999'],
+      'notification_ids_42_a1': ['999'],
+    });
+
+    await AlarmNamespaceMigrator.migrateIfNeeded(
+      oldUserId: '1234567',
+      newUserId: '42',
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getStringList('notification_ids_42_a1'), ['999', '100', '101']);
+    expect(prefs.getStringList('notification_ids_1234567_a1'), isNull);
+  });
+
+  group('JSON 파싱에 실패하면 아무것도 지우지 않는다(리뷰 재검토 P9)', () {
+    test('새 쪽 JSON이 깨져 있으면 이전 알람 목록을 그대로 둔다', () async {
+      SharedPreferences.setMockInitialValues({
+        'medicine_alarms_1234567': '[{"id":"old"}]',
+        'medicine_alarms_42': '{broken',
+      });
+
+      await AlarmNamespaceMigrator.migrateIfNeeded(
+        oldUserId: '1234567',
+        newUserId: '42',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('medicine_alarms_1234567'), '[{"id":"old"}]');
+      expect(prefs.getString('medicine_alarms_42'), '{broken');
+      // 완료 표시를 남기지 않아 다음 로그인/복원 때 다시 시도한다.
+      expect(prefs.getBool('user_id_unified_v1_1234567'), isNot(true));
+    });
+
+    test('이전 쪽 JSON이 깨져 있어도 이전 키를 지우지 않는다', () async {
+      SharedPreferences.setMockInitialValues({
+        'medicine_alarms_1234567': '{broken',
+      });
+
+      await AlarmNamespaceMigrator.migrateIfNeeded(
+        oldUserId: '1234567',
+        newUserId: '42',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('medicine_alarms_1234567'), '{broken');
+      expect(prefs.getString('medicine_alarms_42'), isNull);
+    });
   });
 
   test('알람 id가 겹치면 새 계정 쪽 데이터를 우선한다', () async {

@@ -68,9 +68,13 @@ class AlarmNamespaceMigrator {
     if (oldAlarmsJson != null) {
       final newAlarmsJson = prefs.getString(newAlarmsKey);
       final merged = _mergeAlarmListsJson(newAlarmsJson, oldAlarmsJson);
-      if (merged != null) {
-        await prefs.setString(newAlarmsKey, merged);
+      if (merged == null) {
+        // 어느 쪽 JSON이든 파싱에 실패하면 아무것도 옮기거나 지우지 않는다.
+        // 이전 키를 지우면 정상이던 알람 목록이 사라진다. 완료 플래그도
+        // 남기지 않아 다음 로그인/복원 때 다시 시도하게 한다.
+        return;
       }
+      await prefs.setString(newAlarmsKey, merged);
       await prefs.remove(oldAlarmsKey);
     }
 
@@ -92,9 +96,9 @@ class AlarmNamespaceMigrator {
   }
 
   /// 알람 목록 두 개(JSON 배열 문자열)를 알람 `id` 기준으로 병합한다.
-  /// 같은 id가 양쪽에 있으면(드문 경우) 새 계정 쪽 값을 우선한다. 병합할
-  /// 게 없으면(둘 다 비었거나 파싱 실패) null을 반환해 호출부가 기존 값을
-  /// 그대로 두게 한다.
+  /// 같은 id가 양쪽에 있으면(드문 경우) 새 계정 쪽 값을 우선한다. 어느
+  /// 쪽이든 파싱에 실패하면 null을 반환해 호출부가 양쪽 키를 모두 그대로
+  /// 두게 한다.
   static String? _mergeAlarmListsJson(String? newJson, String oldJson) {
     try {
       final byId = <String, Map<String, dynamic>>{};
@@ -116,14 +120,15 @@ class AlarmNamespaceMigrator {
 
       return json.encode(byId.values.toList());
     } catch (_) {
-      // 파싱에 실패하면 손대지 않는다 — 호출부가 기존 값을 그대로 둔다.
-      return newJson;
+      return null;
     }
   }
 
   /// `<prefix><alarmId>` 형태의 문자열 리스트 키들을 옮긴다. 새 쪽에 이미
-  /// 값이 있으면(같은 alarmId) 새 값을 유지하고 이전 값은 버린다 — 알람
-  /// id는 사실상 유일하므로 충돌은 "같은 알람이 이미 처리됨"을 뜻한다.
+  /// 값이 있으면(같은 alarmId) 두 목록을 합친다(새 쪽 ID가 앞, 중복 제거).
+  /// 이전 ID를 버리면 그 ID로 이미 예약된 OS 알림을 아무도 취소할 수 없게
+  /// 된다. `scheduleAlarm`은 목록의 ID를 모두 취소한 뒤 필요한 개수만 다시
+  /// 쓰므로 다음 재예약 때 저절로 정리된다.
   static Future<void> _moveKeyedByAlarmIdStringList({
     required SharedPreferences prefs,
     required String oldPrefix,
@@ -137,12 +142,13 @@ class AlarmNamespaceMigrator {
     for (final oldKey in oldKeys) {
       final alarmId = oldKey.substring(oldPrefix.length);
       final newKey = '$newPrefix$alarmId';
-      if (prefs.getStringList(newKey) == null) {
-        final ids = prefs.getStringList(oldKey);
-        if (ids != null) {
-          await prefs.setStringList(newKey, ids);
-        }
-      }
+      final oldIds = prefs.getStringList(oldKey) ?? const <String>[];
+      final newIds = prefs.getStringList(newKey);
+      final mergedIds = <String>[
+        ...?newIds,
+        ...oldIds.where((id) => !(newIds?.contains(id) ?? false)),
+      ];
+      await prefs.setStringList(newKey, mergedIds);
       await prefs.remove(oldKey);
     }
   }
