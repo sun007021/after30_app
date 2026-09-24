@@ -73,6 +73,29 @@ void main() {
     return captured;
   }
 
+  /// `AuthService.logout`이 루트 내비게이터로 `/login`을 찾으므로, 로그아웃
+  /// 흐름까지 확인하는 테스트는 이 라우트가 있는 호스트가 필요하다.
+  Future<BuildContext> pumpHostWithLoginRoute(
+    WidgetTester tester,
+    TargetPlatform platform,
+  ) async {
+    late BuildContext captured;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: platform),
+        routes: {'/login': (_) => const Scaffold(body: Text('로그인 화면'))},
+        home: Builder(
+          builder: (context) {
+            captured = context;
+            return const Scaffold(body: SizedBox());
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    return captured;
+  }
+
   testWidgets('provider=email + Android: 비밀번호 입력을 위한 Material 다이얼로그를 보여준다', (tester) async {
     mockMyProfile('email');
     final context = await pumpHost(tester, TargetPlatform.android);
@@ -172,5 +195,133 @@ void main() {
     // 이메일 탈퇴 흐름(비밀번호 입력)으로 폴백한다.
     expect(find.text('계정 탈퇴'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('provider=kakao: 카카오 분기를 탄다(테스트 환경엔 카카오 SDK 채널이 없어 오류로 끝난다)', (
+    tester,
+  ) async {
+    // 카카오 SDK(플랫폼 채널)는 단위 테스트 환경에 없으므로 실제 로그인까지
+    // 확인할 수는 없다 — 대신 provider=kakao일 때 이메일/알 수 없는 값
+    // 분기가 아니라 카카오 분기(_showKakaoDeleteDialog)로 들어간다는 것만
+    // 확인한다. 카카오 분기에 들어가면 isKakaoTalkInstalled()가 채널 미등록
+    // 오류를 던지고, 그 예외는 일반 오류 다이얼로그로 이어진다 — 이메일
+    // 분기(비밀번호 다이얼로그)나 미지원 안내(apple)와는 구분되는 결과다.
+    mockMyProfile('kakao');
+    final context = await pumpHost(tester, TargetPlatform.android);
+
+    unawaited(DeleteAccountDialog.show(context));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    // 카카오 SDK 호출(isKakaoTalkInstalled 등)은 실제 플랫폼 채널을 타므로
+    // 가짜 테스트 zone의 프레임 스케줄과 무관하게 진행된다 — runAsync로
+    // 실제 이벤트 루프를 한 바퀴 돌려준 뒤 다시 프레임을 정리한다.
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('계정 탈퇴'), findsNothing);
+    expect(find.textContaining('아직 탈퇴를 지원하지 않습니다'), findsNothing);
+    expect(find.textContaining('계정 탈퇴 중 오류가 발생했습니다'), findsOneWidget);
+  });
+
+  testWidgets(
+    'provider=email: 비밀번호 제출 → 탈퇴 API 성공 → logout(provider: email)으로 로그인 화면에 진입한다',
+    (tester) async {
+      mockInterceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.path == '/users/me') {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {'provider': 'email'},
+              ),
+            );
+            return;
+          }
+          if (options.path == '/users/account' && options.method == 'DELETE') {
+            handler.resolve(
+              Response(requestOptions: options, statusCode: 200, data: null),
+            );
+            return;
+          }
+          // AuthService.logout(provider: 'email')은 카카오 로그아웃을
+          // 시도하지 않으므로, 그 외 경로가 호출되면 테스트 설계가 틀린
+          // 것이다.
+          handler.reject(
+            DioException(requestOptions: options, message: '예상하지 못한 경로: ${options.path}'),
+          );
+        },
+      );
+      ApiClient().dio.interceptors.add(mockInterceptor!);
+      final context = await pumpHostWithLoginRoute(tester, TargetPlatform.android);
+
+      unawaited(DeleteAccountDialog.show(context));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('탈퇴하기'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('계정 탈퇴'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'my-password');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('탈퇴하기'));
+      await tester.pumpAndSettle();
+
+      // 탈퇴 API가 성공했으므로 오류 다이얼로그 없이 로그아웃 후 로그인
+      // 화면으로 진입해야 한다.
+      expect(find.textContaining('오류가 발생했습니다'), findsNothing);
+      expect(find.text('로그인 화면'), findsOneWidget);
+    },
+  );
+
+  testWidgets('provider=email: 탈퇴 API가 401을 반환하면 비밀번호 오류 메시지를 보여준다', (tester) async {
+    mockInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path == '/users/me') {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {'provider': 'email'},
+            ),
+          );
+          return;
+        }
+        if (options.path == '/users/account' && options.method == 'DELETE') {
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              response: Response(requestOptions: options, statusCode: 401),
+              type: DioExceptionType.badResponse,
+            ),
+          );
+          return;
+        }
+        handler.reject(
+          DioException(requestOptions: options, message: '예상하지 못한 경로: ${options.path}'),
+        );
+      },
+    );
+    ApiClient().dio.interceptors.add(mockInterceptor!);
+    final context = await pumpHost(tester, TargetPlatform.android);
+
+    unawaited(DeleteAccountDialog.show(context));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('계정 탈퇴'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'wrong-password');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('비밀번호가 올바르지 않습니다'), findsOneWidget);
   });
 }
