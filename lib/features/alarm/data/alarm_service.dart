@@ -372,7 +372,11 @@ class AlarmService {
             hhmm: timeStr,
           );
           if (success) {
-            await AwesomeNotifications().cancel(notifId);
+            // 리뷰 B1: `cancel()`은 표시된 알림뿐 아니라 반복 예약까지
+            // 취소해서, 요일이 합쳐진 iOS 매일 알람은 한 번만 눌러도
+            // 7일치가 모두 사라졌다(Android도 원래 같은 버그). 지금
+            // 표시된 알림만 닫는 `dismiss()`로 바꾼다.
+            await AwesomeNotifications().dismiss(notifId);
             print('복용 완료 처리됨: notificationId=$notifId');
           } else {
             print('복용 완료 처리 실패: 알림 유지 - notificationId=$notifId');
