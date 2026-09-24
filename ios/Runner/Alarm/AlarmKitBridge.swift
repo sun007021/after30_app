@@ -38,6 +38,12 @@ import AlarmKit
 enum AlarmKitBridge {
   static let channelName = "after30/alarmkit"
 
+  // `AlarmKitWorker`(iOS 26 전용 actor) 안에 있으면 이 값을 읽는
+  // `peek`/`ackCompletion`(iOS 버전 가드가 없는 코드)에서 "iOS 26
+  // 이상에서만 쓸 수 있다"는 컴파일 에러가 난다 — 문자열 상수일 뿐
+  // iOS 26 API가 아니므로 여기 최상위로 옮겼다.
+  private static let pendingCompletionsKey = "alarmkit_pending_completions_v1"
+
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: channelName,
@@ -210,7 +216,7 @@ enum AlarmKitBridge {
   }
 
   private static func loadPendingCompletions() -> [PendingCompletion] {
-    guard let data = UserDefaults.standard.data(forKey: AlarmKitWorker.pendingCompletionsKey) else {
+    guard let data = UserDefaults.standard.data(forKey: pendingCompletionsKey) else {
       return []
     }
     return (try? JSONDecoder().decode([PendingCompletion].self, from: data)) ?? []
@@ -218,7 +224,7 @@ enum AlarmKitBridge {
 
   private static func savePendingCompletions(_ completions: [PendingCompletion]) {
     guard let data = try? JSONEncoder().encode(completions) else { return }
-    UserDefaults.standard.set(data, forKey: AlarmKitWorker.pendingCompletionsKey)
+    UserDefaults.standard.set(data, forKey: pendingCompletionsKey)
   }
 }
 
@@ -232,7 +238,6 @@ enum AlarmKitBridge {
 actor AlarmKitWorker {
   static let shared = AlarmKitWorker()
   static let recordsKey = "alarmkit_records_v1"
-  static let pendingCompletionsKey = "alarmkit_pending_completions_v1"
 
   private init() {}
 
