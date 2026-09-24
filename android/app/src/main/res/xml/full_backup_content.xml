@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11(API 30) 이하의 전체 백업(Auto Backup)에서 flutter_secure_storage
+  (D8, 로그인 토큰 저장소)가 쓰는 SharedPreferences 파일을 제외한다.
+  data_extraction_rules.xml과 같은 목적이며, 대상 API 레벨만 다르다.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+</full-backup-content>

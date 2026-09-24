@@ -5,11 +5,21 @@ import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/core/storage/user_store.dart';
 
 class AuthService {
-  /// 카카오 로그아웃 + 앱 세션 정리
-  static Future<void> logout(BuildContext context) async {
-    try {
-      await UserApi.instance.logout();
-    } catch (_) {}
+  /// 로그아웃 + 앱 세션 정리.
+  ///
+  /// [provider]는 `/users/me.provider` 값('kakao', 'email', 'apple')이다.
+  /// 카카오 세션 정리는 카카오 사용자에게만 의미가 있으므로, 호출부가
+  /// provider를 알고 있으면(예: [DeleteAccountDialog]) 넘겨서 불필요한
+  /// 카카오 SDK 호출을 건너뛴다. provider를 모르는 기존 호출부(마이페이지
+  /// 로그아웃 등)는 인자를 생략하면 기존과 동일하게 카카오 로그아웃을
+  /// 시도한다(카카오 세션이 없으면 SDK가 조용히 실패하므로 안전하다).
+  static Future<void> logout(BuildContext context, {String? provider}) async {
+    final shouldTryKakaoLogout = provider == null || provider == 'kakao';
+    if (shouldTryKakaoLogout) {
+      try {
+        await UserApi.instance.logout();
+      } catch (_) {}
+    }
     // 기기에 예약된 알림만 취소하고, 저장된 알람 데이터는 유지(재로그인 시 복구용)
     await AlarmService().cancelAllActiveAlarmSchedules();
     await TokenStore.clear();
