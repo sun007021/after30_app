@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:after30/features/calendar/ui/calendar_page.dart';
+import 'package:after30/features/calendar/ui/widgets/calendar_day_widgets.dart';
 
 import '../../core/design/design_test_utils.dart';
 import 'calendar_test_utils.dart';
@@ -100,5 +101,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fetcher.callCount, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('iOS: 미완료여도 선택한 날짜(오늘)는 브랜드 색 채움 원으로 표시한다(리뷰 m6)', (tester) async {
+    // 완료율이 100% 미만이면 기본은 게이지/테두리 원이지만, iOS에서는
+    // "선택됨"이 완료 여부보다 우선한다 — 오늘은 초기값으로 이미
+    // 선택돼 있으므로 별도로 탭하지 않아도 채움 원이어야 한다.
+    final fetcher = CountingFetcher(
+      () => [
+        fakeMedication(time: '09:00', date: DateTime.now(), status: 'pending'),
+      ],
+    );
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      CalendarPage(fetchMedications: fetcher.call),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FilledDay), findsWidgets);
+  });
+
+  testWidgets('Android: 미완료인 선택 날짜는 기존처럼 테두리 원으로 남는다(리뷰 m6 대조군)', (tester) async {
+    final fetcher = CountingFetcher(
+      () => [
+        fakeMedication(time: '09:00', date: DateTime.now(), status: 'pending'),
+      ],
+    );
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.android,
+      CalendarPage(fetchMedications: fetcher.call),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FilledDay), findsNothing);
+    expect(find.byType(OutlinedDay), findsWidgets);
   });
 }
