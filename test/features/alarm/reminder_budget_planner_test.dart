@@ -161,7 +161,9 @@ void main() {
       }
     });
 
-    test('7일 전체 선택 알람은 대표 요일 하나로만 예산을 소비한다', () {
+    test('7일 전체 선택(매일) 알람은 실제로 울리는 만큼(7일 창 안에서 요일별 1건씩) 발생분을 담는다 (M2)', () {
+      // 리뷰 M2: 예전에는 "대표 요일 하나"로만 계산해서, 매일 울리는
+      // 알람인데도 발생분이 1건뿐이라 항상 예산에서 밀려났다.
       final alarms = [
         _alarm(
           id: 'daily',
@@ -170,11 +172,15 @@ void main() {
           days: const ['월', '화', '수', '목', '금', '토', '일'],
         ),
       ];
+      // 2026-09-23은 수요일이다.
       final occurrences = buildBudgetedOccurrences(
         activeAlarms: alarms,
         now: DateTime(2026, 9, 23, 7, 0),
       );
-      expect(occurrences.length, 1);
+      // 7일 창 안에서 요일 7개 모두 정확히 1번씩 발생한다.
+      expect(occurrences.length, 7);
+      final fireDates = occurrences.map((o) => o.nextFireAt).toSet();
+      expect(fireDates.length, 7);
     });
   });
 }

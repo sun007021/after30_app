@@ -95,39 +95,50 @@ DateTime nextOccurrenceOf({
   return candidate;
 }
 
-/// 활성 알람 전체에서 "요일×시간" 발생 목록을 만들고, 예산을 초과하면
-/// 가장 가까운 [ReminderBudgetPlanner.iosPendingLimit]개만 남긴다.
-/// 7일 알람은 요일 구분 없이 "매일" 한 건으로 취급해 발생 시각만 계산한다
-/// (실제 등록은 daily-repeat 1건으로 하되, 예산 계산에서는 요청 비용이
-/// 1이라는 점과 일치시키기 위해 대표 요일 하나만 담는다).
+/// 활성 알람 전체에서 앞으로 [windowDays]일 안에 실제로 울릴 발생분을 모두
+/// 펼친 뒤, 예산을 초과하면 가장 가까운 [ReminderBudgetPlanner.iosPendingLimit]
+/// 개만 남긴다(리뷰 M2).
+///
+/// 예전에는 7일 전체 선택 알람을 "대표 요일 하나"로만 계산해, 실제로는
+/// 매일 울리는데도 예산 계산에서는 발생분이 1건뿐이라 매일 알람이 항상
+/// 가장 먼 미래로 밀려나 있었다(가까운 날짜 발생분이 담기지 않음). 이제
+/// 매일 알람은 7개 요일 모두에 대해 발생 시각을 계산해 넣는다.
 List<ReminderOccurrence> buildBudgetedOccurrences({
   required List<MedicineAlarm> activeAlarms,
   required DateTime now,
   int limit = ReminderBudgetPlanner.iosPendingLimit,
+  int windowDays = 7,
 }) {
   final occurrences = <ReminderOccurrence>[];
+  final windowEnd = now.add(Duration(days: windowDays));
   for (final alarm in activeAlarms) {
     if (!alarm.isActive || alarm.times.isEmpty || alarm.days.isEmpty) continue;
     final distinctDays = alarm.days.toSet().length;
     final isDaily = distinctDays >= 7;
-    final days = isDaily ? [alarm.days.first] : alarm.days.toSet().toList();
+    final days = isDaily ? kKoreanDayToIsoWeekday.keys.toList() : alarm.days.toSet().toList();
     for (final day in days) {
       for (final time in alarm.times) {
-        occurrences.add(
-          ReminderOccurrence(
-            alarmId: alarm.id,
-            medicineName: alarm.name,
-            dayKor: day,
-            hour: time.hour,
-            minute: time.minute,
-            nextFireAt: nextOccurrenceOf(
-              now: now,
+        // 창(window) 안에 실제로 울리는 발생분을 전부 담는다(요일 하나당
+        // 보통 1건이지만, 창이 7일보다 길면 여러 건일 수 있다).
+        var nextFireAt = nextOccurrenceOf(
+          now: now,
+          dayKor: day,
+          hour: time.hour,
+          minute: time.minute,
+        );
+        while (nextFireAt.isBefore(windowEnd)) {
+          occurrences.add(
+            ReminderOccurrence(
+              alarmId: alarm.id,
+              medicineName: alarm.name,
               dayKor: day,
               hour: time.hour,
               minute: time.minute,
+              nextFireAt: nextFireAt,
             ),
-          ),
-        );
+          );
+          nextFireAt = nextFireAt.add(const Duration(days: 7));
+        }
       }
     }
   }
