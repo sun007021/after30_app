@@ -8,6 +8,7 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/core/storage/onboarding_store.dart';
+import 'package:after30/core/storage/user_store.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -136,6 +137,44 @@ class _StartupPageState extends State<StartupPage> {
 
   Future<void> _attemptRefresh() async {
     try {
+      // 콜드 스타트가 알림 탭으로 인한 것이면(AlarmKit/로컬 알림 둘 다)
+      // 세션 복원(아래 `ok` 분기)을 거치지 않고 곧장 풀스크린으로 이동해
+      // 버린다 — 그러면 `AlarmService._currentUserId`가 계속 null로 남아
+      // 알람 저장소가 레거시 키를 보게 된다(W3a 리뷰). 풀스크린으로 가기
+      // 전에 먼저 네임스페이스를 맞춰 둔다.
+      final userId = await UserStore.getCurrentUserId();
+      AlarmService.setCurrentUserId(userId);
+
+      // iOS 26+ AlarmKit 알람을 탭해 콜드 스타트된 경우, 지금 울리고 있는
+      // 알람을 조회해 풀스크린 라우트로 이동한다(plan §6 W4 5항). 로컬
+      // 알림(awesome_notifications) 경로는 바로 아래에서 그대로 처리한다.
+      try {
+        final alarmKit = AlarmService.alarmKitScheduler;
+        if (alarmKit != null) {
+          final alerting = await alarmKit.alertingAlarm();
+          if (alerting != null) {
+            final name = alerting['medicineName'] as String? ?? '약';
+            final day = alerting['day'] as String? ?? '월';
+            final hour = (alerting['hour'] as num?)?.toInt() ?? 8;
+            final minute = (alerting['minute'] as num?)?.toInt() ?? 0;
+            final alarmId = alerting['scheduleId'] as String?;
+            if (!mounted) return;
+            AlarmService.showFullscreenAlarm(
+              context,
+              MedicineAlarm(
+                id: alarmId,
+                name: name,
+                times: [TimeOfDay(hour: hour, minute: minute)],
+                days: [day],
+              ),
+              TimeOfDay(hour: hour, minute: minute),
+              day,
+            );
+            return;
+          }
+        }
+      } catch (_) {}
+
       // FullScreen Intent로 앱이 기동된 경우에만 풀스크린 라우트로 이동
       try {
         final initialAction = await AwesomeNotifications()

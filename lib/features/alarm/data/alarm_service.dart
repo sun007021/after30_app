@@ -1,31 +1,64 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/calendar/data/history_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
+import 'package:after30/features/alarm/data/awesome_reminder_scheduler.dart';
+import 'package:after30/features/alarm/data/alarmkit_reminder_scheduler.dart';
+import 'package:after30/features/alarm/data/reminder_scheduler.dart';
+import 'package:after30/features/alarm/data/reminder_scheduler_selector.dart';
 import 'package:after30/features/alarm/ui/fullscreen_alarm_page.dart';
 import 'package:after30/features/my/settings_store.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 알람 저장소 + 파사드(plan §6 W4 1항). 기기 스케줄링은
+/// [ReminderSchedulerSelector](Android/iOS 로컬 알림/AlarmKit 중 선택)에
+/// 위임하고, 이 클래스는 기존 공개 API를 그대로 유지해 화면 코드가 바뀌지
+/// 않게 한다.
 @pragma('vm:entry-point')
 class AlarmService {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
   AlarmService._internal();
   static const bool _verboseLogs = false; // 상세 로그 스위치
-  // 문자열 값은 기기에 이미 예약된 알림의 액션 키와 호환되어야 하므로 유지하고,
-  // 실제 동작(복용 완료)에 맞춰 식별자 이름만 정리했다.
-  static const String actionKeyMarkTaken = 'SNOOZE_10';
-  static const String actionKeyCheckOthers = 'CHECK_OTHERS';
 
   static const String _alarmsKeyLegacy = 'medicine_alarms';
-  static const String _nextNotificationIdKey = 'alarm_next_notification_id';
-  static const int _maxNotificationId = 2000000; // 32비트 정수 범위 내 안전 상한
   static String? _currentUserId; // 사용자 네임스페이스
-  static int _nextNotificationId = 1; // 순차적 알람 ID
   static GlobalKey<NavigatorState>? _navigatorKey; // 전체화면 네비게이션용
+
+  static final ReminderSchedulerSelector _scheduler = ReminderSchedulerSelector(
+    local: AwesomeReminderScheduler(
+      notificationIdsKeyFor: _notificationIdsKeyForStatic,
+      deviceNotificationsAllowed: MySettingsStore.getAllowDeviceNotifications,
+      onBudgetWarning: (message) => _budgetWarningController.add(message),
+    )..activeAlarmsProvider = () => AlarmService()._activeAlarmsFromStorage(),
+  );
+
+  static final StreamController<String> _budgetWarningController =
+      StreamController<String>.broadcast();
+
+  /// iOS 64개 예산 초과로 일부 알람이 잘렸을 때 1회성 안내 메시지가
+  /// 흘러나오는 스트림(plan §6 W4 2항). UI(W5)가 구독해 `AppToast`로
+  /// 보여준다.
+  static Stream<String> get budgetWarnings => _budgetWarningController.stream;
+
+  /// 현재 iOS에서 쓰고 있는 전략(디버그 화면/설정 화면 노출용).
+  static Future<ReminderStrategy> currentReminderStrategy() =>
+      _scheduler.currentStrategy();
+
+  /// AlarmKit 권한/기기 알람 설정 화면(W9 `DeviceAlarmSettings`)이 재사용할
+  /// 수 있게 AlarmKit 스케줄러를 노출한다.
+  static AlarmKitReminderScheduler? get alarmKitScheduler => _scheduler.alarmKit;
+
+  /// 현재 대기 중인 iOS 로컬 알림 예산 상태(디버그 하네스/설정 화면용).
+  static Future<ReminderBudgetStatus> pendingBudget() => _scheduler.pendingBudget();
+
+  final _AlarmServiceLifecycleObserver _lifecycleObserver = _AlarmServiceLifecycleObserver();
 
   static void setNavigatorKey(GlobalKey<NavigatorState> key) {
     _navigatorKey = key;
@@ -36,13 +69,13 @@ class AlarmService {
     _currentUserId = userId;
   }
 
-  String _alarmsKeyForUser() {
+  static String _alarmsKeyForUserStatic() {
     return _currentUserId == null
         ? _alarmsKeyLegacy
-        : 'medicine_alarms_${_currentUserId}';
+        : 'medicine_alarms_$_currentUserId';
   }
 
-  String _notificationIdsKeyFor(String alarmId) {
+  static String _notificationIdsKeyForStatic(String alarmId) {
     return _currentUserId == null
         ? 'notification_ids_$alarmId'
         : 'notification_ids_${_currentUserId}_$alarmId';
@@ -51,9 +84,6 @@ class AlarmService {
   Future<void> initialize() async {
     // 시간대 초기화
     tz.initializeTimeZones();
-
-    // 순차적 알람 ID 카운터 복원(앱 재시작 시 리셋되어 기존 알림을 덮어쓰는 문제 방지)
-    await _restoreNextNotificationId();
 
     // 알림 초기화
     await AwesomeNotifications().initialize(
@@ -90,8 +120,11 @@ class AlarmService {
       ],
     );
 
-    // 알림 권한 요청
-    await AwesomeNotifications().requestPermissionToSendNotifications();
+    // 알림 권한 요청은 여기서 하지 않는다(HIG 위반 — 콜드 런치 시점).
+    // 대신 `ReminderPermissionFlow.ensureRequestedAfterLogin`(로그인 직후,
+    // Android 기존 동작 재현)과 `requestWithRationale`(첫 약 등록 직전,
+    // 사전 설명 후 시스템 프롬프트, iOS 26+는 AlarmKit 권한도 함께)에서
+    // 맥락과 함께 요청한다.
 
     // 알림 액션 리스너 설정
     AwesomeNotifications().setListeners(
@@ -100,57 +133,37 @@ class AlarmService {
       onNotificationDisplayedMethod: AlarmService._onNotificationDisplayed,
       onDismissActionReceivedMethod: AlarmService._onDismissActionReceived,
     );
-  }
 
-  // 다음 발급할 알림 ID를 SharedPreferences에서 복원(없으면 기존 최댓값+1로 보정)
-  Future<void> _restoreNextNotificationId() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final stored = prefs.getInt(_nextNotificationIdKey);
-      if (stored != null && stored > 0) {
-        _nextNotificationId = stored;
-      }
-
-      // 저장된 notification_ids_* 중 최댓값보다 작으면 최댓값+1로 보정(기존 사용자 마이그레이션)
-      var maxExisting = 0;
-      for (final key in prefs.getKeys()) {
-        if (key.startsWith('notification_ids_')) {
-          final ids = prefs.getStringList(key) ?? const [];
-          for (final idString in ids) {
-            final id = int.tryParse(idString);
-            if (id != null && id > maxExisting) {
-              maxExisting = id;
-            }
-          }
-        }
-      }
-      if (_nextNotificationId <= maxExisting) {
-        _nextNotificationId = maxExisting + 1;
-      }
-      if (_nextNotificationId > _maxNotificationId || _nextNotificationId < 1) {
-        _nextNotificationId = 1;
-      }
-
-      await prefs.setInt(_nextNotificationIdKey, _nextNotificationId);
-    } catch (e) {
-      print('알림 ID 카운터 복원 실패: $e');
+    // iOS 로컬 알림 fallback은 64개 예산을 앱 포그라운드 진입마다 앞으로
+    // 굴려야 하고(plan §7), AlarmKit "복용 완료" 백그라운드 인텐트가 남긴
+    // 완료 기록도 그때 함께 반영한다. Android 동작에는 영향이 없다(가드).
+    //
+    // 리뷰 m4: 완료 기록 처리/"지금 울리고 있는 알람" 조회는 여기(콜드
+    // 스타트, 로그인 세션 복원 전)서는 하지 않는다 — `_currentUserId`도
+    // 아직 안 정해졌고 `_navigatorKey`도 아직 없어 아무 일도 못 한다.
+    // 세션이 복원된 뒤 [handleSessionReady]([app_shell.dart] 첫
+    // post-frame)와 resume 때만 실행한다.
+    if (Platform.isIOS) {
+      _lifecycleObserver.onResumed = () async {
+        await rescheduleAllActiveFromStorage();
+        // 리뷰 M8: 완료 기록 처리가 느려도(오프라인 등) 화면 재개 자체를
+        // 막지 않는다.
+        unawaited(_drainAlarmKitCompletions());
+        unawaited(_refreshAlertingAlarmKitState());
+      };
+      WidgetsBinding.instance.addObserver(_lifecycleObserver);
     }
   }
 
-  // 다음 알림 ID를 발급하고 영속화(상한 도달 시 1로 순환)
-  Future<int> _allocateNextNotificationId() async {
-    final id = _nextNotificationId;
-    _nextNotificationId++;
-    if (_nextNotificationId > _maxNotificationId) {
-      _nextNotificationId = 1;
-    }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_nextNotificationIdKey, _nextNotificationId);
-    } catch (e) {
-      print('알림 ID 카운터 저장 실패: $e');
-    }
-    return id;
+  /// 세션이 복원된 뒤(자동 로그인 포함) 앱 셸이 처음 그려지면 1회
+  /// 호출한다(`app_shell.dart` initState 첫 post-frame,
+  /// `ReminderPermissionFlow.ensureRequestedAfterLogin` 옆 — 리뷰 M8/m4).
+  /// 그 전에는 `_currentUserId`/`_navigatorKey`가 준비되지 않아 완료 기록
+  /// 처리와 "지금 울리고 있는 알람" 조회가 조용히 아무 일도 하지 않는다.
+  static Future<void> handleSessionReady() async {
+    if (!Platform.isIOS) return;
+    await _drainAlarmKitCompletions();
+    await _refreshAlertingAlarmKitState();
   }
 
   static String _formatYMD(DateTime d) {
@@ -194,10 +207,13 @@ class AlarmService {
   }
 
   // 성공/실패를 반환한다. 스케줄 매칭 실패, API 호출 실패 모두 실패(false)로 취급한다.
+  // [at]은 복용 완료로 기록할 시각(리뷰 M8) — 지정하지 않으면 지금 이 순간
+  // 처리되고 있다고 보고 `DateTime.now()`를 쓴다(알림 탭 등 즉시 처리 경로).
   static Future<bool> _markTakenBestEffort({
     required String medicineName,
     required String dayKor,
     required String hhmm,
+    DateTime? at,
   }) async {
     try {
       final schedules = await ScheduleService().getSchedules(
@@ -231,10 +247,10 @@ class AlarmService {
         }
         return false;
       }
-      final today = DateTime.now();
+      final takenAt = at ?? DateTime.now();
       await HistoryService().markTaken(
         scheduleId: matchId,
-        scheduledDate: _formatYMD(today),
+        scheduledDate: _formatYMD(takenAt),
         // 백엔드는 HH:mm 형식을 기대할 수 있어 분 단위로 전달
         scheduledTime: timeHms.substring(0, 5),
       );
@@ -259,6 +275,82 @@ class AlarmService {
       dayKor: dayKor,
       hhmm: hhmm,
     );
+  }
+
+  /// AlarmKit "복용 완료" 보조 버튼(백그라운드 LiveActivityIntent)이 앱이
+  /// 백그라운드/종료 상태일 때 남겨 둔 완료 기록을 꺼내 처리한다
+  /// (plan §6 W4 3b, §7 "백그라운드 액션 실패 시 foreground로 전환" 리스크
+  /// 대응은 실기기 검증 후 필요하면 추가한다).
+  static const List<String> _weekdayKor = ['', '월', '화', '수', '목', '금', '토', '일'];
+
+  /// `DateTime.weekday`(1=월 ... 7=일)를 한국어 요일로 바꾼다.
+  static String _koreanWeekdayFor(DateTime d) => _weekdayKor[d.weekday];
+
+  static Future<void> _drainAlarmKitCompletions() async {
+    final alarmKit = _scheduler.alarmKit;
+    if (alarmKit == null) return;
+    try {
+      // 리뷰 M8: 지우면서 읽는 게 아니라 읽기만 하고(peek), 서버 반영에
+      // 성공한 항목만 지운다(ack) — 오프라인 등으로 실패하면 다음 폴링에서
+      // 다시 시도할 수 있어야 한다.
+      final completions = await alarmKit.peekCompletions();
+      for (final c in completions) {
+        final id = (c['id'] as String?) ?? '';
+        final name = (c['medicineName'] as String?) ?? '';
+        final hour = (c['hour'] as num?)?.toInt() ?? 0;
+        final minute = (c['minute'] as num?)?.toInt() ?? 0;
+        // 실제로 버튼을 누른 시각을 쓴다(리뷰 M8) — `DateTime.now()`를
+        // 쓰면 자정을 넘겨 늦게 처리될 때 다음 날짜로 잘못 기록된다.
+        final timestampMs = (c['timestampMs'] as num?)?.toInt();
+        final pressedAt = timestampMs != null
+            ? DateTime.fromMillisecondsSinceEpoch(timestampMs)
+            : DateTime.now();
+        final hhmm =
+            '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+        final success = await _markTakenBestEffort(
+          medicineName: name,
+          dayKor: _koreanWeekdayFor(pressedAt),
+          hhmm: hhmm,
+          at: pressedAt,
+        );
+        if (success && id.isNotEmpty) {
+          await alarmKit.ackCompletion(id);
+        }
+      }
+    } catch (e) {
+      print('AlarmKit 완료 기록 처리 실패: $e');
+    }
+  }
+
+  /// 지금 AlarmKit 알람이 울리고 있다면 풀스크린 페이지로 이동한다(앱이
+  /// 이미 실행 중인 상태에서 알림을 탭해 포그라운드로 온 경우). 콜드
+  /// 스타트 경로는 `main.dart`의 `StartupPage`가 직접 조회한다.
+  static Future<void> _refreshAlertingAlarmKitState() async {
+    final alarmKit = _scheduler.alarmKit;
+    final navContext = _navigatorKey?.currentState?.context;
+    if (alarmKit == null || navContext == null) return;
+    try {
+      final alerting = await alarmKit.alertingAlarm();
+      if (alerting == null) return;
+      final name = (alerting['medicineName'] as String?) ?? '약';
+      final day = (alerting['day'] as String?) ?? '월';
+      final hour = (alerting['hour'] as num?)?.toInt() ?? 8;
+      final minute = (alerting['minute'] as num?)?.toInt() ?? 0;
+      final alarmId = alerting['scheduleId'] as String?;
+      showFullscreenAlarm(
+        navContext,
+        MedicineAlarm(
+          id: alarmId,
+          name: name,
+          times: [TimeOfDay(hour: hour, minute: minute)],
+          days: [day],
+        ),
+        TimeOfDay(hour: hour, minute: minute),
+        day,
+      );
+    } catch (e) {
+      print('AlarmKit 알림 상태 조회 실패: $e');
+    }
   }
 
   @pragma('vm:entry-point')
@@ -288,7 +380,7 @@ class AlarmService {
       );
 
       // 액션 버튼 처리
-      if (pressedKey == actionKeyMarkTaken) {
+      if (pressedKey == AwesomeReminderScheduler.actionKeyMarkTaken) {
         // 복용 완료: 성공한 경우에만 알림을 닫는다. 실패 시(오프라인/서버 거부 등)
         // 알림을 유지해 사용자가 다시 시도할 수 있게 한다.
         try {
@@ -298,7 +390,11 @@ class AlarmService {
             hhmm: timeStr,
           );
           if (success) {
-            await AwesomeNotifications().cancel(notifId);
+            // 리뷰 B1: `cancel()`은 표시된 알림뿐 아니라 반복 예약까지
+            // 취소해서, 요일이 합쳐진 iOS 매일 알람은 한 번만 눌러도
+            // 7일치가 모두 사라졌다(Android도 원래 같은 버그). 지금
+            // 표시된 알림만 닫는 `dismiss()`로 바꾼다.
+            await AwesomeNotifications().dismiss(notifId);
             print('복용 완료 처리됨: notificationId=$notifId');
           } else {
             print('복용 완료 처리 실패: 알림 유지 - notificationId=$notifId');
@@ -307,7 +403,7 @@ class AlarmService {
           print('복용 완료 처리 실패: $e');
         }
         return;
-      } else if (pressedKey == actionKeyCheckOthers) {
+      } else if (pressedKey == AwesomeReminderScheduler.actionKeyCheckOthers) {
         // 홈 화면으로 이동
         final state = _navigatorKey?.currentState;
         if (state != null) {
@@ -366,55 +462,13 @@ class AlarmService {
       print(
         '🔔 알람 스케줄링: scheduleId=${alarm.id}, name=${alarm.name}, times=${alarm.times.length}, days=${alarm.days.length}',
       );
-
-      // 기존 알림 ID 가져오기 (수정 시 재사용)
-      final existingNotificationIds = await _getExistingNotificationIds(
-        alarm.id,
-      );
-      if (_verboseLogs) {
-        print('   🔄 기존 알림 ID: $existingNotificationIds');
-      }
-
-      // 기존 알람 취소
-      await cancelAlarm(alarm.id);
-      if (_verboseLogs) {
-        print('   ✅ 기존 알람 취소 완료');
-      }
-
-      final deviceAllowed = await MySettingsStore.getAllowDeviceNotifications();
-      if (!deviceAllowed) {
-        await _saveAlarmWithNotificationIds(alarm, []);
-        print('   ⏸️ 디바이스 알람 비활성화 - 스케줄링 건너뜀');
-        return true;
-      }
-
-      // 각 요일과 시간에 대해 알람 등록
-      final notificationIds = <int>[];
-      int idIndex = 0;
-
-      for (final day in alarm.days) {
-        for (final time in alarm.times) {
-          if (_verboseLogs) {
-            print('   📅 $day ${time.hour}:${time.minute} 알람 등록 중...');
-          }
-
-          // 기존 ID가 있으면 재사용, 없으면 새로 생성
-          final notificationId = idIndex < existingNotificationIds.length
-              ? existingNotificationIds[idIndex]
-              : await _allocateNextNotificationId();
-
-          await _scheduleSingleAlarmWithId(alarm, day, time, notificationId);
-          notificationIds.add(notificationId);
-          idIndex++;
-        }
-      }
-      print('   ✅ 알람 스케줄링 완료: scheduleId=${alarm.id}');
-
-      // 알람 저장 (알림 ID 포함)
-      await _saveAlarmWithNotificationIds(alarm, notificationIds);
-      print('   💾 알람 저장 완료');
-
-      return true;
+      // 먼저 저장소에 알람 메타데이터를 반영한다 — iOS 스케줄러는 전체
+      // 활성 알람 목록을 다시 읽어 64개 예산을 계산하므로, 이 알람이
+      // 이미 저장돼 있어야 한다.
+      await _upsertAlarmMetadata(alarm);
+      final ok = await _scheduler.schedule(alarm);
+      print(ok ? '   ✅ 알람 스케줄링 완료: scheduleId=${alarm.id}' : '   ❌ 알람 스케줄링 실패');
+      return ok;
     } catch (e) {
       print('❌ 알람 스케줄링 실패: $e');
       return false;
@@ -423,122 +477,47 @@ class AlarmService {
 
   // 해당 알람이 이미 기기에 예약돼 있는지 확인(새 기기/재설치 후 동기화용)
   Future<bool> hasScheduledNotifications(String alarmId) async {
-    final ids = await _getExistingNotificationIds(alarmId);
-    return ids.isNotEmpty;
-  }
-
-  // 기존 알림 ID 가져오기
-  Future<List<int>> _getExistingNotificationIds(String alarmId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final notificationIdsKey = _notificationIdsKeyFor(alarmId);
-      final notificationIdsString = prefs.getStringList(notificationIdsKey);
-
-      if (notificationIdsString != null) {
-        return notificationIdsString.map((id) => int.parse(id)).toList();
-      }
-      return [];
-    } catch (e) {
-      print('기존 알림 ID 가져오기 실패: $e');
-      return [];
+      final ids = prefs.getStringList(_notificationIdsKeyForStatic(alarmId));
+      if (ids != null && ids.isNotEmpty) return true;
+    } catch (_) {}
+    final alarmKit = _scheduler.alarmKit;
+    if (alarmKit != null) {
+      final list = await alarmKit.list();
+      if (list.any((e) => e['scheduleId'] == alarmId)) return true;
     }
+    // 리뷰 M10: iOS 로컬 알림이 64개 예산 초과로 이번 회차엔 id가
+    // 없어도([]), 현재 전략이 이미 이 알람을 알고 관리 중이면 "예약
+    // 없음"으로 보지 않는다 — 안 그러면 알람 탭을 열 때마다 예산 밖
+    // 알람마다 전체 재계산과 안내 토스트가 반복된다.
+    if (await _scheduler.local.isManagedByCurrentIosPass(alarmId)) return true;
+    return false;
   }
 
-  // ID를 지정해서 알람 등록
-  Future<void> _scheduleSingleAlarmWithId(
-    MedicineAlarm alarm,
-    String day,
-    TimeOfDay time,
-    int notificationId,
-  ) async {
-    try {
-      final dayIndex = _getDayIndex(day);
-
-      if (_verboseLogs) {
-        print(
-          '      📅 $day ${time.hour}:${time.minute} - weekday=$dayIndex 매주 반복',
-        );
-        print('      🆔 알림ID: $notificationId (재사용됨)');
-      }
-
-      // 알람 스케줄링 (전체화면/웨이크업)
-      await AwesomeNotifications().createNotification(
-        content: NotificationContent(
-          id: notificationId,
-          channelKey: 'medicine_alarms',
-          title: '약 복용 알람',
-          body: '${alarm.name} 복용 시간입니다!',
-          notificationLayout: NotificationLayout.Default,
-          wakeUpScreen: true,
-          fullScreenIntent: true,
-          autoDismissible: false,
-          locked: true,
-          category: NotificationCategory.Alarm,
-          displayOnBackground: true,
-          displayOnForeground: true,
-          payload: {
-            'alarmId': alarm.id,
-            'medicineName': alarm.name,
-            'time':
-                '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
-            'day': day,
-            'notificationId': '$notificationId',
-            'fs': '1',
-          },
-        ),
-        actionButtons: [
-          NotificationActionButton(
-            key: actionKeyMarkTaken,
-            label: '복용 완료',
-            actionType: ActionType.SilentAction,
-          ),
-          NotificationActionButton(key: actionKeyCheckOthers, label: '이외 약 체크'),
-        ],
-        schedule: NotificationCalendar(
-          weekday: dayIndex,
-          hour: time.hour,
-          minute: time.minute,
-          second: 0,
-          repeats: true,
-          preciseAlarm: true,
-          allowWhileIdle: true,
-        ),
-      );
-      if (_verboseLogs) {
-        print('      ✅ 단일 알람 스케줄링 완료');
-      }
-    } catch (e) {
-      print('      ❌ 단일 알람 스케줄링 실패: $e');
-      rethrow;
+  // 알람 메타데이터만 저장(알림 ID는 각 스케줄러가 자체적으로 관리)
+  Future<void> _upsertAlarmMetadata(MedicineAlarm alarm) async {
+    final prefs = await SharedPreferences.getInstance();
+    final alarms = await getAlarms();
+    final existingIndex = alarms.indexWhere((a) => a.id == alarm.id);
+    if (existingIndex >= 0) {
+      alarms[existingIndex] = alarm;
+    } else {
+      alarms.add(alarm);
     }
+    final alarmsJson = alarms.map((a) => a.toJson()).toList();
+    await prefs.setString(_alarmsKeyForUserStatic(), json.encode(alarmsJson));
   }
 
-  int _getDayIndex(String day) {
-    const dayMap = {'월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7};
-    return dayMap[day] ?? 1;
+  Future<List<MedicineAlarm>> _activeAlarmsFromStorage() async {
+    final alarms = await getAlarms();
+    return alarms.where((a) => a.isActive).toList();
   }
 
   // 알람 취소 (ID는 유지)
   Future<void> cancelAlarm(String alarmId) async {
-    try {
-      // 저장된 알림 ID 가져오기
-      final prefs = await SharedPreferences.getInstance();
-      final notificationIdsKey = _notificationIdsKeyFor(alarmId);
-      final notificationIdsString = prefs.getStringList(notificationIdsKey);
-
-      if (notificationIdsString != null) {
-        for (final idString in notificationIdsString) {
-          final notificationId = int.parse(idString);
-          await AwesomeNotifications().cancel(notificationId);
-          if (_verboseLogs) {
-            print('   🔔 알림 취소: $notificationId');
-          }
-        }
-        print('   ✅ 알림 취소 완료: scheduleId=$alarmId');
-      }
-    } catch (e) {
-      print('알람 취소 실패: $e');
-    }
+    await _scheduler.cancel(alarmId);
+    print('   ✅ 알림 취소 완료: scheduleId=$alarmId');
   }
 
   // 활성 알람의 디바이스 스케줄만 취소 (저장 데이터는 유지)
@@ -555,23 +534,20 @@ class AlarmService {
     }
   }
 
-  // 모든 알람 취소
+  // 모든 알람 취소(표시/예약 전부, 모든 전략)
   Future<void> cancelAllAlarms() async {
-    await AwesomeNotifications().cancelAll();
+    await _scheduler.cancelAll();
   }
 
-  // 모든 예약(스케줄)만 취소
+  // 모든 예약(스케줄)만 취소 — 기존 API 호환을 위해 유지, cancelAllAlarms와 동일하게 위임한다.
   Future<void> cancelAllAlarmSchedules() async {
-    await AwesomeNotifications().cancelAllSchedules();
+    await _scheduler.cancelAll();
   }
 
   // 모든 알람 데이터(스케줄 + 저장소) 정리
   Future<void> clearAllAlarmData() async {
     try {
-      // 표시/대기 중인 모든 알림 및 모든 예약 스케줄 취소
-      await cancelAllAlarms();
-      await cancelAllAlarmSchedules();
-      // 저장된 알람 목록 및 각 알림 ID 키 제거
+      await _scheduler.cancelAll();
       final prefs = await SharedPreferences.getInstance();
       // 레거시 키 제거
       await prefs.remove(_alarmsKeyLegacy);
@@ -593,56 +569,12 @@ class AlarmService {
   // 저장된 알람을 불러와 활성화된 항목만 재스케줄
   Future<void> rescheduleAllActiveFromStorage() async {
     try {
-      final alarms = await getAlarms();
-      for (final alarm in alarms) {
-        if (alarm.isActive) {
-          await scheduleAlarm(alarm);
-        }
-      }
+      final alarms = await _activeAlarmsFromStorage();
+      await _scheduler.rescheduleAll(alarms);
     } catch (e) {
       print('알람 재스케줄 실패: $e');
     }
   }
-
-  // 알람 저장 (알림 ID 포함)
-  Future<void> _saveAlarmWithNotificationIds(
-    MedicineAlarm alarm,
-    List<int> notificationIds,
-  ) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final alarms = await getAlarms();
-
-      // 기존 알람이 있으면 업데이트, 없으면 추가
-      final existingIndex = alarms.indexWhere((a) => a.id == alarm.id);
-      if (existingIndex >= 0) {
-        alarms[existingIndex] = alarm;
-      } else {
-        alarms.add(alarm);
-      }
-
-      // 알림 ID 저장
-      final notificationIdsKey = _notificationIdsKeyFor(alarm.id);
-      await prefs.setStringList(
-        notificationIdsKey,
-        notificationIds.map((id) => id.toString()).toList(),
-      );
-      print(
-        '   🔔 알림 저장: scheduleId=${alarm.id}, count=${notificationIds.length}',
-      );
-
-      final alarmsJson = alarms.map((a) => a.toJson()).toList();
-      await prefs.setString(_alarmsKeyForUser(), json.encode(alarmsJson));
-      if (_verboseLogs) {
-        print('   ✅ SharedPreferences 저장 완료');
-      }
-    } catch (e) {
-      print('❌ 알람 저장 실패: $e');
-      rethrow;
-    }
-  }
-
-  // (미사용) 과거 저장 함수 제거됨
 
   // 저장된 알람 불러오기
   Future<List<MedicineAlarm>> getAlarms() async {
@@ -650,7 +582,7 @@ class AlarmService {
       final prefs = await SharedPreferences.getInstance();
       // 사용자별 키 먼저, 없으면 레거시 키로 백필
       final alarmsString =
-          prefs.getString(_alarmsKeyForUser()) ??
+          prefs.getString(_alarmsKeyForUserStatic()) ??
           prefs.getString(_alarmsKeyLegacy);
 
       if (alarmsString == null) return [];
@@ -666,18 +598,17 @@ class AlarmService {
   // 알람 삭제 (ID도 완전 삭제)
   Future<void> deleteAlarm(String alarmId) async {
     try {
-      await cancelAlarm(alarmId);
+      await _scheduler.cancel(alarmId);
 
       final prefs = await SharedPreferences.getInstance();
       final alarms = await getAlarms();
       alarms.removeWhere((a) => a.id == alarmId);
 
       final alarmsJson = alarms.map((a) => a.toJson()).toList();
-      await prefs.setString(_alarmsKeyForUser(), json.encode(alarmsJson));
+      await prefs.setString(_alarmsKeyForUserStatic(), json.encode(alarmsJson));
 
       // 알람 삭제 시에는 알림 ID도 완전 삭제
-      final notificationIdsKey = _notificationIdsKeyFor(alarmId);
-      await prefs.remove(notificationIdsKey);
+      await prefs.remove(_notificationIdsKeyForStatic(alarmId));
       print('   🗑️ 알림 데이터 제거: scheduleId=$alarmId');
     } catch (e) {
       print('알람 삭제 실패: $e');
@@ -694,15 +625,15 @@ class AlarmService {
         final updatedAlarm = alarms[alarmIndex].copyWith(isActive: isActive);
         alarms[alarmIndex] = updatedAlarm;
 
-        if (isActive) {
-          await scheduleAlarm(updatedAlarm);
-        } else {
-          await cancelAlarm(alarmId);
-        }
-
         final prefs = await SharedPreferences.getInstance();
         final alarmsJson = alarms.map((a) => a.toJson()).toList();
-        await prefs.setString(_alarmsKeyForUser(), json.encode(alarmsJson));
+        await prefs.setString(_alarmsKeyForUserStatic(), json.encode(alarmsJson));
+
+        if (isActive) {
+          await _scheduler.schedule(updatedAlarm);
+        } else {
+          await _scheduler.cancel(alarmId);
+        }
       }
     } catch (e) {
       print('알람 상태 변경 실패: $e');
@@ -728,5 +659,19 @@ class AlarmService {
         fullscreenDialog: true,
       ),
     );
+  }
+}
+
+/// iOS 로컬 알림 64개 예산 롤링 재예약(plan §7)과 AlarmKit 완료 기록 반영을
+/// 앱 포그라운드 진입 때마다 트리거하는 전용 옵저버. `AlarmService.initialize()`
+/// 에서만 등록하므로 다른 파일(app_shell.dart 등)을 건드리지 않는다.
+class _AlarmServiceLifecycleObserver extends WidgetsBindingObserver {
+  Future<void> Function()? onResumed;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResumed?.call();
+    }
   }
 }
