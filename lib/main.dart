@@ -8,6 +8,7 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/core/storage/onboarding_store.dart';
+import 'package:after30/core/storage/user_store.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
