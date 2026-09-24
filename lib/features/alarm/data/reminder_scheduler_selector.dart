@@ -58,9 +58,22 @@ class ReminderSchedulerSelector implements ReminderScheduler {
   /// 모든 공개 메서드 호출을 하나의 체인으로 직렬화한다(M3).
   Future<void> _chain = Future<void>.value();
 
+  /// [_serialized]가 이전 링크를 기다리는 최대 시간. 어떤 이유로든(네이티브
+  /// 채널 응답이 영원히 안 오거나, 위젯 테스트 zone이 겹치는 등) 이전
+  /// 링크가 끝나지 않으면 이 체인이 영원히 막혀서 이후의 모든 스케줄링
+  /// 요청이 죽어버린다 — 그런 전역 데드락보다는 순서가 깨지더라도(드문
+  /// 경우) 다음 요청이 진행되는 편이 안전하다.
+  @visibleForTesting
+  static const Duration serializationGateTimeout = Duration(seconds: 5);
+
   Future<T> _serialized<T>(Future<T> Function() action) {
+    final previous = _chain;
     final completer = Completer<T>();
-    _chain = _chain.then((_) async {
+    // 이전 링크 완료를 기다리되(순서 보장), 제한 시간을 넘기면 그냥
+    // 진행한다 — `previous`는 그 자체로 실패하지 않게 짜여 있어(아래
+    // catch) 정상 상황에서는 타임아웃이 발생하지 않는다.
+    final gate = previous.timeout(serializationGateTimeout, onTimeout: () {});
+    _chain = gate.then((_) async {
       try {
         completer.complete(await action());
       } catch (e, st) {
