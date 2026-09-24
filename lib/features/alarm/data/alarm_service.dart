@@ -487,6 +487,11 @@ class AlarmService {
       final list = await alarmKit.list();
       if (list.any((e) => e['scheduleId'] == alarmId)) return true;
     }
+    // 리뷰 M10: iOS 로컬 알림이 64개 예산 초과로 이번 회차엔 id가
+    // 없어도([]), 현재 전략이 이미 이 알람을 알고 관리 중이면 "예약
+    // 없음"으로 보지 않는다 — 안 그러면 알람 탭을 열 때마다 예산 밖
+    // 알람마다 전체 재계산과 안내 토스트가 반복된다.
+    if (await _scheduler.local.isManagedByCurrentIosPass(alarmId)) return true;
     return false;
   }
 

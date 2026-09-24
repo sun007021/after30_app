@@ -29,19 +29,19 @@ class ReminderPermissionFlow {
   static Future<void> ensureRequestedAfterLogin(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_kRequestedAfterLoginKey) ?? false) return;
-    await prefs.setBool(_kRequestedAfterLoginKey, true);
 
-    // Android는 기존과 동일하게(그냥 시점만 콜드 런치 → 로그인 직후로
-    // 늦춘 것) 바로 시스템 권한을 요청한다. iOS는 여기서 바로 요청하지
-    // 않고 첫 약 등록 시점([requestWithRationale])까지 기다린다 —
-    // Apple HIG는 권한 요청 전에 맥락(사전 설명)을 요구한다.
-    if (Platform.isAndroid) {
-      try {
-        await AwesomeNotifications().requestPermissionToSendNotifications();
-      } catch (_) {
-        // 권한 다이얼로그를 띄울 수 없는 상황(테스트 등)은 조용히 무시한다.
-      }
+    // Android/iOS 공통으로 로그인 직후 1회 시스템 알림 권한을 요청한다
+    // (리뷰 m1 — 예전에는 iOS만 건너뛰고 첫 약 등록까지 미뤄서, 약을
+    // 등록하지 않는 사용자는 영영 알림을 못 받았다).
+    try {
+      await AwesomeNotifications().requestPermissionToSendNotifications();
+    } catch (_) {
+      // 권한 다이얼로그를 띄울 수 없는 상황(테스트 등)은 조용히 무시한다.
     }
+
+    // 플래그는 요청이 끝난 뒤에 세운다(리뷰 m1 — 요청 도중 예외가 나거나
+    // 프로세스가 죽으면 다음 진입 때 다시 시도할 수 있어야 한다).
+    await prefs.setBool(_kRequestedAfterLoginKey, true);
   }
 
   /// 첫 약 등록 직전 등 맥락이 있는 시점에 호출한다(W5). 사전 설명 알럿에
@@ -61,9 +61,12 @@ class ReminderPermissionFlow {
     var granted = false;
     if (Platform.isIOS) {
       // iOS는 FCM이 쓰는 시스템 권한(UNUserNotificationCenter)과 로컬
-      // 알림 권한이 같은 다이얼로그다. Firebase 쪽에서 먼저 요청 결과를
-      // 확인한 뒤(plan §6 W4 6항), awesome_notifications 쪽은 이미 결정된
-      // 상태를 다시 읽기만 한다(두 번째 다이얼로그가 뜨지 않는다).
+      // 알림 권한이 같은 다이얼로그라 Firebase 쪽 요청 하나로 충분하다
+      // (plan §6 W4 6항). 리뷰 M11: 이어서
+      // `AwesomeNotifications().requestPermissionToSendNotifications()`를
+      // "이미 결정된 상태를 다시 읽기만 한다"는 의도로 호출했었는데,
+      // 실제로는 방금 거부된 직후 iOS 설정 앱을 열어버려서 완전히
+      // 제거했다.
       try {
         final settings = await FirebaseMessaging.instance.requestPermission(
           alert: true,
@@ -73,7 +76,6 @@ class ReminderPermissionFlow {
         granted =
             settings.authorizationStatus == AuthorizationStatus.authorized ||
             settings.authorizationStatus == AuthorizationStatus.provisional;
-        await AwesomeNotifications().requestPermissionToSendNotifications();
         // APNs 토큰을 기다리느라 이 화면 흐름을 막지 않는다(리뷰 M7).
         // 백엔드 동기화는 실패해도 다음 토큰 갱신/재시도 때 다시 된다.
         unawaited(FcmService.syncTokenToBackend());

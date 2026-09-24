@@ -40,6 +40,7 @@ class AwesomeReminderScheduler implements ReminderScheduler {
   static const String actionKeyMarkTaken = 'SNOOZE_10';
   static const String actionKeyCheckOthers = 'CHECK_OTHERS';
   static const String _nextNotificationIdKey = 'alarm_next_notification_id';
+  static const String _iosManagedIdsKey = 'reminder_ios_managed_alarm_ids';
   static const int _maxNotificationId = 2000000; // 32비트 정수 범위 내 안전 상한
   static const String _medicineAlarmsChannelKey = 'medicine_alarms';
 
@@ -332,6 +333,39 @@ class AwesomeReminderScheduler implements ReminderScheduler {
       if (!activeIds.contains(alarm.id)) {
         await _saveIdsFor(alarm.id, const []);
       }
+    }
+
+    // 리뷰 M10: 예산 초과로 이번 회차엔 알림 id가 없는([]) 알람이라도,
+    // "이번 재계산에서 실제로 다뤘다"는 사실은 따로 기록해 둔다 —
+    // `hasScheduledNotifications`가 이 기록을 봐서 예산 때문에 빠진
+    // 알람과 아직 한 번도 등록된 적 없는 알람(새 기기/재설치 복구
+    // 대상)을 구분할 수 있게 한다.
+    await _saveManagedIds(activeIds);
+  }
+
+  Future<void> _saveManagedIds(Set<String> alarmIds) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_iosManagedIdsKey, alarmIds.toList());
+    } catch (e) {
+      print('iOS 관리 알람 id 저장 실패: $e');
+    }
+  }
+
+  /// 이 알람이 "현재 전략(iOS 로컬 알림)이 최근 재계산에서 이미 다룬"
+  /// 알람인지 확인한다(리뷰 M10). 예산 초과로 알림 id가 없어도([])
+  /// 이미 관리 중이면 true — `AlarmService.hasScheduledNotifications`가
+  /// 새 기기/재설치 복구가 필요한 알람과 구분하는 데 쓴다. 이 기록은
+  /// `_rescheduleIos`(iOS 전용)에서만 채워지므로 다른 플랫폼에서는
+  /// 항상 비어 있어 자연히 false다 — 별도 플랫폼 분기를 두지 않는다
+  /// (단위 테스트에서 직접 검증할 수 있게 하기 위함이기도 하다).
+  Future<bool> isManagedByCurrentIosPass(String alarmId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ids = prefs.getStringList(_iosManagedIdsKey) ?? const [];
+      return ids.contains(alarmId);
+    } catch (_) {
+      return false;
     }
   }
 
