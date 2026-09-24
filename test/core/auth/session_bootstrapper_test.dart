@@ -213,4 +213,57 @@ void main() {
     expect(prefs.getString('medicine_alarms_99'), '[]');
     expect(prefs.getString('medicine_alarms_user@example.com'), isNull);
   });
+
+  test(
+    'restore(): 리뷰 M5 — JWT 파싱도 실패하고 폴백도 없으면 oldUserId를 그대로 써서 '
+    '알람 네임스페이스가 비지 않는다',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'token_store_installed_marker': true,
+        'current_user_id': '77',
+        'medicine_alarms_77': '[]',
+      });
+      await TokenStore.saveTokens(
+        accessToken: 'expired-access',
+        refreshToken: 'valid-refresh',
+        accessExpiresIn: 0,
+        refreshExpiresIn: 86400,
+      );
+
+      // 새 access_token 자체가 JWT 형식이 아니라 파싱이 실패하는 상황을
+      // 흉내낸다(백엔드 응답 이상 등, 드문 경우).
+      ApiClient().dio.interceptors.remove(blockNetworkInterceptor);
+      final fakeRefresh = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.path == '/auth/token/refresh') {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'access_token': 'not-a-valid-jwt',
+                  'access_expires_in': 3600,
+                },
+              ),
+            );
+            return;
+          }
+          handler.reject(
+            DioException(requestOptions: options, message: '테스트 환경 네트워크 차단'),
+          );
+        },
+      );
+      ApiClient().dio.interceptors.add(fakeRefresh);
+      addTearDown(() => ApiClient().dio.interceptors.remove(fakeRefresh));
+
+      final restored = await SessionBootstrapper.restore();
+
+      expect(restored, isTrue);
+      // JWT도 폴백도 없으니 oldUserId('77')를 그대로 써야 한다(null이면
+      // AlarmService 네임스페이스가 비어 알람이 전혀 재예약되지 않는다).
+      expect(await UserStore.getCurrentUserId(), '77');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('medicine_alarms_77'), '[]');
+    },
+  );
 }
