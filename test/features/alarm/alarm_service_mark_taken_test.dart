@@ -6,7 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:after30/core/network/api_client.dart';
+import 'package:after30/core/storage/token_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
+
+import '../../support/fake_secure_storage.dart';
 
 /// `/schedules/` GET과 `/histories/process` POST만 응답하는 가짜
 /// `HttpClientAdapter`. dio는 `ApiClient` 싱글톤 안에 이미 생성돼 있으므로,
@@ -57,7 +60,11 @@ void main() {
   late _FakeAdapter adapter;
 
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    // ApiClient의 인증 인터셉터가 TokenStore(Keychain/Keystore)를 거치므로,
+    // 실제 보안 저장소 채널을 목킹하는 대신 메모리 기반 가짜로 격리한다
+    // (W3a 리뷰에서 넘어온 항목 — 다른 테스트와 상태가 섞이지 않게 한다).
+    TokenStore.debugOverrideSecureStorage(FakeSecureStorage());
+    SharedPreferences.setMockInitialValues({'token_store_installed_marker': true});
     adapter = _FakeAdapter(
       schedules: [
         {
@@ -75,6 +82,10 @@ void main() {
       ],
     );
     ApiClient().dio.httpClientAdapter = adapter;
+  });
+
+  tearDown(() {
+    TokenStore.debugReset();
   });
 
   test('요일·시간이 정확히 일치하면 매칭된 scheduleId로 복용 완료 처리된다', () async {
