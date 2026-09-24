@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
-import 'package:after30/features/login/data/backend_auth_service.dart';
-import 'package:after30/core/storage/user_store.dart';
-import 'package:after30/features/alarm/data/alarm_service.dart';
-import 'package:after30/app/app_shell.dart';
-import 'package:after30/services/notifications/fcm_service.dart';
+import 'package:after30/core/auth/auth_provider_client.dart';
+import 'package:after30/core/auth/session_bootstrapper.dart';
 import 'package:after30/utils/responsive.dart';
 
 class SignupIntroPage extends StatefulWidget {
@@ -21,35 +16,15 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
 
   Future<void> _handleKakaoLogin() async {
     try {
-      bool kakaoTalkInstalled = await isKakaoTalkInstalled();
-      OAuthToken? kakaoToken;
-      if (kakaoTalkInstalled) {
-        try {
-          kakaoToken = await UserApi.instance.loginWithKakaoTalk();
-        } catch (error) {
-          if (error is PlatformException && error.code == 'CANCELED') {
-            return;
-          }
-          kakaoToken = await UserApi.instance.loginWithKakaoAccount();
-        }
-      } else {
-        kakaoToken = await UserApi.instance.loginWithKakaoAccount();
-      }
-
-      final backend = BackendAuthService();
-      await backend.loginWithKakaoAccessToken(kakaoToken.accessToken);
-
-      final me = await UserApi.instance.me();
-      final userId = me.id.toString();
-      await UserStore.setCurrentUserId(userId);
-      AlarmService.setCurrentUserId(userId);
-      await AlarmService().rescheduleAllActiveFromStorage();
-      // 로그인 성공 시 FCM 토큰을 백엔드로 동기화
-      await FcmService.syncTokenToBackend();
-
-      // 로그인 성공 후에는 앱 셸(홈 탭)로 진입한다(plan §6 W10 4/6항, D11).
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const AppShell()),
+      // 토큰 저장 → 사용자 ID 통합(백엔드 ID 기준) → 알람 네임스페이스
+      // 마이그레이션 → 재스케줄 → FCM 동기화 → 셸 진입까지는
+      // SessionBootstrapper가 공통으로 처리한다(plan §6 W3a 1항). 예전에는
+      // 이 화면이 카카오 회원 ID(`UserApi.instance.me().id`)를 직접
+      // 저장해서, 제공자가 늘어나면 사용자 ID 기준이 달라지는 문제가
+      // 있었다.
+      await SessionBootstrapper.completeLogin(
+        context,
+        KakaoAuthProviderClient(),
       );
     } catch (e) {
       if (!mounted) return;

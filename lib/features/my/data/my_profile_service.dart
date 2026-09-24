@@ -72,6 +72,27 @@ class MyProfile {
     final phone = phoneNumber?.trim();
     return phone != null && phone.isNotEmpty;
   }
+
+  /// 로그인 제공자를 화면에 보여줄 한국어 표시명으로 바꾼다(plan §6 W3a
+  /// 6항). `my_info_edit_page.dart`(W9 소유)의 SSO 표시 행이 이 값을
+  /// 쓴다.
+  String get providerDisplayName => providerDisplayNameFor(provider);
+
+  /// [provider] 문자열 하나만 있을 때도 같은 매핑을 쓸 수 있도록 정적으로도
+  /// 노출한다(예: 탈퇴 다이얼로그가 프로필 전체를 만들지 않고도 분기할 때).
+  static String providerDisplayNameFor(String? provider) {
+    switch (provider?.trim().toLowerCase()) {
+      case 'kakao':
+        return '카카오톡';
+      case 'email':
+        return '이메일';
+      case 'apple':
+        // Apple 로그인은 W3b에서 추가된다(D14) — 표시명만 미리 준비해 둔다.
+        return 'Apple';
+      default:
+        return '알 수 없음';
+    }
+  }
 }
 
 class MyProfileService {

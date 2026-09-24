@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/app/app_routes.dart';
+import 'package:after30/core/auth/session_bootstrapper.dart';
 import 'package:after30/core/design/app_theme.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
-import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/core/storage/onboarding_store.dart';
-import 'package:after30/core/storage/user_store.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:after30/services/notifications/fcm_service.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -211,14 +210,14 @@ class _StartupPageState extends State<StartupPage> {
         }
       } catch (_) {}
 
-      final ok = await BackendAuthService().refreshSession();
+      // 토큰 리프레시 → 사용자 ID 통합(구 카카오ID/이메일 폴백 → 백엔드
+      // ID) → 알람 네임스페이스 마이그레이션 → 재스케줄 → FCM 동기화까지는
+      // SessionBootstrapper가 공통으로 처리한다(plan §6 W3a 1·2항, login.dart/
+      // email_login_page.dart와 동일한 경로).
+      final restored = await SessionBootstrapper.restore();
       if (!mounted) return;
-      if (ok) {
+      if (restored) {
         await OnboardingStore.setCompleted();
-        // 저장된 사용자 ID가 있다면 네임스페이스 설정 후 재스케줄
-        final userId = await UserStore.getCurrentUserId();
-        AlarmService.setCurrentUserId(userId);
-        await AlarmService().rescheduleAllActiveFromStorage();
         if (!mounted) return;
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
