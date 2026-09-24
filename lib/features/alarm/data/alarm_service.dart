@@ -137,15 +137,33 @@ class AlarmService {
     // iOS 로컬 알림 fallback은 64개 예산을 앱 포그라운드 진입마다 앞으로
     // 굴려야 하고(plan §7), AlarmKit "복용 완료" 백그라운드 인텐트가 남긴
     // 완료 기록도 그때 함께 반영한다. Android 동작에는 영향이 없다(가드).
+    //
+    // 리뷰 m4: 완료 기록 처리/"지금 울리고 있는 알람" 조회는 여기(콜드
+    // 스타트, 로그인 세션 복원 전)서는 하지 않는다 — `_currentUserId`도
+    // 아직 안 정해졌고 `_navigatorKey`도 아직 없어 아무 일도 못 한다.
+    // 세션이 복원된 뒤 [handleSessionReady]([app_shell.dart] 첫
+    // post-frame)와 resume 때만 실행한다.
     if (Platform.isIOS) {
-      await _drainAlarmKitCompletions();
-      await _refreshAlertingAlarmKitState();
       _lifecycleObserver.onResumed = () async {
         await rescheduleAllActiveFromStorage();
-        await _drainAlarmKitCompletions();
+        // 리뷰 M8: 완료 기록 처리가 느려도(오프라인 등) 화면 재개 자체를
+        // 막지 않는다.
+        unawaited(_drainAlarmKitCompletions());
+        unawaited(_refreshAlertingAlarmKitState());
       };
       WidgetsBinding.instance.addObserver(_lifecycleObserver);
     }
+  }
+
+  /// 세션이 복원된 뒤(자동 로그인 포함) 앱 셸이 처음 그려지면 1회
+  /// 호출한다(`app_shell.dart` initState 첫 post-frame,
+  /// `ReminderPermissionFlow.ensureRequestedAfterLogin` 옆 — 리뷰 M8/m4).
+  /// 그 전에는 `_currentUserId`/`_navigatorKey`가 준비되지 않아 완료 기록
+  /// 처리와 "지금 울리고 있는 알람" 조회가 조용히 아무 일도 하지 않는다.
+  static Future<void> handleSessionReady() async {
+    if (!Platform.isIOS) return;
+    await _drainAlarmKitCompletions();
+    await _refreshAlertingAlarmKitState();
   }
 
   static String _formatYMD(DateTime d) {
