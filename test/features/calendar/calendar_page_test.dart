@@ -65,7 +65,7 @@ void main() {
     expect(find.byType(CupertinoDatePicker), findsNothing);
   });
 
-  testWidgets('월 제목을 탭하면 연/월 점프 피커가 뜬다(Android: Material 날짜 선택기)', (tester) async {
+  testWidgets('월 제목 탭은 iOS 전용이다 — Android는 탭 핸들러가 없다(리뷰 m1)', (tester) async {
     final fetcher = CountingFetcher();
     await pumpWithPlatform(
       tester,
@@ -76,10 +76,16 @@ void main() {
 
     final now = DateTime.now();
     final title = '${now.year}년 ${now.month.toString().padLeft(2, '0')}월';
-    await tester.tap(find.text(title));
+    // 기존 구조 그대로: 제목 위에 GestureDetector가 씌워지지 않는다.
+    expect(
+      find.ancestor(of: find.text(title), matching: find.byType(GestureDetector)),
+      findsNothing,
+    );
+
+    await tester.tap(find.text(title), warnIfMissed: false);
     await tester.pumpAndSettle();
 
-    expect(find.byType(DatePickerDialog), findsOneWidget);
+    expect(find.byType(DatePickerDialog), findsNothing);
   });
 
   testWidgets('fetchMedications를 주입하면 실제 네트워크 대신 그 함수를 쓴다', (tester) async {

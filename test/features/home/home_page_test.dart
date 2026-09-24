@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:after30/core/design/design.dart';
 import 'package:after30/features/home/ui/home.dart';
@@ -22,6 +23,9 @@ void main() {
     expect(find.byType(CustomScrollView), findsNothing);
     expect(find.byType(AppSliverNavBar), findsNothing);
     expect(find.byType(CupertinoSliverRefreshControl), findsNothing);
+    // 당겨서 새로고침은 iOS 전용이다(리뷰 m1, 팀 리드 결정) — Android는
+    // RefreshIndicator를 붙이지 않고 기존 구조 그대로다.
+    expect(find.byType(RefreshIndicator), findsNothing);
   });
 
   testWidgets('iOS에서는 큰 제목 헤더(AppSliverNavBar)와 당겨서 새로고침을 쓴다', (tester) async {
