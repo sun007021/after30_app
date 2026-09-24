@@ -24,18 +24,25 @@ class DeleteAccountDialog {
     );
     if (!confirmed) return;
 
+    // 리뷰: "조회 자체가 실패"(네트워크 오류 등)와 "provider 값만 비어
+    // 있음"(조회는 성공했지만 필드가 없거나 알 수 없는 값)을 구분한다.
+    // 전자는 사용자의 계정 상태를 전혀 알 수 없으므로 탈퇴를 진행하지
+    // 않고 오류를 안내한 뒤 중단한다. 후자만 예전 방식(카카오 세션 유무)
+    // 폴백을 탄다 — App Store 5.1.1(v) 위험은 후자에서만 회피하면 된다.
     String? provider;
+    bool profileFetchFailed = false;
     try {
       final profile = await MyProfileService().getMyProfile();
       provider = profile.provider;
     } catch (_) {
-      // 리뷰: 프로필 조회 실패로 탈퇴 자체를 막지 않는다(App Store
-      // 5.1.1(v) 위험) — 아래 default 분기가 예전 방식(카카오 세션 유무)
-      // 으로 판단하게 둔다.
-      provider = null;
+      profileFetchFailed = true;
     }
 
     if (!context.mounted) return;
+    if (profileFetchFailed) {
+      _showErrorDialog(context, '계정 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     switch (provider?.trim().toLowerCase()) {
       case 'kakao':
         await _showKakaoDeleteDialog(context);

@@ -96,8 +96,14 @@ void main() {
       'medicine_alarms_1234567': '[]',
     });
 
+    // M2/M3: 마이그레이션 소스는 UserStore가 아니라 이번에 로그인한 계정
+    // 자신의 예전 식별자 후보(legacyUserIds)다. 카카오 클라이언트가
+    // `UserApi.instance.me().id`로 채우는 값을 흉내낸다.
     final fakeClient = _FakeAuthProviderClient(
-      AuthSignInResult(tokens: _fakeTokens(accessToken: _fakeJwt({'sub': 42}))),
+      AuthSignInResult(
+        tokens: _fakeTokens(accessToken: _fakeJwt({'sub': 42})),
+        legacyUserIds: const ['1234567'],
+      ),
     );
 
     late BuildContext capturedContext;
