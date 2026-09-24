@@ -93,6 +93,9 @@ class WeekStrip extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             if (isSelected)
+              // 선택 표시는 iOS/Android 모두 기존 로직: 모두 완료면 꽉 찬
+              // 원, 아니면 테두리 원. 꽉 찬 파란 원은 "모두 복용"이라는
+              // 뜻이라 선택만으로 채우지 않는다(2026-09-25 결정).
               (total > 0 && done >= total)
                   ? FilledDay(
                       text: d.day.toString(),

@@ -4,6 +4,12 @@ import 'package:after30/features/calendar/models/medication.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/core/storage/user_store.dart';
 
+/// 특정 기간의 복약 목록을 가져오는 함수 시그니처. 기본값은
+/// [MedicationService.fetchMedications]이며, 홈/캘린더 화면 양쪽에서
+/// 테스트·디버그 프리뷰용으로 네트워크 호출 없이 가짜 데이터를 주입할 때
+/// 이 시그니처를 쓴다(리뷰 n1: 중복 정의를 이 한 곳으로 통합).
+typedef FetchMedicationsFn = Future<List<Medication>> Function(DateTime start, DateTime end);
+
 class MedicationService {
   static String _formatYMD(DateTime d) {
     return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
