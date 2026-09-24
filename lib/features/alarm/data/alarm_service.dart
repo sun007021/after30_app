@@ -189,10 +189,13 @@ class AlarmService {
   }
 
   // 성공/실패를 반환한다. 스케줄 매칭 실패, API 호출 실패 모두 실패(false)로 취급한다.
+  // [at]은 복용 완료로 기록할 시각(리뷰 M8) — 지정하지 않으면 지금 이 순간
+  // 처리되고 있다고 보고 `DateTime.now()`를 쓴다(알림 탭 등 즉시 처리 경로).
   static Future<bool> _markTakenBestEffort({
     required String medicineName,
     required String dayKor,
     required String hhmm,
+    DateTime? at,
   }) async {
     try {
       final schedules = await ScheduleService().getSchedules(
@@ -226,10 +229,10 @@ class AlarmService {
         }
         return false;
       }
-      final today = DateTime.now();
+      final takenAt = at ?? DateTime.now();
       await HistoryService().markTaken(
         scheduleId: matchId,
-        scheduledDate: _formatYMD(today),
+        scheduledDate: _formatYMD(takenAt),
         // 백엔드는 HH:mm 형식을 기대할 수 있어 분 단위로 전달
         scheduledTime: timeHms.substring(0, 5),
       );
@@ -260,19 +263,41 @@ class AlarmService {
   /// 백그라운드/종료 상태일 때 남겨 둔 완료 기록을 꺼내 처리한다
   /// (plan §6 W4 3b, §7 "백그라운드 액션 실패 시 foreground로 전환" 리스크
   /// 대응은 실기기 검증 후 필요하면 추가한다).
+  static const List<String> _weekdayKor = ['', '월', '화', '수', '목', '금', '토', '일'];
+
+  /// `DateTime.weekday`(1=월 ... 7=일)를 한국어 요일로 바꾼다.
+  static String _koreanWeekdayFor(DateTime d) => _weekdayKor[d.weekday];
+
   static Future<void> _drainAlarmKitCompletions() async {
     final alarmKit = _scheduler.alarmKit;
     if (alarmKit == null) return;
     try {
-      final completions = await alarmKit.drainCompletions();
+      // 리뷰 M8: 지우면서 읽는 게 아니라 읽기만 하고(peek), 서버 반영에
+      // 성공한 항목만 지운다(ack) — 오프라인 등으로 실패하면 다음 폴링에서
+      // 다시 시도할 수 있어야 한다.
+      final completions = await alarmKit.peekCompletions();
       for (final c in completions) {
+        final id = (c['id'] as String?) ?? '';
         final name = (c['medicineName'] as String?) ?? '';
-        final day = (c['day'] as String?) ?? '월';
         final hour = (c['hour'] as num?)?.toInt() ?? 0;
         final minute = (c['minute'] as num?)?.toInt() ?? 0;
+        // 실제로 버튼을 누른 시각을 쓴다(리뷰 M8) — `DateTime.now()`를
+        // 쓰면 자정을 넘겨 늦게 처리될 때 다음 날짜로 잘못 기록된다.
+        final timestampMs = (c['timestampMs'] as num?)?.toInt();
+        final pressedAt = timestampMs != null
+            ? DateTime.fromMillisecondsSinceEpoch(timestampMs)
+            : DateTime.now();
         final hhmm =
             '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-        await _markTakenBestEffort(medicineName: name, dayKor: day, hhmm: hhmm);
+        final success = await _markTakenBestEffort(
+          medicineName: name,
+          dayKor: _koreanWeekdayFor(pressedAt),
+          hhmm: hhmm,
+          at: pressedAt,
+        );
+        if (success && id.isNotEmpty) {
+          await alarmKit.ackCompletion(id);
+        }
       }
     } catch (e) {
       print('AlarmKit 완료 기록 처리 실패: $e');
