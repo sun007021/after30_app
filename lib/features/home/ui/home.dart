@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/app/app_shell.dart';
+import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/home/ui/home_content.dart';
 import 'package:after30/features/common/navigationBar.dart';
@@ -16,15 +17,17 @@ class HomePage extends StatefulWidget {
   final bool checkPhoneRegistration;
 
   /// [HomeContent]로 그대로 전달되는 테스트/디버그 프리뷰용 주입 지점.
-  /// 지정하지 않으면 실제 서비스를 사용한다.
+  /// 지정하지 않으면 실제 서비스/시계를 사용한다.
   final FetchMedicationsFn? fetchMedications;
   final FamilyService? familyService;
+  final DateTime Function() now;
 
   const HomePage({
     super.key,
     this.checkPhoneRegistration = false,
     this.fetchMedications,
     this.familyService,
+    this.now = DateTime.now,
   });
 
   @override
@@ -34,10 +37,11 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   User? _user;
 
-  /// 홈 탭이 (다른 탭에 있다가) 다시 활성화됐을 때 [HomeContentState.reload]를
-  /// 호출하기 위한 키(M2). AppShell은 IndexedStack으로 탭 상태를 유지하므로
-  /// HomeContent의 initState는 최초 방문 때 한 번만 실행되고, 이후에는 이
-  /// 훅으로만 데이터를 다시 불러올 수 있다.
+  /// 홈 탭이 (다른 탭에 있다가) 다시 활성화됐을 때
+  /// [HomeContentState.onTabActivated]를 호출하기 위한 키(M2). AppShell은
+  /// IndexedStack으로 탭 상태를 유지하므로 HomeContent의 initState는 최초
+  /// 방문 때 한 번만 실행되고, 이후에는 이 훅으로만 데이터를 다시 불러올
+  /// 수 있다.
   final GlobalKey<HomeContentState> _contentKey = GlobalKey<HomeContentState>();
 
   @override
@@ -69,12 +73,13 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: AppShellTabActivationListener(
         tabIndex: AppShellTab.home,
-        onActivated: () => _contentKey.currentState?.reload(),
+        onActivated: () => _contentKey.currentState?.onTabActivated(),
         child: HomeContent(
           key: _contentKey,
           user: _user,
           fetchMedications: widget.fetchMedications,
           familyService: widget.familyService,
+          now: widget.now,
         ),
       ),
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 2),

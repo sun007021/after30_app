@@ -24,6 +24,26 @@ class CalendarMonthHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final titleText = Text(
+      '${focusedDay.year}년 ${focusedDay.month.toString().padLeft(2, '0')}월',
+      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+      key: monthHeaderKey,
+    );
+    // 리뷰 m1(팀 리드 결정): 월 제목 탭은 iOS 전용이다. `onTitleTap`이
+    // null이면(Android) 제목에 아무 래퍼도 씌우지 않은 기존 구조를 그대로
+    // 유지한다 — GestureDetector/Semantics를 아예 만들지 않는다.
+    final title = onTitleTap == null
+        ? titleText
+        : Semantics(
+            button: true,
+            hint: '연/월 선택',
+            child: GestureDetector(
+              onTap: onTitleTap,
+              behavior: HitTestBehavior.opaque,
+              child: titleText,
+            ),
+          );
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -35,15 +55,7 @@ class CalendarMonthHeader extends StatelessWidget {
           ),
           onPressed: onPreviousMonth,
         ),
-        GestureDetector(
-          onTap: onTitleTap,
-          behavior: HitTestBehavior.opaque,
-          child: Text(
-            '${focusedDay.year}년 ${focusedDay.month.toString().padLeft(2, '0')}월',
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-            key: monthHeaderKey,
-          ),
-        ),
+        title,
         IconButton(
           icon: Transform(
             alignment: Alignment.center,

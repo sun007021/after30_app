@@ -20,11 +20,6 @@ import 'package:after30/features/home/ui/widgets/home_family_gauge_row.dart';
 import 'package:after30/features/home/ui/widgets/medication_dose_tile.dart';
 import 'package:after30/utils/responsive.dart';
 
-/// 특정 기간의 복약 목록을 가져오는 함수 시그니처. 기본값은
-/// [MedicationService.fetchMedications]이며, 테스트/프리뷰에서 네트워크 호출
-/// 없이 가짜 데이터를 주입할 수 있도록 열어 둔다.
-typedef FetchMedicationsFn = Future<List<Medication>> Function(DateTime start, DateTime end);
-
 class HomeContent extends StatefulWidget {
   final User? user;
 
@@ -36,11 +31,17 @@ class HomeContent extends StatefulWidget {
   /// 않으면 실제 [FamilyService]를 사용한다.
   final FamilyService? familyService;
 
+  /// "오늘"을 계산하는 데 쓰는 시계 주입 지점(테스트용). 지정하지 않으면
+  /// 실제 [DateTime.now]를 쓴다(리뷰 M1 — 셸 전역 플래그 대신 화면이 직접
+  /// 자정 롤오버를 감지할 수 있도록 결정론적으로 테스트하기 위함).
+  final DateTime Function() now;
+
   const HomeContent({
     super.key,
     required this.user,
     this.fetchMedications,
     this.familyService,
+    this.now = DateTime.now,
   });
 
   @override
@@ -48,20 +49,35 @@ class HomeContent extends StatefulWidget {
 }
 
 /// `HomePage`(M2 탭 재활성화 훅)가 `GlobalKey<HomeContentState>`로 이
-/// 상태에 접근해 [reload]를 호출할 수 있도록 공개 타입으로 둔다.
+/// 상태에 접근해 [onTabActivated]를 호출할 수 있도록 공개 타입으로 둔다.
 class HomeContentState extends State<HomeContent> {
   late final FamilyService _familyService = widget.familyService ?? FamilyService();
   late final FetchMedicationsFn _fetchMedications =
       widget.fetchMedications ?? MedicationService.fetchMedications;
+  late final DateTime Function() _now = widget.now;
   final Set<String> _processingDoseKeys = <String>{};
 
   // 캘린더(calendar_page.dart)의 firstDay/lastDay 와 동일한 기준을 사용한다.
   static final DateTime _minSelectableDate = DateTime(2000, 1, 1);
   static final DateTime _maxSelectableDate = DateTime(2100, 12, 31);
 
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _selectedDate;
+
+  /// 마지막으로 확인한 "오늘" 날짜(리뷰 M1). 탭 재활성화 훅에서 이 값과
+  /// 현재 시계를 비교해 스스로 자정 롤오버를 판단한다 — 더 이상
+  /// `AppShell.dateChangedOnLastActivation`(셸 전역, 탭 하나에만 적용되는
+  /// 일회성 플래그)에 의존하지 않는다. 그 플래그는 활성화 시점에 활성
+  /// 탭에만 적용되고 곧바로 리셋되므로, 다른 탭에 있는 동안 날짜가
+  /// 바뀌면 그 탭은 영영 신호를 받지 못했다.
+  late DateTime _lastSeenDay;
+
   List<Medication> _medications = [];
   bool _isLoading = true;
+
+  /// 응답 경쟁(리뷰 M3) 방지용 요청 일련번호. 매 `_loadDosesForDate`
+  /// 호출마다 증가시키고, 응답이 돌아왔을 때 이 값이 최신 요청과 다르면
+  /// (더 최근 요청이 이미 나갔으면) 그 응답은 버린다.
+  int _loadSeq = 0;
 
   List<MemberMedicationSummary> _familyMembers = [];
   Map<int, int> _userIdToGroupId = {};
@@ -69,6 +85,8 @@ class HomeContentState extends State<HomeContent> {
   @override
   void initState() {
     super.initState();
+    _selectedDate = _dateOnly(_now());
+    _lastSeenDay = _selectedDate;
     _loadDosesForDate(_selectedDate);
     _loadFamilyDashboard();
   }
@@ -114,19 +132,33 @@ class HomeContentState extends State<HomeContent> {
   /// AppShell 탭 재활성화(M2) 훅에서 호출된다. 다른 탭에 있다가 홈 탭으로
   /// 돌아왔을 때 최신 데이터를 다시 불러온다.
   ///
-  /// 마지막 활성화 이후 자정이 지나 날짜가 바뀐 경우(N5/N10, 예: 탭을
-  /// 전환한 채로 자정을 넘기거나 앱을 백그라운드에 오래 두고 돌아온 경우)에는
-  /// 선택된 날짜를 오늘로 되돌린 뒤 다시 불러온다.
+  /// 마지막으로 이 화면이 본 날짜([_lastSeenDay])와 지금 시계를 비교해
+  /// 스스로 자정 롤오버를 판단한다(리뷰 M1). 날짜가 바뀌었을 때만 선택
+  /// 날짜를 오늘로 되돌리고 전체 목록 로딩 표시를 보여준다 — 날짜가
+  /// 그대로면 사용자가 보던 목록을 유지한 채 조용히 갱신한다(리뷰 m3).
   ///
-  /// [Future]를 반환해 iOS `CupertinoSliverRefreshControl`/Android
-  /// `RefreshIndicator`의 당겨서 새로고침 콜백으로도 그대로 쓸 수 있다.
-  Future<void> reload() async {
-    final dateChanged = AppShell.maybeOf(context)?.dateChangedOnLastActivation ?? false;
-    if (dateChanged) {
-      _selectedDate = DateTime.now();
+  /// 당겨서 새로고침(iOS `CupertinoSliverRefreshControl`)은 이 메서드가
+  /// 아니라 [refresh]를 쓴다 — 활성화 훅과 새로고침을 같은 메서드로
+  /// 묶으면, 자정 롤오버로 발동한 날짜 리셋 신호가 그 뒤의 새로고침에도
+  /// 남아 있어 사용자가 고른 과거 날짜를 도로 오늘로 튕겨버렸다(리뷰 M2).
+  Future<void> onTabActivated() async {
+    final today = _dateOnly(_now());
+    final dayChanged = today != _lastSeenDay;
+    _lastSeenDay = today;
+    if (dayChanged && mounted) {
+      setState(() => _selectedDate = today);
     }
     await Future.wait([
-      _loadDosesForDate(_selectedDate),
+      _loadDosesForDate(_selectedDate, showSpinner: dayChanged),
+      _loadFamilyDashboard(),
+    ]);
+  }
+
+  /// 당겨서 새로고침 전용(리뷰 M2). 현재 선택된 날짜의 데이터만 조용히
+  /// 다시 불러올 뿐, 날짜를 바꾸거나 자정 롤오버를 검사하지 않는다.
+  Future<void> refresh() async {
+    await Future.wait([
+      _loadDosesForDate(_selectedDate, showSpinner: false),
       _loadFamilyDashboard(),
     ]);
   }
@@ -138,13 +170,25 @@ class HomeContentState extends State<HomeContent> {
     await _loadFamilyDashboard();
   }
 
-  Future<void> _loadDosesForDate(DateTime date) async {
-    setState(() {
-      _isLoading = true;
-    });
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// [showSpinner]가 true면 목록 전체를 로딩 인디케이터로 잠깐 가린다
+  /// (초기 로드/날짜 변경 시). false면 기존 목록을 그대로 둔 채 응답이
+  /// 오면 조용히 교체한다(탭 재활성화·당겨서 새로고침, 리뷰 m3).
+  Future<void> _loadDosesForDate(DateTime date, {bool showSpinner = true}) async {
+    final req = ++_loadSeq;
+    if (showSpinner) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
       final items = await _fetchMedications(date, date);
+      // 응답이 도착했을 때 이미 더 최신 요청이 나갔거나(req != _loadSeq),
+      // 그 사이 사용자가 다른 날짜로 옮겨갔으면(리뷰 M3) 이 응답은 버린다.
+      if (!mounted || req != _loadSeq || !_isSameDay(date, _selectedDate)) return;
       setState(() {
         _medications = items
             .where(
@@ -157,6 +201,7 @@ class HomeContentState extends State<HomeContent> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted || req != _loadSeq || !_isSameDay(date, _selectedDate)) return;
       setState(() {
         _isLoading = false;
       });
@@ -418,8 +463,8 @@ class HomeContentState extends State<HomeContent> {
   }
 
   /// Android: 기존 화면 그대로(Column + SafeArea + SingleChildScrollView).
-  /// 당겨서 새로고침만 [RefreshIndicator]로 추가한다(정지 상태 외형은
-  /// 그대로다 — Responsive.md.6 참고).
+  /// 당겨서 새로고침은 iOS 전용이라(리뷰 m1, 팀 리드 결정) Android는
+  /// `RefreshIndicator`를 붙이지 않고 원래 구조를 그대로 유지한다.
   Widget _buildAndroid(
     BuildContext context,
     List<Medication> dayMeds,
@@ -433,13 +478,9 @@ class HomeContentState extends State<HomeContent> {
         children: [
           _buildFamilyGaugeSection(context, topSafeArea: true),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: reload,
-              child: SingleChildScrollView(
-                padding: EdgeInsets.zero,
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: _buildChecklistSection(context, dayMeds, bottomSafe),
-              ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              child: _buildChecklistSection(context, dayMeds, bottomSafe),
             ),
           ),
         ],
@@ -449,13 +490,14 @@ class HomeContentState extends State<HomeContent> {
 
   /// iOS: [AppSliverNavBar]로 선택한 날짜를 큰 제목으로 보여주고,
   /// [CupertinoSliverRefreshControl]로 당겨서 새로고침을 지원한다(§6 W7).
+  /// 새로고침은 날짜를 바꾸지 않는 [refresh]에 연결한다(리뷰 M2).
   Widget _buildIOS(
     BuildContext context,
     List<Medication> dayMeds,
     double bottomSafe,
   ) {
     const skyBlue = Color(0xFFEBF0FF);
-    final now = DateTime.now();
+    final now = _now();
     final isToday =
         _selectedDate.year == now.year &&
         _selectedDate.month == now.month &&
@@ -467,7 +509,7 @@ class HomeContentState extends State<HomeContent> {
       body: CustomScrollView(
         slivers: [
           AppSliverNavBar(title: title, showBackButton: false),
-          CupertinoSliverRefreshControl(onRefresh: reload),
+          CupertinoSliverRefreshControl(onRefresh: refresh),
           SliverToBoxAdapter(child: _buildFamilyGaugeSection(context, topSafeArea: false)),
           SliverToBoxAdapter(child: _buildChecklistSection(context, dayMeds, bottomSafe)),
         ],

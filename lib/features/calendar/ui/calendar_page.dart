@@ -14,17 +14,17 @@ import 'package:after30/features/calendar/ui/widgets/calendar_month_header.dart'
 import 'package:after30/features/calendar/ui/widgets/medication_sheet_header.dart';
 import 'package:after30/utils/responsive.dart';
 
-/// 특정 기간의 복약 목록을 가져오는 함수 시그니처(홈 화면과 동일한 계약).
-/// 테스트/디버그 프리뷰에서 네트워크 호출 없이 가짜 데이터를 주입할 수
-/// 있도록 열어 둔다.
-typedef FetchMedicationsFn = Future<List<Medication>> Function(DateTime start, DateTime end);
-
 class CalendarPage extends StatefulWidget {
   /// 복약 목록 조회 함수 주입 지점(테스트/디버그 프리뷰용). 지정하지 않으면
   /// 실제 서비스([MedicationService.fetchMedications])를 사용한다.
   final FetchMedicationsFn? fetchMedications;
 
-  const CalendarPage({super.key, this.fetchMedications});
+  /// "오늘"을 계산하는 데 쓰는 시계 주입 지점(테스트용). 지정하지 않으면
+  /// 실제 [DateTime.now]를 쓴다(리뷰 M1 — 셸 전역 플래그 대신 화면이 직접
+  /// 자정 롤오버를 감지할 수 있도록 결정론적으로 테스트하기 위함).
+  final DateTime Function() now;
+
+  const CalendarPage({super.key, this.fetchMedications, this.now = DateTime.now});
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
@@ -33,9 +33,17 @@ class CalendarPage extends StatefulWidget {
 class _CalendarPageState extends State<CalendarPage> {
   late final FetchMedicationsFn _fetchMedications =
       widget.fetchMedications ?? MedicationService.fetchMedications;
+  late final DateTime Function() _now = widget.now;
 
-  DateTime _focusedDay = DateTime.now();
+  late DateTime _focusedDay;
   DateTime? _selectedDay;
+
+  /// 마지막으로 확인한 "오늘" 날짜(리뷰 M1). 탭 재활성화 훅에서 이 값과
+  /// 현재 시계를 비교해 자정이 지났는지 스스로 판단한다 — 더 이상
+  /// `AppShell.dateChangedOnLastActivation`(셸 전역, 탭 하나에만 적용되는
+  /// 일회성 플래그)에 의존하지 않는다.
+  late DateTime _lastSeenDay;
+
   final Map<DateTime, int> _totalByDay = {};
   final Map<DateTime, int> _doneByDay = {};
   final Map<DateTime, List<Medication>> _medsByDay = {};
@@ -46,9 +54,16 @@ class _CalendarPageState extends State<CalendarPage> {
   final GlobalKey _calendarCardKey = GlobalKey();
   double? _minInitialSheetFraction;
 
+  /// 응답 경쟁(리뷰 M3) 방지용 요청 일련번호. 매 `_loadMonth` 호출마다
+  /// 증가시키고, 응답이 돌아왔을 때 이 값이 최신 요청과 다르면(더 최근
+  /// 요청이 이미 나갔으면) 그 응답은 버린다.
+  int _loadSeq = 0;
+
   @override
   void initState() {
     super.initState();
+    _focusedDay = _now();
+    _lastSeenDay = dateKey(_focusedDay);
     // 첫 진입 시 오늘 날짜를 선택하고 시트를 보이도록 설정
     _selectedDay = dateKey(_focusedDay);
     _sheetVisible = true;
@@ -106,21 +121,37 @@ class _CalendarPageState extends State<CalendarPage> {
 
   /// AppShell 탭 재활성화(M2) 훅에서 호출된다(§6 W7 — 예: 홈 탭에서 복용
   /// 완료로 기록한 뒤 기록 탭으로 돌아오면 최신 상태가 반영돼야 한다).
-  /// 마지막 활성화 이후 날짜가 바뀐 경우(N5/N10)에는 선택 날짜를 오늘로
-  /// 되돌린다.
-  Future<void> reload() async {
-    final dateChanged = AppShell.maybeOf(context)?.dateChangedOnLastActivation ?? false;
-    if (dateChanged) {
-      final today = DateTime.now();
+  ///
+  /// 마지막으로 이 화면이 본 날짜([_lastSeenDay])와 지금 시계를 비교해
+  /// 스스로 자정 롤오버를 판단한다(리뷰 M1). 셸 전역
+  /// `AppShell.dateChangedOnLastActivation`은 탭 하나가 활성화될 때 한 번만
+  /// true였다가 곧바로 false로 리셋되는 값이라, 그 순간 다른 탭에 있었으면
+  /// 그 탭은 영영 리셋 신호를 받지 못했다 — 각 화면이 자기 시계 비교로
+  /// 직접 판단하면 어느 탭에 있었든, 몇 번을 오갔든 다음에 활성화될 때
+  /// 정확히 한 번 리셋된다.
+  Future<void> onTabActivated() async {
+    final today = dateKey(_now());
+    final dayChanged = today != _lastSeenDay;
+    _lastSeenDay = today;
+    if (dayChanged) {
       setState(() {
         _focusedDay = today;
-        _selectedDay = dateKey(today);
+        _selectedDay = today;
       });
     }
     await _loadMonth(_focusedDay);
+    if (dayChanged) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_sheetVisible) _recalculateSheetFractions();
+      });
+    }
   }
 
+  bool _isSameMonth(DateTime a, DateTime b) => a.year == b.year && a.month == b.month;
+
   Future<void> _loadMonth(DateTime anyDayInMonth) async {
+    final req = ++_loadSeq;
+    final requestedMonth = DateTime(anyDayInMonth.year, anyDayInMonth.month);
     final first = DateTime(anyDayInMonth.year, anyDayInMonth.month, 1);
     final last = DateTime(anyDayInMonth.year, anyDayInMonth.month + 1, 0);
     try {
@@ -136,7 +167,9 @@ class _CalendarPageState extends State<CalendarPage> {
         }
         medsByDay.putIfAbsent(key, () => <Medication>[]).add(m);
       }
-      if (!mounted) return;
+      // 응답이 도착했을 때 이미 더 최신 요청이 나갔거나(req != _loadSeq),
+      // 그 사이 화면이 다른 달로 옮겨갔으면(리뷰 M3) 이 응답은 버린다.
+      if (!mounted || req != _loadSeq || !_isSameMonth(requestedMonth, _focusedDay)) return;
       setState(() {
         _totalByDay
           ..clear()
@@ -149,7 +182,7 @@ class _CalendarPageState extends State<CalendarPage> {
           ..addAll(medsByDay);
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || req != _loadSeq || !_isSameMonth(requestedMonth, _focusedDay)) return;
       setState(() {
         _totalByDay.clear();
         _doneByDay.clear();
@@ -251,7 +284,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
     return AppShellTabActivationListener(
       tabIndex: AppShellTab.history,
-      onActivated: reload,
+      onActivated: onTabActivated,
       child: Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -284,7 +317,10 @@ class _CalendarPageState extends State<CalendarPage> {
                         CalendarMonthHeader(
                           focusedDay: _focusedDay,
                           monthHeaderKey: _monthHeaderKey,
-                          onTitleTap: _jumpToMonth,
+                          // 리뷰 m1(팀 리드 결정): 월 제목 탭은 iOS 전용
+                          // 기능이다. Android는 null을 넘겨 제목에 아무런
+                          // 탭 핸들러도 붙지 않는 기존 구조를 그대로 유지한다.
+                          onTitleTap: cupertino ? _jumpToMonth : null,
                           onPreviousMonth: () {
                             final prev = DateTime(
                               _focusedDay.year,
@@ -369,7 +405,17 @@ class _CalendarPageState extends State<CalendarPage> {
                               );
                             },
                             selectedBuilder: (context, day, focusedDay) {
-                              // 선택된 날짜에는 게이지 숨김: 모두 완료면 꽉 찬 파란 원, 아니면 테두리만
+                              // iOS(리뷰 m6, §6 W7): 선택된 날짜는 완료 여부와
+                              // 무관하게 항상 브랜드 컬러로 꽉 찬 원이다.
+                              if (cupertino) {
+                                return FilledDay(
+                                  text: day.day.toString(),
+                                  bg: primaryBlue,
+                                  fg: Colors.white,
+                                );
+                              }
+                              // Android: 기존 로직 그대로(모두 완료면 꽉 찬
+                              // 파란 원, 아니면 테두리만) — 외형 변경 없음.
                               final key = dateKey(day);
                               final total = _totalByDay[key] ?? 0;
                               final done = _doneByDay[key] ?? 0;
@@ -457,16 +503,16 @@ class _CalendarPageState extends State<CalendarPage> {
                                       8,
                                     ),
                                   ),
-                                  // handle bar
+                                  // handle bar(그래버). 리뷰 n3: iOS는
+                                  // 고정 36×5(§4.3 시트 그래버 규격),
+                                  // Android는 기존 64×5를 그대로 유지한다.
                                   Container(
-                                    width: Responsive.responsiveValue(
-                                      context,
-                                      64,
-                                    ),
-                                    height: Responsive.responsiveValue(
-                                      context,
-                                      5,
-                                    ),
+                                    width: cupertino
+                                        ? 36
+                                        : Responsive.responsiveValue(context, 64),
+                                    height: cupertino
+                                        ? 5
+                                        : Responsive.responsiveValue(context, 5),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFCBD5E1),
                                       borderRadius: BorderRadius.circular(
