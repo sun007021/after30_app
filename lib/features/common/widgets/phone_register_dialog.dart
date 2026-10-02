@@ -55,8 +55,11 @@ Future<bool> ensurePhoneRegistered(
 
 /// 번호가 없다는 전제로 등록 시트를 연다(프로필 조회는 하지 않는다). 성공하면
 /// 서버에 저장된 번호(예: 010-1234-5678)를, 저장하지 않고 닫으면 null을
-/// 돌려준다. 저장 중에는 사용자가 시트를 닫을 수 없다. 부수 효과: 번호 중복
-/// 확인(`GET /users/check-phone`)과 `PATCH /users/me`(`{"phone_number"}`만).
+/// 돌려준다. 저장 중에는 배리어 탭과 뒤로 가기로 닫히지 않는다. 스와이프로는
+/// 닫힐 수 있는데(바텀 시트가 PopScope를 거치지 않고 직접 pop한다), 그때는
+/// 저장 결과를 기다렸다가 돌려주고, 저장이 실패하면 오류 토스트를 띄운다.
+/// 부수 효과: 번호 중복 확인(`GET /users/check-phone`)과
+/// `PATCH /users/me`(`{"phone_number"}`만).
 Future<String?> showPhoneRegisterSheet({
   required BuildContext context,
   MyProfileService? profileService,
@@ -80,7 +83,19 @@ Future<String?> showPhoneRegisterSheet({
     ),
   );
   if (popped != null) return popped;
-  return saving?.future;
+  final pending = saving;
+  if (pending == null) return null;
+  // 저장 중 스와이프로 닫힌 경우다. 시트가 없어 오류 문구를 보여줄 곳이
+  // 없으므로, 저장이 실패하면 토스트로 알린다(재검토 R1b).
+  final result = await pending.future;
+  if (result == null && context.mounted) {
+    AppToast.show(
+      context,
+      '전화번호를 저장하지 못했어요. 다시 시도해 주세요.',
+      type: AppToastType.error,
+    );
+  }
+  return result;
 }
 
 class PhoneRegisterSheetContent extends StatefulWidget {
