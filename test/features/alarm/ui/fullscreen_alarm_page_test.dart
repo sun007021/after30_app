@@ -107,7 +107,7 @@ void main() {
 
     final popScope = tester.widget<PopScope>(find.byType(PopScope).first);
     expect(popScope.canPop, isFalse);
-    expect(find.byType(WillPopScope), findsNothing);
+    expect(find.byWidgetPredicate((w) => w.runtimeType.toString() == 'WillPopScope'), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
