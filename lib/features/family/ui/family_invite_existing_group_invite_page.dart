@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
@@ -435,37 +437,7 @@ class _FamilyInviteExistingGroupInvitePageState
                             28,
                             0,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              SizedBox(
-                                height: Responsive.responsiveHeight(context, 66),
-                                child: TextField(
-                                  controller: _phoneController,
-                                  enabled: !_isLookingUp && !_isSending,
-                                  keyboardType: TextInputType.phone,
-                                  textInputAction: TextInputAction.done,
-                                  onSubmitted: (_) => _addPhone(),
-                                  decoration: _fieldDecoration(
-                                    context: context,
-                                    hintText: '010-XXXX-XXXX',
-                                    suffix: _isLookingUp
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(12),
-                                            child: SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            ),
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                          child: _buildPhoneField(context),
                         ),
                       ],
                     ),
@@ -511,6 +483,59 @@ class _FamilyInviteExistingGroupInvitePageState
     );
   }
 
+  /// 초대할 번호 입력창. iOS는 전화 패드 + 하이픈 포매터 + 완료 바 +
+  /// 자동완성을 쓰는 [AppTextField]이고, Android는 기존 [TextField] 외형을
+  /// 그대로 유지한다. iOS 전화 패드에는 return 키가 없어 "추가" 버튼을 둔다.
+  Widget _buildPhoneField(BuildContext context) {
+    final enabled = !_isLookingUp && !_isSending;
+    if (isCupertino(context)) {
+      return AppTextField(
+        controller: _phoneController,
+        enabled: enabled,
+        placeholder: '010-XXXX-XXXX',
+        keyboardType: TextInputType.phone,
+        showKeyboardDoneBar: true,
+        inputFormatters: [PhoneNumberFormatter()],
+        autofillHints: const [AutofillHints.telephoneNumber],
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _addPhone(),
+        suffix: _isLookingUp
+            ? const AppActivityIndicator()
+            : AppButton(
+                label: '추가',
+                variant: AppButtonVariant.tinted,
+                size: AppButtonSize.medium,
+                expand: false,
+                onPressed: enabled ? _addPhone : null,
+              ),
+      );
+    }
+    return SizedBox(
+      height: Responsive.responsiveHeight(context, 66),
+      child: TextField(
+        controller: _phoneController,
+        enabled: enabled,
+        keyboardType: TextInputType.phone,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _addPhone(),
+        decoration: _fieldDecoration(
+          context: context,
+          hintText: '010-XXXX-XXXX',
+          suffix: _isLookingUp
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
   InputDecoration _fieldDecoration({
     required BuildContext context,
     required String hintText,
@@ -551,6 +576,7 @@ class _PhoneInviteChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino();
     return Container(
       height: 31,
       padding: const EdgeInsets.fromLTRB(14, 5, 7, 4),
@@ -578,6 +604,44 @@ class _PhoneInviteChip extends StatelessWidget {
               width: 21,
               height: 21,
               child: Icon(Icons.close, size: 15, color: Colors.black),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// iOS: 브랜드 틴트 캡슐 칩 + 삭제 아이콘(탭 영역 확보).
+  Widget _buildCupertino() {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 36),
+      padding: const EdgeInsets.only(left: 14),
+      decoration: ShapeDecoration(
+        color: AppColors.primaryTint,
+        shape: const StadiumBorder(),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: AppColors.primary,
+            ),
+          ),
+          GestureDetector(
+            onTap: onRemove,
+            behavior: HitTestBehavior.opaque,
+            child: const SizedBox(
+              width: 36,
+              height: 36,
+              child: Icon(
+                CupertinoIcons.xmark_circle_fill,
+                size: 18,
+                color: AppColors.primary,
+              ),
             ),
           ),
         ],
