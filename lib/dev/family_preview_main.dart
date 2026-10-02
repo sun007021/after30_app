@@ -15,6 +15,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/app/app_shell.dart';
 import 'package:after30/core/design/app_theme.dart';
 import 'package:after30/features/calendar/models/medication.dart';
@@ -36,7 +37,12 @@ const _scene = String.fromEnvironment('SCENE', defaultValue: 'banner');
 
 final _rootKey = GlobalKey<NavigatorState>();
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // 셸이 처음 진입할 때 띄우는 시스템 알림 권한 다이얼로그가 스크린샷을
+  // 가리지 않게, 이미 요청한 것으로 표시해 둔다(프리뷰 전용).
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool('reminder_permission_requested_after_login', true);
   runApp(const _FamilyPreviewApp());
   Future.delayed(const Duration(seconds: 4), _runScene);
 }
