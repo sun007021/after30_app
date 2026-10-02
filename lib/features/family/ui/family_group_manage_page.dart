@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:after30/core/design/design.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -173,12 +174,14 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
   }
 
   Future<void> _removeMember(GroupMember member) async {
-    final confirmed = await DoubleCheckDialog.show(
+    final confirmed = await showAppConfirm(
       context: context,
       title: '멤버 제거',
       message: '${member.userName ?? '가족'}님을 그룹에서 제거하시겠습니까?',
       cancelLabel: '취소',
       confirmLabel: '제거',
+      // Android 확인 버튼은 기존 브랜드 색을 유지하고, iOS만 파괴적 표시를 쓴다.
+      destructive: isCupertino(context),
     );
     if (!confirmed || !mounted) return;
 
@@ -211,12 +214,13 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
       return;
     }
 
-    final confirmed = await DoubleCheckDialog.show(
+    final confirmed = await showAppConfirm(
       context: context,
       title: '가족 그룹 탈퇴',
       message: '정말 이 가족 그룹에서 탈퇴하시겠습니까?',
       cancelLabel: '취소',
       confirmLabel: '탈퇴',
+      destructive: isCupertino(context),
     );
     if (!confirmed || !mounted) return;
 
@@ -241,6 +245,35 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
       );
     } finally {
       if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// 멤버 행의 "더보기"/길게 누르기 진입점. iOS는 액션 시트(제거=파괴적),
+  /// Android는 기존 팝업 메뉴를 그대로 쓴다.
+  Future<void> _openMemberActions(BuildContext context, GroupMember member) async {
+    if (!isCupertino(context)) {
+      _showMemberMenu(context, member);
+      return;
+    }
+    final action = await showAppActionSheet<String>(
+      context: context,
+      title: member.userName ?? '가족',
+      actions: [
+        if (_isOwner && !member.isOwner)
+          const AppActionSheetAction(label: '가족장 위임', value: 'transfer'),
+        if (_isOwner && member.userId != _currentUserId)
+          const AppActionSheetAction(
+            label: '멤버 제거',
+            value: 'remove',
+            destructive: true,
+          ),
+      ],
+    );
+    if (!mounted) return;
+    if (action == 'transfer') {
+      await _transferOwnership(member);
+    } else if (action == 'remove') {
+      await _removeMember(member);
     }
   }
 
@@ -503,7 +536,12 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                             !isSelf &&
                                             !_isProcessing;
 
-                                        return Row(
+                                        return GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onLongPress: showMenu && isCupertino(context)
+                                              ? () => _openMemberActions(context, member)
+                                              : null,
+                                          child: Row(
                                           children: [
                                             _buildAvatar(name, size: 40),
                                             if (isSelf) ...[
@@ -565,6 +603,21 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                             if (showMenu)
                                               Builder(
                                                 builder: (menuContext) {
+                                                  if (isCupertino(menuContext)) {
+                                                    return GestureDetector(
+                                                      behavior: HitTestBehavior.opaque,
+                                                      onTap: () => _openMemberActions(menuContext, member),
+                                                      child: const SizedBox(
+                                                        width: 44,
+                                                        height: 44,
+                                                        child: Icon(
+                                                          CupertinoIcons.ellipsis,
+                                                          size: 20,
+                                                          color: AppColors.secondaryLabel,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
                                                   return GestureDetector(
                                                     onTap: () =>
                                                         _showMemberMenu(
@@ -606,6 +659,7 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                                 },
                                               ),
                                           ],
+                                          ),
                                         );
                                       },
                                     ),
