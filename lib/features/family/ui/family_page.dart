@@ -146,9 +146,24 @@ class _FamilyPageState extends State<FamilyPage> {
     return ok;
   }
 
-  Future<void> _onTapRegisterPhone() async {
-    await _ensurePhone('가족이 나를 초대하고 내가 가족을 초대하려면 전화번호가 필요해요.');
+  /// 번호 확인(네트워크)과 시트/화면 전환이 끝나기 전의 중복 탭을 막는다.
+  /// `ensurePhoneRegistered`는 호출마다 GET /users/me를 하므로, 그 시간 동안
+  /// 가드가 없으면 더블탭이 화면을 두 번 push하거나 시트를 겹쳐 연다.
+  bool _gateBusy = false;
+
+  Future<void> _runGated(Future<void> Function() body) async {
+    if (_gateBusy) return;
+    _gateBusy = true;
+    try {
+      await body();
+    } finally {
+      _gateBusy = false;
+    }
   }
+
+  Future<void> _onTapRegisterPhone() => _runGated(() async {
+    await _ensurePhone('가족이 나를 초대하고 내가 가족을 초대하려면 전화번호가 필요해요.');
+  });
 
   @override
   void dispose() {
@@ -504,46 +519,49 @@ class _FamilyPageState extends State<FamilyPage> {
     required bool accept,
   }) async {
     if (_processingInvitationId != null) return;
-
-    final groupName = invitation.groupName?.trim();
-    final hasGroupName = groupName != null && groupName.isNotEmpty;
-    final confirmed = await DoubleCheckDialog.show(
-      context: context,
-      title: accept ? '그룹 초대 수락' : '그룹 초대 거절',
-      message: accept
-          ? (hasGroupName
-                ? '\'$groupName\' 그룹 초대를 수락하시겠습니까?'
-                : '가족 그룹 초대를 수락하시겠습니까?')
-          : (hasGroupName
-                ? '\'$groupName\' 그룹 초대를 거절하시겠습니까?'
-                : '가족 그룹 초대를 거절하시겠습니까?'),
-      cancelLabel: '취소',
-      confirmLabel: accept ? '수락하기' : '거절하기',
-    );
-    if (!confirmed || !mounted) return;
-
-    // 초대 수락은 전화번호가 있어야 한다(D11). 거절은 필요 없다.
-    if (accept && !await _ensurePhone('초대를 수락하려면 전화번호가 필요해요.')) {
-      return;
-    }
-    if (!mounted) return;
-
+    // 확인 팝업이 닫히는 애니메이션 중에도 배너 탭이 통과하므로, 확인을
+    // 띄우기 전에 처리 중 표시를 걸고 모든 경로에서 finally로 푼다.
     setState(() => _processingInvitationId = invitation.id);
     try {
-      if (accept) {
-        await _familyService.acceptInvitation(invitation.id);
-      } else {
-        await _familyService.declineInvitation(invitation.id);
-      }
-      await _loadPageData();
-    } catch (_) {
-      if (!mounted) return;
-      await DoubleCheckDialog.showSingle(
+      final groupName = invitation.groupName?.trim();
+      final hasGroupName = groupName != null && groupName.isNotEmpty;
+      final confirmed = await DoubleCheckDialog.show(
         context: context,
-        title: '알림',
-        message: accept ? '초대 수락에 실패했습니다.' : '초대 거절에 실패했습니다.',
-        confirmLabel: '확인',
+        title: accept ? '그룹 초대 수락' : '그룹 초대 거절',
+        message: accept
+            ? (hasGroupName
+                  ? '\'$groupName\' 그룹 초대를 수락하시겠습니까?'
+                  : '가족 그룹 초대를 수락하시겠습니까?')
+            : (hasGroupName
+                  ? '\'$groupName\' 그룹 초대를 거절하시겠습니까?'
+                  : '가족 그룹 초대를 거절하시겠습니까?'),
+        cancelLabel: '취소',
+        confirmLabel: accept ? '수락하기' : '거절하기',
       );
+      if (!confirmed || !mounted) return;
+
+      // 초대 수락은 전화번호가 있어야 한다(D11). 거절은 필요 없다.
+      if (accept && !await _ensurePhone('초대를 수락하려면 전화번호가 필요해요.')) {
+        return;
+      }
+      if (!mounted) return;
+
+      try {
+        if (accept) {
+          await _familyService.acceptInvitation(invitation.id);
+        } else {
+          await _familyService.declineInvitation(invitation.id);
+        }
+        await _loadPageData();
+      } catch (_) {
+        if (!mounted) return;
+        await DoubleCheckDialog.showSingle(
+          context: context,
+          title: '알림',
+          message: accept ? '초대 수락에 실패했습니다.' : '초대 거절에 실패했습니다.',
+          confirmLabel: '확인',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _processingInvitationId = null);
@@ -551,10 +569,10 @@ class _FamilyPageState extends State<FamilyPage> {
     }
   }
 
-  Future<void> _openInviteFlow() async {
+  Future<void> _openInviteFlow() => _runGated(() async {
     final group = _selectedGroup;
     if (group == null) {
-      await _openCreateGroup();
+      await _createGroupFlow();
       return;
     }
 
@@ -570,12 +588,12 @@ class _FamilyPageState extends State<FamilyPage> {
       ),
     );
     await _loadPageData();
-  }
+  });
 
-  Future<void> _openGroupManage() async {
+  Future<void> _openGroupManage() => _runGated(() async {
     final group = _selectedGroup;
     if (group == null) {
-      await _openCreateGroup();
+      await _createGroupFlow();
       return;
     }
 
@@ -586,9 +604,12 @@ class _FamilyPageState extends State<FamilyPage> {
       ),
     );
     await _loadPageData();
-  }
+  });
 
-  Future<void> _openCreateGroup() async {
+  Future<void> _openCreateGroup() => _runGated(_createGroupFlow);
+
+  /// [_runGated] 안에서만 호출한다(자체 가드 없음).
+  Future<void> _createGroupFlow() async {
     if (!await _ensurePhone('그룹을 만들려면 전화번호가 필요해요.')) return;
     if (!mounted) return;
 

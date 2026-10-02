@@ -6,10 +6,22 @@ import 'package:after30/features/common/widgets/phone_register_dialog.dart';
 import 'package:after30/features/family/ui/family_invite_existing_group_invite_page.dart';
 import 'package:after30/features/family/ui/family_invite_group_select_page.dart';
 import 'package:after30/features/family/ui/family_page.dart';
+import 'package:after30/features/family/ui/widgets/family_invitation_banner.dart';
 
 import '../../app/app_shell_test_utils.dart';
 
 import 'family_test_utils.dart';
+
+class _PushCounter extends NavigatorObserver {
+  int pageRoutes = 0;
+  int sheets = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is ModalBottomSheetRoute) sheets++;
+    if (route is PageRoute) pageRoutes++;
+  }
+}
 
 /// 리뷰(PR #35) 회귀 — 번호 확인(GET /users/me)이 네트워크 시간만큼 걸리는
 /// 동안 진행 중 플래그가 없어 더블탭이 중복 동작을 일으키던 문제. 즉시
@@ -50,6 +62,101 @@ void main() {
         expect(family.createdGroupNames, ['새 가족']);
         expect(family.sentPhones, ['+821099998888']);
         expect(profile.getCalls, 1);
+      });
+
+      testWidgets('M2 가족 추가(+) 더블탭은 초대 화면을 한 번만 연다', (tester) async {
+        useTallPhoneViewport(tester);
+        final observer = _PushCounter();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.build().copyWith(platform: platform),
+            navigatorObservers: [observer],
+            home: FamilyPage(
+              familyService: FakeFamilyService(groups: [fakeGroup()], members: [fakeMember()]),
+              profileService: FakeProfileService(
+                phone: '010-1111-2222',
+                getDelay: const Duration(milliseconds: 400),
+              ),
+              userService: FakeUserService(),
+              fetchMemberMedications: noMedications,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        observer.pageRoutes = 0;
+
+        final add = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_AddMemberAvatar');
+        await tester.tap(add);
+        await tester.pump(const Duration(milliseconds: 150));
+        await tester.tap(add, warnIfMissed: false);
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pumpAndSettle();
+
+        expect(observer.pageRoutes, 1);
+      });
+
+      testWidgets('M2 번호 없이 새 그룹 생성하기 더블탭은 시트를 한 번만 연다', (tester) async {
+        useTallPhoneViewport(tester);
+        final observer = _PushCounter();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.build().copyWith(platform: platform),
+            navigatorObservers: [observer],
+            home: FamilyPage(
+              familyService: FakeFamilyService(),
+              profileService: FakeProfileService(getDelay: const Duration(milliseconds: 400)),
+              userService: FakeUserService(),
+              fetchMemberMedications: noMedications,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        observer.sheets = 0;
+
+        await tester.tap(find.text('새 그룹 생성하기'));
+        await tester.pump(const Duration(milliseconds: 150));
+        await tester.tap(find.text('새 그룹 생성하기'), warnIfMissed: false);
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pumpAndSettle();
+
+        expect(observer.sheets, 1);
+      });
+
+      testWidgets('M2 초대 수락: 확인 후 프로필 조회 중 다시 눌러도 한 번만 수락한다', (tester) async {
+        useTallPhoneViewport(tester);
+        final family = FakeFamilyService(invitations: [fakeInvitation()])
+          ..acceptDelay = const Duration(milliseconds: 300);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.build().copyWith(platform: platform),
+            home: FamilyPage(
+              familyService: family,
+              profileService: FakeProfileService(
+                phone: '010-1111-2222',
+                getDelay: const Duration(milliseconds: 1500),
+              ),
+              userService: FakeUserService(),
+              fetchMemberMedications: noMedications,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('수락하기'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('수락하기').last); // 확인
+        await tester.pump(const Duration(milliseconds: 400)); // 프로필 조회 대기 중
+        final banner = find.descendant(
+          of: find.byType(FamilyInvitationBanner),
+          matching: find.text('수락하기'),
+        );
+        await tester.tap(banner, warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('수락하기').last, warnIfMissed: false);
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+
+        expect(family.acceptedInvitationIds, [5]);
       });
 
       testWidgets('M1 저장 중 배리어 탭으로는 시트가 닫히지 않고 저장 후 이어진다', (tester) async {
