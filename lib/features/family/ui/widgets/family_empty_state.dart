@@ -1,5 +1,6 @@
 import 'package:after30/utils/responsive.dart';
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class FamilyEmptyState extends StatelessWidget {
@@ -9,6 +10,7 @@ class FamilyEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cupertino = isCupertino(context);
     return Padding(
       padding: Responsive.responsivePaddingLTRB(context, 42, 24, 42, 0),
       child: Align(
@@ -18,13 +20,28 @@ class FamilyEmptyState extends StatelessWidget {
           constraints: BoxConstraints(
             maxWidth: Responsive.responsiveValue(context, 291),
           ),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(
-              Responsive.responsiveValue(context, 24),
-            ),
-            border: Border.all(color: const Color(0xFFA4A4A4)),
-          ),
+          // iOS: 테두리 없는 토큰 카드(연속 곡률). Android: 기존 회색 테두리.
+          decoration: cupertino
+              ? ShapeDecoration(
+                  color: AppColors.surface,
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: AppRadius.borderRadius(AppRadius.lg),
+                  ),
+                  shadows: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 12,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                )
+              : BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(
+                    Responsive.responsiveValue(context, 24),
+                  ),
+                  border: Border.all(color: const Color(0xFFA4A4A4)),
+                ),
           clipBehavior: Clip.antiAlias,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -57,7 +74,15 @@ class FamilyEmptyState extends StatelessWidget {
                 ),
               ),
               SizedBox(height: Responsive.responsiveHeight(context, 16)),
-              _CreateGroupButton(onPressed: onCreateGroup),
+              if (cupertino)
+                AppButton(
+                  label: '새 그룹 생성하기',
+                  size: AppButtonSize.medium,
+                  expand: false,
+                  onPressed: onCreateGroup,
+                )
+              else
+                _CreateGroupButton(onPressed: onCreateGroup),
               SizedBox(height: Responsive.responsiveHeight(context, 20)),
             ],
           ),

@@ -133,6 +133,14 @@ class MyProfileService {
     return getMyProfile();
   }
 
+  /// 전화번호만 부분 수정한다(`PATCH /users/me`, `{"phone_number"}` 하나만 전송).
+  /// 서버의 `UserProfileUpdateRequest`는 모든 필드가 선택이라, 이름/성별을 같이
+  /// 보내면 오히려 null 이름을 빈 문자열로 덮거나 enum에 없는 성별 값('기타' 등)
+  /// 으로 422가 날 수 있다. 번호를 처음 등록하는 가족 탭 시트가 쓴다.
+  Future<void> updatePhoneNumber(String phoneNumber) async {
+    await _client.patch('/users/me', data: {'phone_number': phoneNumber});
+  }
+
   Future<void> updateFcmToken(String token) async {
     await _client.patch('/users/me/fcm-token', data: {'fcm_token': token});
   }
