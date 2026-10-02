@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/app/app_shell.dart';
 import 'package:after30/core/design/design.dart';
 import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/calendar/models/medication.dart';
@@ -34,7 +35,7 @@ class FamilyPage extends StatefulWidget {
 
   /// 선택한 멤버의 해당 날짜 복약 목록 조회를 대체한다(기본: 실제 API).
   final Future<List<Medication>> Function(int userId, DateTime day)?
-      fetchMemberMedications;
+  fetchMemberMedications;
 
   const FamilyPage({
     super.key,
@@ -58,8 +59,23 @@ class _FamilyPageState extends State<FamilyPage> {
   bool _isLoading = true;
   int? _processingInvitationId;
   bool _isLoadingMedications = false;
+
+  /// 페이지 데이터 요청 일련번호. 응답이 도착했을 때 이미 더 최신 요청이
+  /// 나갔으면(seq != _loadSeq) 낡은 응답이므로 버린다(W7 홈과 같은 방식).
+  int _loadSeq = 0;
+
+  /// 그룹 상세(멤버/대시보드) 요청 일련번호. 그룹을 바꾸거나 새로고침하면
+  /// 이전 그룹의 늦은 응답이 화면을 덮어쓰지 않게 한다.
+  int _groupSeq = 0;
+  bool _pageLoadInFlight = false;
+
+  /// initialGroupId는 첫 로드에만 적용한다(이후 새로고침이 사용자가 고른
+  /// 그룹을 되돌리지 않도록).
+  bool _initialGroupApplied = false;
+
   /// 내 전화번호 등록 여부(null: 아직 모름). 배너 표시 판단용.
   bool? _hasPhone;
+
   /// 안내 배너를 닫았는지. 가족 탭은 앱 셸에서 상태가 유지되므로 앱을 다시
   /// 켜기 전까지(세션 동안) 닫은 상태가 유지된다.
   bool _phoneBannerDismissed = false;
@@ -68,12 +84,16 @@ class _FamilyPageState extends State<FamilyPage> {
   List<FamilyGroup> _groups = [];
   FamilyGroup? _selectedGroup;
   List<GroupMember> _members = [];
+
   /// 멤버 프로필 게이지용 — 항상 오늘 날짜 기준
   FamilyDashboard? _todayDashboard;
+
   /// 바텀시트 복용 현황용 — 선택한 날짜 기준
   FamilyDashboard? _dashboard;
+
   /// 나에게 온 초대 (배너용)
   List<FamilyInvitation> _pendingInvitations = [];
+
   /// 현재 그룹에 보낸 초대 중 수락 대기 (멤버 행 pending 표시용)
   List<FamilyInvitation> _groupPendingInvitations = [];
 
@@ -165,8 +185,7 @@ class _FamilyPageState extends State<FamilyPage> {
     try {
       final current = _dragController.size;
       final wasAtMin =
-          previousFraction == null ||
-          current <= (previousFraction + 0.02);
+          previousFraction == null || current <= (previousFraction + 0.02);
       if (wasAtMin || current < initialFraction) {
         _dragController.jumpTo(initialFraction);
       }
@@ -178,17 +197,31 @@ class _FamilyPageState extends State<FamilyPage> {
     return only.subtract(Duration(days: only.weekday % 7));
   }
 
-  Future<void> _loadPageData() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  /// 탭이 (다른 탭에 있다가) 다시 활성화되면 그룹/대시보드/초대를 조용히
+  /// 다시 불러온다. 첫 방문의 initState 로드가 진행 중이면 중복 요청을 피한다.
+  void _onTabActivated() {
+    if (!mounted || _isLoading || _pageLoadInFlight) return;
+    _loadPageData(silent: true);
+    _loadPhoneStatus();
+  }
+
+  /// [silent]가 true면 전체 화면 로더 없이 기존 화면을 둔 채 갱신한다.
+  Future<void> _loadPageData({bool silent = false}) async {
+    final seq = ++_loadSeq;
+    _pageLoadInFlight = true;
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final results = await Future.wait([
         _familyService.getUserGroups(),
         _familyService.getMyInvitations(),
       ]);
+      if (!mounted || seq != _loadSeq) return;
 
       final groups = results[0] as List<FamilyGroup>;
       final invitations = results[1] as List<FamilyInvitation>;
@@ -197,7 +230,8 @@ class _FamilyPageState extends State<FamilyPage> {
       FamilyGroup? selected = _selectedGroup;
       if (groups.isEmpty) {
         selected = null;
-      } else if (widget.initialGroupId != null &&
+      } else if (!_initialGroupApplied &&
+          widget.initialGroupId != null &&
           groups.any((group) => group.id == widget.initialGroupId)) {
         selected = groups.firstWhere(
           (group) => group.id == widget.initialGroupId,
@@ -209,12 +243,14 @@ class _FamilyPageState extends State<FamilyPage> {
         selected = groups.firstWhere((group) => group.id == selected!.id);
       }
 
-      if (!mounted) return;
+      _initialGroupApplied = true;
       setState(() {
         _groups = groups;
         _selectedGroup = selected;
         _pendingInvitations = pending;
+        _errorMessage = null;
         if (selected == null) {
+          _groupSeq++;
           _groupPendingInvitations = [];
           _members = [];
         }
@@ -228,11 +264,13 @@ class _FamilyPageState extends State<FamilyPage> {
         });
       }
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || seq != _loadSeq) return;
       setState(() {
         _isLoading = false;
         _errorMessage = '가족 정보를 불러오지 못했습니다.';
       });
+    } finally {
+      if (seq == _loadSeq) _pageLoadInFlight = false;
     }
   }
 
@@ -245,6 +283,7 @@ class _FamilyPageState extends State<FamilyPage> {
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   Future<void> _loadGroupData(int groupId) async {
+    final seq = ++_groupSeq;
     try {
       final membersFuture = _familyService.getGroupMembers(groupId);
       final today = _todayDate;
@@ -260,10 +299,7 @@ class _FamilyPageState extends State<FamilyPage> {
       );
       final selectedDashboardFuture = _isSameDay(selected, today)
           ? todayDashboardFuture
-          : _familyService.getDashboard(
-              groupId: groupId,
-              targetDate: selected,
-            );
+          : _familyService.getDashboard(groupId: groupId, targetDate: selected);
 
       final members = await membersFuture;
       final todayDashboard = await todayDashboardFuture;
@@ -271,14 +307,15 @@ class _FamilyPageState extends State<FamilyPage> {
 
       List<FamilyInvitation> pendingSent = const [];
       try {
-        final groupInvitations =
-            await _familyService.getGroupInvitations(groupId);
-        pendingSent =
-            groupInvitations.where((item) => item.isPending).toList();
+        final groupInvitations = await _familyService.getGroupInvitations(
+          groupId,
+        );
+        pendingSent = groupInvitations.where((item) => item.isPending).toList();
       } catch (_) {
         pendingSent = const [];
       }
 
+      if (!mounted || seq != _groupSeq) return;
       int? selectedUserId = _selectedUserId;
       if (members.isEmpty) {
         selectedUserId = null;
@@ -305,7 +342,7 @@ class _FamilyPageState extends State<FamilyPage> {
         _loadMedicationsForSelectedMember(),
       ]);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || seq != _groupSeq) return;
       setState(() {
         _errorMessage = '그룹 정보를 불러오지 못했습니다.';
       });
@@ -379,8 +416,7 @@ class _FamilyPageState extends State<FamilyPage> {
       }
       final currentUserIdStr = await UserStore.getCurrentUserId();
       final currentUserId = int.tryParse(currentUserIdStr ?? '');
-      final isOtherMember =
-          currentUserId != null && userId != currentUserId;
+      final isOtherMember = currentUserId != null && userId != currentUserId;
 
       final meds = isOtherMember
           ? await MedicationService.fetchFamilyMemberMedications(
@@ -475,11 +511,11 @@ class _FamilyPageState extends State<FamilyPage> {
       title: accept ? '그룹 초대 수락' : '그룹 초대 거절',
       message: accept
           ? (hasGroupName
-              ? '\'$groupName\' 그룹 초대를 수락하시겠습니까?'
-              : '가족 그룹 초대를 수락하시겠습니까?')
+                ? '\'$groupName\' 그룹 초대를 수락하시겠습니까?'
+                : '가족 그룹 초대를 수락하시겠습니까?')
           : (hasGroupName
-              ? '\'$groupName\' 그룹 초대를 거절하시겠습니까?'
-              : '가족 그룹 초대를 거절하시겠습니까?'),
+                ? '\'$groupName\' 그룹 초대를 거절하시겠습니까?'
+                : '가족 그룹 초대를 거절하시겠습니까?'),
       cancelLabel: '취소',
       confirmLabel: accept ? '수락하기' : '거절하기',
     );
@@ -665,7 +701,9 @@ class _FamilyPageState extends State<FamilyPage> {
       actions: [
         for (final group in _groups)
           AppActionSheetAction(
-            label: _selectedGroup?.id == group.id ? '✓ ${group.name}' : group.name,
+            label: _selectedGroup?.id == group.id
+                ? '✓ ${group.name}'
+                : group.name,
             value: 'group_${group.id}',
           ),
         const AppActionSheetAction(label: '새 그룹 생성하기', value: 'create'),
@@ -719,97 +757,99 @@ class _FamilyPageState extends State<FamilyPage> {
         : '$memberName 복용 현황';
 
     return Scaffold(
-      backgroundColor: _groups.isEmpty
-          ? Colors.white
-          : const Color(0xFFEAF2FF),
-      body: SafeArea(
-        bottom: false,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Stack(
-                key: _stackKey,
-                fit: StackFit.expand,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildHeader(context),
-                      if (_errorMessage != null) _buildErrorBanner(),
-                      if (_hasPhone == false && !_phoneBannerDismissed)
-                        FamilyPhoneBanner(
-                          onRegister: _onTapRegisterPhone,
-                          onDismiss: () =>
-                              setState(() => _phoneBannerDismissed = true),
-                        ),
-                      if (_pendingInvitations.isNotEmpty)
-                        ..._pendingInvitations.map(
-                          (invitation) => FamilyInvitationBanner(
-                            key: ValueKey(invitation.id),
-                            invitation: invitation,
-                            isProcessing:
-                                _processingInvitationId == invitation.id,
-                            onAccept: () => _handleInvitation(
+      backgroundColor: _groups.isEmpty ? Colors.white : const Color(0xFFEAF2FF),
+      body: AppShellTabActivationListener(
+        tabIndex: AppShellTab.family,
+        onActivated: _onTabActivated,
+        child: SafeArea(
+          bottom: false,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Stack(
+                  key: _stackKey,
+                  fit: StackFit.expand,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildHeader(context),
+                        if (_errorMessage != null) _buildErrorBanner(),
+                        if (_hasPhone == false && !_phoneBannerDismissed)
+                          FamilyPhoneBanner(
+                            onRegister: _onTapRegisterPhone,
+                            onDismiss: () =>
+                                setState(() => _phoneBannerDismissed = true),
+                          ),
+                        if (_pendingInvitations.isNotEmpty)
+                          ..._pendingInvitations.map(
+                            (invitation) => FamilyInvitationBanner(
+                              key: ValueKey(invitation.id),
                               invitation: invitation,
-                              accept: true,
+                              isProcessing:
+                                  _processingInvitationId == invitation.id,
+                              onAccept: () => _handleInvitation(
+                                invitation: invitation,
+                                accept: true,
+                              ),
+                              onDecline: () => _handleInvitation(
+                                invitation: invitation,
+                                accept: false,
+                              ),
                             ),
-                            onDecline: () => _handleInvitation(
-                              invitation: invitation,
-                              accept: false,
+                          ),
+                        if (_groups.isEmpty)
+                          Expanded(child: _buildEmptyState(context))
+                        else ...[
+                          KeyedSubtree(
+                            key: _memberRowKey,
+                            child: FamilyMemberRow(
+                              members: _members,
+                              pendingInvitations: _groupPendingInvitations,
+                              summariesByUserId: _summariesByUserId,
+                              selectedUserId: _selectedUserId,
+                              onMemberSelected: _onMemberSelected,
+                              onAddMember: _openInviteFlow,
                             ),
                           ),
-                        ),
-                      if (_groups.isEmpty)
-                        Expanded(child: _buildEmptyState(context))
-                      else ...[
-                        KeyedSubtree(
-                          key: _memberRowKey,
-                          child: FamilyMemberRow(
-                            members: _members,
-                            pendingInvitations: _groupPendingInvitations,
-                            summariesByUserId: _summariesByUserId,
-                            selectedUserId: _selectedUserId,
-                            onMemberSelected: _onMemberSelected,
-                            onAddMember: _openInviteFlow,
+                          Expanded(
+                            child: Container(
+                              width: double.infinity,
+                              color: lightBlueBg,
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Container(
-                            width: double.infinity,
-                            color: lightBlueBg,
-                          ),
-                        ),
+                        ],
                       ],
-                    ],
-                  ),
-                  if (hasGroups && _minInitialSheetFraction != null)
-                    DraggableScrollableSheet(
-                      controller: _dragController,
-                      expand: false,
-                      snap: true,
-                      snapSizes: [_minInitialSheetFraction!, 1.0],
-                      minChildSize: _minInitialSheetFraction!,
-                      initialChildSize: _minInitialSheetFraction!,
-                      maxChildSize: 1.0,
-                      builder: (context, scrollController) {
-                        return MedicationRecordSheetContent(
-                          scrollController: scrollController,
-                          selectedDay: _selectedDate,
-                          total: summary?.totalScheduled ?? 0,
-                          done: summary?.takenCount ?? 0,
-                          totalByDay: _totalByDay,
-                          doneByDay: _doneByDay,
-                          medications: _medications,
-                          isLoading: _isLoadingMedications,
-                          title: sheetTitle,
-                          onDaySelected: _onDateSelected,
-                          emptyMessage: (summary?.totalScheduled ?? 0) == 0
-                              ? '등록된 복약 일정이 없습니다.'
-                              : '선택한 날짜에 기록이 없습니다',
-                        );
-                      },
                     ),
-                ],
-              ),
+                    if (hasGroups && _minInitialSheetFraction != null)
+                      DraggableScrollableSheet(
+                        controller: _dragController,
+                        expand: false,
+                        snap: true,
+                        snapSizes: [_minInitialSheetFraction!, 1.0],
+                        minChildSize: _minInitialSheetFraction!,
+                        initialChildSize: _minInitialSheetFraction!,
+                        maxChildSize: 1.0,
+                        builder: (context, scrollController) {
+                          return MedicationRecordSheetContent(
+                            scrollController: scrollController,
+                            selectedDay: _selectedDate,
+                            total: summary?.totalScheduled ?? 0,
+                            done: summary?.takenCount ?? 0,
+                            totalByDay: _totalByDay,
+                            doneByDay: _doneByDay,
+                            medications: _medications,
+                            isLoading: _isLoadingMedications,
+                            title: sheetTitle,
+                            onDaySelected: _onDateSelected,
+                            emptyMessage: (summary?.totalScheduled ?? 0) == 0
+                                ? '등록된 복약 일정이 없습니다.'
+                                : '선택한 날짜에 기록이 없습니다',
+                          );
+                        },
+                      ),
+                  ],
+                ),
+        ),
       ),
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 1),
     );

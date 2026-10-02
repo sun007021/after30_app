@@ -56,8 +56,16 @@ class FakeFamilyService extends FamilyService {
     return List.of(invitations);
   }
 
+  /// 그룹별 멤버(지정하지 않은 그룹은 [members]). [membersGates]로 응답을 미룰 수 있다.
+  final Map<int, List<GroupMember>> membersByGroup = {};
+  final Map<int, Future<void>> membersGates = {};
+
   @override
-  Future<List<GroupMember>> getGroupMembers(int groupId) async => List.of(members);
+  Future<List<GroupMember>> getGroupMembers(int groupId) async {
+    final snapshot = List<GroupMember>.of(membersByGroup[groupId] ?? members);
+    await membersGates[groupId];
+    return snapshot;
+  }
 
   @override
   Future<List<FamilyInvitation>> getGroupInvitations(int groupId) async => const [];
@@ -249,6 +257,7 @@ Future<void> pumpFamilyShell(
   required FakeFamilyService familyService,
   required FakeProfileService profileService,
   int initialIndex = AppShellTab.family,
+  TargetPlatform? platform,
 }) async {
   useTallPhoneViewport(tester);
   final builders = testPageBuilders();
@@ -260,7 +269,7 @@ Future<void> pumpFamilyShell(
       );
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.build(),
+      theme: platform == null ? AppTheme.build() : AppTheme.build().copyWith(platform: platform),
       home: AppShell(initialIndex: initialIndex, pageBuilders: builders),
     ),
   );
