@@ -1,4 +1,8 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:after30/core/design/design.dart';
+import 'package:after30/features/alarm/data/reminder_permission_flow.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
@@ -6,9 +10,30 @@ import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/utils/responsive.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
 
+/// 첫 약 등록 직전에 알림 권한을 사전 설명과 함께 요청하는 함수 형태.
+/// 실제 앱은 [ReminderPermissionFlow.requestWithRationale]을 쓰고, 테스트는
+/// 가짜 함수를 주입한다.
+typedef ReminderPermissionRequester = Future<bool> Function(BuildContext context);
+
 class MedicineRegisterPage extends StatefulWidget {
   final MedicineAlarm? initialAlarm;
-  const MedicineRegisterPage({super.key, this.initialAlarm});
+
+  /// 테스트/프리뷰용 주입 지점. 지정하지 않으면 실제 서비스를 쓴다.
+  final ScheduleService? scheduleService;
+  final AlarmService? alarmService;
+  final ReminderPermissionRequester? requestPermission;
+
+  const MedicineRegisterPage({
+    super.key,
+    this.initialAlarm,
+    this.scheduleService,
+    this.alarmService,
+    this.requestPermission,
+  });
+
+  /// 첫 등록 사전 설명이 끝났는지(허용까지 받았는지) 기록하는 키.
+  static const String permissionRationaleDoneKey =
+      'alarm_permission_rationale_done';
 
   @override
   State<MedicineRegisterPage> createState() => _MedicineRegisterPageState();
@@ -109,18 +134,20 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     });
   }
 
+  void _showMinimumTimeNotice() {
+    DoubleCheckDialog.showSingle(
+      context: context,
+      title: '안내',
+      message: '복용 시간은 최소 1개 이상 입력해야 합니다.',
+    );
+  }
+
   void _removeTimeAt(int idx) {
-    setState(() {
-      if (_times.length == 1) {
-        DoubleCheckDialog.showSingle(
-          context: context,
-          title: '안내',
-          message: '복용 시간은 최소 1개 이상 입력해야 합니다.',
-        );
-      } else {
-        _times.removeAt(idx);
-      }
-    });
+    if (_times.length == 1) {
+      _showMinimumTimeNotice();
+      return;
+    }
+    setState(() => _times.removeAt(idx));
   }
 
   // 등록/수정 직전에 중복 시간을 제거하고 정렬해 서버 저장값과 로컬 스케줄이
@@ -145,11 +172,11 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   }
 
   Future<void> _pickTime(int idx) async {
-    final picked = await showTimePicker(
+    final picked = await showAppTimePicker(
       context: context,
       initialTime: _times[idx],
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _times[idx] = picked;
         _times.sort(
@@ -163,11 +190,378 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     setState(() {});
   }
 
+  /// 첫 약 등록 직전에 사전 설명 + 시스템 권한 요청을 한 번 수행한다(iOS).
+  /// 허용까지 받은 뒤에는 다시 묻지 않는다. 반환값은 "알림이 울릴 수 있는
+  /// 상태인가"이며, false면 등록은 그대로 진행하고 저장 후 토스트로 안내한다.
+  Future<bool> _ensureNotificationPermission() async {
+    // Android는 로그인 직후 한 번 이미 요청했고 기존 동작을 유지한다.
+    if (!isCupertino(context)) return true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(MedicineRegisterPage.permissionRationaleDoneKey) ??
+          false) {
+        return true;
+      }
+      if (!mounted) return true;
+      final request =
+          widget.requestPermission ?? ReminderPermissionFlow.requestWithRationale;
+      final granted = await request(context);
+      if (granted) {
+        await prefs.setBool(MedicineRegisterPage.permissionRationaleDoneKey, true);
+      }
+      return granted;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<void> _showError(String title, String message) {
+    return showAppAlert(context: context, title: title, message: message);
+  }
+
+  Future<void> _submit() async {
+    final name = _medicineController.text.trim();
+    final times = _dedupeAndSortTimes(_times);
+    final hasMissing = name.isEmpty || _selectedDays.isEmpty || times.isEmpty;
+    if (hasMissing) {
+      await DoubleCheckDialog.showSingle(
+        context: context,
+        title: '아직 입력되지 않은 정보가 있어요.',
+        message: '복약 시간이나 약 이름을 입력해야 정확한 알림을 드릴 수 있어요.',
+      );
+      return;
+    }
+    if (name.length > 255) {
+      await DoubleCheckDialog.showSingle(
+        context: context,
+        title: '안내',
+        message: '약 이름은 1~255자 사이여야 합니다.',
+      );
+      return;
+    }
+    final isEdit = widget.initialAlarm != null;
+    final confirmed = await DoubleCheckDialog.show(
+      context: context,
+      title: isEdit ? '수정한 내용을 저장할까요?' : '약을 등록하시겠습니까?',
+      message: isEdit
+          ? '변경된 복약 시간은 다음 알림부터 바로 적용됩니다.'
+          : '입력하신 시간에 맞춰 잊지 않도록 알림을 보내드릴게요.',
+      confirmLabel: isEdit ? '저장' : '등록',
+      cancelLabel: '취소',
+    );
+    if (!confirmed || !mounted) return;
+
+    // 수정이 아닌 신규 등록에서만 첫 1회 권한 흐름을 거친다.
+    final canNotify = isEdit ? true : await _ensureNotificationPermission();
+    if (!mounted) return;
+
+    late final MedicineAlarm alarm;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final scheduleService = widget.scheduleService ?? ScheduleService();
+      final now = DateTime.now();
+      final startDate =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final timeStrings = times
+          .map(
+            (t) =>
+                '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
+          )
+          .toList();
+      const dayEnumMap = {
+        '월': 'MON',
+        '화': 'TUE',
+        '수': 'WED',
+        '목': 'THU',
+        '금': 'FRI',
+        '토': 'SAT',
+        '일': 'SUN',
+      };
+      final repeatDays = _selectedDays
+          .map((d) => dayEnumMap[d])
+          .whereType<String>()
+          .toList();
+      final body = {
+        'medication_name': name,
+        'times': timeStrings,
+        'repeat_days': repeatDays,
+        if (widget.initialAlarm == null) 'start_date': startDate,
+      };
+      if (widget.initialAlarm == null) {
+        final created = await scheduleService.createSchedule(body);
+        final createdMap = created as Map<String, dynamic>;
+        final scheduleId = (createdMap['id'] as num).toInt();
+        final everyDay = _selectedDays.length == 7;
+        alarm = MedicineAlarm(
+          id: scheduleId.toString(),
+          name: name,
+          times: times,
+          days: List.from(_selectedDays),
+          everyDay: everyDay,
+          nfcEnabled: _nfcEnabled,
+        );
+      } else {
+        final scheduleId = int.tryParse(widget.initialAlarm!.id);
+        if (scheduleId == null) {
+          throw Exception('기존 알람 ID가 유효하지 않습니다.');
+        }
+        await scheduleService.updateSchedule(scheduleId, body);
+        final everyDay = _selectedDays.length == 7;
+        alarm = MedicineAlarm(
+          id: widget.initialAlarm!.id,
+          name: name,
+          times: times,
+          days: List.from(_selectedDays),
+          everyDay: everyDay,
+          nfcEnabled: _nfcEnabled,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        await _showError('오류', '스케줄 생성에 실패했습니다. 다시 시도해주세요.\n$e');
+      }
+      return;
+    }
+
+    final alarmService = widget.alarmService ?? AlarmService();
+    final success = await alarmService.scheduleAlarm(alarm);
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (success) {
+      AppHaptics.success(context);
+      if (!canNotify) {
+        AppToast.show(
+          context,
+          '알림 권한이 꺼져 있어 허용하기 전까지 알람이 울리지 않아요. 설정에서 알림을 허용해주세요.',
+          type: AppToastType.error,
+        );
+      }
+      Navigator.pop(context, alarm);
+    } else {
+      await _showError('안내', '알람 등록에 실패했습니다. 다시 시도해주세요.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     _medicineController.removeListener(_medicineListener);
     _medicineController.addListener(_medicineListener);
 
+    return isCupertino(context)
+        ? _buildCupertino(context)
+        : _buildMaterial(context);
+  }
+
+  // ---------------------------------------------------------------------
+  // iOS
+  // ---------------------------------------------------------------------
+
+  Widget _sectionTitle(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(text, style: AppTypography.title.copyWith(fontSize: 20)),
+  );
+
+  Widget _buildCupertino(BuildContext context) {
+    final isEdit = widget.initialAlarm != null;
+    final nameLength = _medicineController.text.length;
+    return Scaffold(
+      backgroundColor: AppColors.groupedBackground,
+      appBar: AppNavBar(title: isEdit ? '약 수정' : '약 등록'),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  StepHeader(currentStep: _currentStep),
+                  const SizedBox(height: 12),
+                  _sectionTitle('1. 어떤 약을 드시나요?'),
+                  AppTextField(
+                    controller: _medicineController,
+                    placeholder: '약 이름을 입력 해주세요',
+                    maxLength: 255,
+                    textInputAction: TextInputAction.done,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, right: 4),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '$nameLength/255',
+                        key: const ValueKey('nameCounter'),
+                        style: AppTypography.footnote,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Row(
+                    children: [
+                      Expanded(child: _sectionTitle('2. 복용 날짜를 선택해주세요')),
+                      _everyDayChip(),
+                    ],
+                  ),
+                  _dayToggles(context, AppColors.primary),
+                  const SizedBox(height: 32),
+                  _sectionTitle('3. 복용 시간을 알려주세요'),
+                  AppGroupedSection(
+                    children: [
+                      for (var i = 0; i < _times.length; i++)
+                        AppSwipeActions(
+                          key: ValueKey('timeSwipe_$i'),
+                          itemKey: ValueKey(
+                            'time_${_times[i].hour}_${_times[i].minute}_$i',
+                          ),
+                          // 최소 1개 규칙: 마지막 한 개는 삭제 확인 전에 막는다.
+                          confirmDismiss: () async {
+                            if (_times.length == 1) {
+                              _showMinimumTimeNotice();
+                              return false;
+                            }
+                            return true;
+                          },
+                          onDelete: () => _removeTimeAt(i),
+                          child: AppListTile(
+                            title: '알람',
+                            trailing: Text(
+                              _formatHHmm(_times[i]),
+                              style: const TextStyle(
+                                fontSize: 17,
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            onTap: () => _pickTime(i),
+                          ),
+                        ),
+                      AppListTile(
+                        title: '시간 추가',
+                        leading: const Icon(
+                          CupertinoIcons.add_circled_solid,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
+                        leadingWidth: 22,
+                        onTap: _addTime,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // 키보드가 올라오면 Scaffold가 body를 줄이므로 CTA가 키보드 위에 남는다.
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: AppButton(
+                label: '등록하기',
+                loading: _isLoading,
+                onPressed: _isLoading ? null : _submit,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatHHmm(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  /// iOS의 "매일" 토글 칩(Android의 "전체선택" 체크박스 대체).
+  Widget _everyDayChip() {
+    final on = _allDaysSelected;
+    return Semantics(
+      button: true,
+      selected: on,
+      label: '매일',
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const ValueKey('everyDayChip'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          AppHaptics.selection(context);
+          _toggleAllDays();
+        },
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          alignment: Alignment.center,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: on ? AppColors.primary : AppColors.primaryTint,
+              borderRadius: BorderRadius.circular(AppRadius.capsule),
+            ),
+            child: Text(
+              '매일',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: on ? Colors.white : AppColors.primary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 요일 원형 토글(44pt). 두 플랫폼 공통이며 색상만 다르다.
+  Widget _dayToggles(BuildContext context, Color accent) {
+    return Wrap(
+      spacing: Responsive.responsiveValue(context, 10),
+      runSpacing: Responsive.responsiveValue(context, 8),
+      alignment: WrapAlignment.start,
+      children: _allDays.map((day) {
+        final selected = _selectedDays.contains(day);
+        return GestureDetector(
+          onTap: () {
+            AppHaptics.selection(context);
+            _toggleDay(day);
+          },
+          child: Container(
+            width: Responsive.responsiveValue(context, 44),
+            height: Responsive.responsiveValue(context, 44),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? accent : Colors.white,
+              border: Border.all(color: accent, width: 2),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              day,
+              style: TextStyle(
+                color: selected ? Colors.white : accent,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: Responsive.responsiveFontSize(context, 16),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Android(기존 외형/동작 그대로)
+  // ---------------------------------------------------------------------
+
+  Widget _buildMaterial(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -236,47 +630,7 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                       ),
                     ],
                   ),
-                  Wrap(
-                    spacing: Responsive.responsiveValue(context, 10),
-                    runSpacing: Responsive.responsiveValue(context, 8),
-                    alignment: WrapAlignment.start,
-                    children: _allDays.map((day) {
-                      final selected = _selectedDays.contains(day);
-                      return GestureDetector(
-                        onTap: () => _toggleDay(day),
-                        child: Container(
-                          width: Responsive.responsiveValue(context, 44),
-                          height: Responsive.responsiveValue(context, 44),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? const Color(0xFF235DFF)
-                                : Colors.white,
-                            border: Border.all(
-                              color: const Color(0xFF235DFF),
-                              width: 2,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            day,
-                            style: TextStyle(
-                              color: selected
-                                  ? Colors.white
-                                  : const Color(0xFF235DFF),
-                              fontWeight: selected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              fontSize: Responsive.responsiveFontSize(
-                                context,
-                                16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                  _dayToggles(context, const Color(0xFF235DFF)),
                   const SizedBox(height: 45),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -339,175 +693,10 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                     );
                   }),
                   const SizedBox(height: 16),
-                  // NFC 섹션 제거
                   const SizedBox(height: 8),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () async {
-                      final name = _medicineController.text.trim();
-                      // 서버는 중복 시간을 제거해서 저장하므로, 등록 전에 로컬에서도
-                      // 중복을 제거해 서버 값과 어긋나지 않게 한다.
-                      final times = _dedupeAndSortTimes(_times);
-                      final hasMissing =
-                          name.isEmpty ||
-                          _selectedDays.isEmpty ||
-                          times.isEmpty;
-                      if (hasMissing) {
-                        await DoubleCheckDialog.showSingle(
-                          context: context,
-                          title: '아직 입력되지 않은 정보가 있어요.',
-                          message: '복약 시간이나 약 이름을 입력해야 정확한 알림을 드릴 수 있어요.',
-                        );
-                        return;
-                      }
-                      if (name.length > 255) {
-                        await DoubleCheckDialog.showSingle(
-                          context: context,
-                          title: '안내',
-                          message: '약 이름은 1~255자 사이여야 합니다.',
-                        );
-                        return;
-                      }
-                      final isEdit = widget.initialAlarm != null;
-                      final confirmed = await DoubleCheckDialog.show(
-                        context: context,
-                        title: isEdit ? '수정한 내용을 저장할까요?' : '약을 등록하시겠습니까?',
-                        message: isEdit
-                            ? '변경된 복약 시간은 다음 알림부터 바로 적용됩니다.'
-                            : '입력하신 시간에 맞춰 잊지 않도록 알림을 보내드릴게요.',
-                        confirmLabel: isEdit ? '저장' : '등록',
-                        cancelLabel: '취소',
-                      );
-                      if (!confirmed) return;
-                      late final MedicineAlarm alarm;
-                      setState(() {
-                        _isLoading = true;
-                      });
-
-                      try {
-                        final scheduleService = ScheduleService();
-                        final now = DateTime.now();
-                        final startDate =
-                            '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-                        final timeStrings = times
-                            .map(
-                              (t) =>
-                                  '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
-                            )
-                            .toList();
-                        const dayEnumMap = {
-                          '월': 'MON',
-                          '화': 'TUE',
-                          '수': 'WED',
-                          '목': 'THU',
-                          '금': 'FRI',
-                          '토': 'SAT',
-                          '일': 'SUN',
-                        };
-                        final repeatDays = _selectedDays
-                            .map((d) => dayEnumMap[d])
-                            .whereType<String>()
-                            .toList();
-                        final body = {
-                          'medication_name': name,
-                          'times': timeStrings,
-                          'repeat_days': repeatDays,
-                          // 신규 등록일 때만 시작일을 오늘로 지정한다.
-                          // 수정 시에는 start_date 를 보내지 않아 기존 시작일이
-                          // 유지되도록 한다(보내면 과거 미복용 기록이 캘린더에서
-                          // 사라지는 문제가 있었음).
-                          if (widget.initialAlarm == null)
-                            'start_date': startDate,
-                        };
-                        if (widget.initialAlarm == null) {
-                          final created = await scheduleService.createSchedule(
-                            body,
-                          );
-                          final createdMap = created as Map<String, dynamic>;
-                          final scheduleId = (createdMap['id'] as num).toInt();
-                          final everyDay = _selectedDays.length == 7;
-                          alarm = MedicineAlarm(
-                            id: scheduleId.toString(),
-                            name: name,
-                            times: times,
-                            days: List.from(_selectedDays),
-                            everyDay: everyDay,
-                            nfcEnabled: _nfcEnabled,
-                          );
-                        } else {
-                          final scheduleId = int.tryParse(
-                            widget.initialAlarm!.id,
-                          );
-                          if (scheduleId == null) {
-                            throw Exception('기존 알람 ID가 유효하지 않습니다.');
-                          }
-                          await scheduleService.updateSchedule(
-                            scheduleId,
-                            body,
-                          );
-                          final everyDay = _selectedDays.length == 7;
-                          alarm = MedicineAlarm(
-                            id: widget.initialAlarm!.id,
-                            name: name,
-                            times: times,
-                            days: List.from(_selectedDays),
-                            everyDay: everyDay,
-                            nfcEnabled: _nfcEnabled,
-                          );
-                        }
-                      } catch (e) {
-                        setState(() {
-                          _isLoading = false;
-                        });
-                        if (mounted) {
-                          await showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('오류'),
-                              content: Text('스케줄 생성에 실패했습니다. 다시 시도해주세요.\n$e'),
-                              backgroundColor: Colors.white,
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  child: const Text('확인'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        return;
-                      }
-
-                      final alarmService = AlarmService();
-                      final success = await alarmService.scheduleAlarm(alarm);
-
-                      setState(() {
-                        _isLoading = false;
-                      });
-
-                      if (success) {
-                        if (mounted) {
-                          Navigator.pop(context, alarm);
-                        }
-                      } else {
-                        if (mounted) {
-                          await showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('안내'),
-                              content: const Text('알람 등록에 실패했습니다. 다시 시도해주세요.'),
-                              backgroundColor: Colors.white,
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  child: const Text('확인'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      }
-                    },
+                    onPressed: _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF235DFF),
                       minimumSize: const Size.fromHeight(48),

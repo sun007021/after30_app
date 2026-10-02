@@ -534,6 +534,32 @@ class AlarmService {
     return false;
   }
 
+  /// 서버에서 내려받은 활성 알람 전체를 저장소에 반영하고 **한 번만** 전체
+  /// 재예약한다(W5). 알람마다 [scheduleAlarm]을 부르면 iOS에서는 매번 64개
+  /// 예산 전체를 다시 계산하므로, 새 기기/재설치 후 동기화처럼 여러 알람이
+  /// 한꺼번에 필요할 때는 이 메서드를 쓴다.
+  Future<void> syncActiveAlarms(List<MedicineAlarm> activeAlarms) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = await getAlarms();
+      for (final alarm in activeAlarms) {
+        final index = stored.indexWhere((a) => a.id == alarm.id);
+        if (index >= 0) {
+          stored[index] = alarm;
+        } else {
+          stored.add(alarm);
+        }
+      }
+      await prefs.setString(
+        _alarmsKeyForUserStatic(),
+        json.encode(stored.map((a) => a.toJson()).toList()),
+      );
+      await _scheduler.rescheduleAll(await _activeAlarmsFromStorage());
+    } catch (e) {
+      print('알람 일괄 동기화 실패: $e');
+    }
+  }
+
   // 알람 메타데이터만 저장(알림 ID는 각 스케줄러가 자체적으로 관리)
   Future<void> _upsertAlarmMetadata(MedicineAlarm alarm) async {
     final prefs = await SharedPreferences.getInstance();
