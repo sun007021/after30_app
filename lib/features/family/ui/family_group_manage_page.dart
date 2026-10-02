@@ -10,6 +10,7 @@ import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/family/models/group_member.dart';
 import 'package:after30/features/family/ui/family_invite_existing_group_invite_page.dart';
 import 'package:after30/app/app_shell.dart';
+import 'package:after30/features/family/ui/widgets/family_loader.dart';
 import 'package:after30/utils/responsive.dart';
 
 class FamilyGroupManagePage extends StatefulWidget {
@@ -392,7 +393,7 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
       backgroundColor: const Color(0xFFEBF0FF),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const FamilyLoader()
             : Column(
                 children: [
                   Padding(

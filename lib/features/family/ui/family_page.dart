@@ -23,6 +23,7 @@ import 'package:after30/features/family/ui/widgets/family_phone_banner.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
 import 'package:after30/features/my/data/user_service.dart';
+import 'package:after30/features/family/ui/widgets/family_loader.dart';
 import 'package:after30/utils/responsive.dart';
 
 class FamilyPage extends StatefulWidget {
@@ -764,7 +765,7 @@ class _FamilyPageState extends State<FamilyPage> {
         child: SafeArea(
           bottom: false,
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? const FamilyLoader()
               : Stack(
                   key: _stackKey,
                   fit: StackFit.expand,

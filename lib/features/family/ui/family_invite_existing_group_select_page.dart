@@ -5,6 +5,7 @@ import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/family/models/group_member.dart';
 import 'package:after30/features/family/ui/family_invite_existing_group_invite_page.dart';
+import 'package:after30/features/family/ui/widgets/family_loader.dart';
 import 'package:after30/utils/responsive.dart';
 
 class FamilyInviteExistingGroupSelectPage extends StatefulWidget {
@@ -141,7 +142,7 @@ class _FamilyInviteExistingGroupSelectPageState
 
   Widget _buildBody(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const FamilyLoader();
     }
 
     if (_errorMessage != null) {
