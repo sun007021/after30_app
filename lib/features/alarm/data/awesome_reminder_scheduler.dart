@@ -93,11 +93,12 @@ class AwesomeReminderScheduler implements ReminderScheduler {
   /// 감싼 것). 생성 이후에 지정할 수 있게 세터로 둔다(순환 의존 방지).
   Future<List<MedicineAlarm>> Function()? activeAlarmsProvider;
 
-  /// 알람 하나를 완전히 제거한다(표시된 알림 dismiss + 예약 취소 +
-  /// 저장된 id 목록도 비움). 삭제/비활성화/전략 전환처럼 "이 알람은 이제
-  /// 정말로 없다"는 경우에만 쓴다. 내부 재스케줄링에서 "다시 등록할
-  /// 예정이니 id는 재사용하겠다"는 경우에는 [_cancelSchedulesOnly]를
-  /// 대신 쓴다(리뷰 M1).
+  /// 알람 하나의 표시된 알림과 예약을 취소한다. 저장된 id 목록은 그대로
+  /// 둔다. 토글 off→on, 로그아웃→재로그인, 디바이스 알람 off→on 뒤에 같은
+  /// id를 다시 쓰는 기존 Android 동작을 유지하기 위해서다(리뷰 M1, 2차 m1).
+  /// 알람을 삭제할 때는 `AlarmService.deleteAlarm`이 id 키 자체를 지운다.
+  /// 내부 재스케줄링에서는 표시된 알림을 건드리지 않는 [_cancelSchedulesOnly]를
+  /// 쓴다.
   @override
   Future<void> cancel(String alarmId) async {
     try {
@@ -112,7 +113,6 @@ class AwesomeReminderScheduler implements ReminderScheduler {
           }
         }
       }
-      await prefs.setStringList(key, const []);
     } catch (e) {
       print('알람 취소 실패: $e');
     }
