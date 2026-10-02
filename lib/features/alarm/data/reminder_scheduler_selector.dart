@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:after30/features/alarm/data/alarmkit_reminder_scheduler.dart';
@@ -33,7 +32,7 @@ class ReminderSchedulerSelector implements ReminderScheduler {
     required AwesomeReminderScheduler local,
     AlarmKitReminderScheduler? alarmKit,
     this.activeAlarmsProvider,
-    @visibleForTesting bool? forceIOS,
+    bool? forceIOS,
   }) : _local = local,
        _isIOS = forceIOS ?? Platform.isIOS,
        _alarmKit =
@@ -44,10 +43,10 @@ class ReminderSchedulerSelector implements ReminderScheduler {
   final AwesomeReminderScheduler _local;
   final AlarmKitReminderScheduler? _alarmKit;
 
-  /// 실제로는 `Platform.isIOS`를 쓰지만, `dart:io`의 `Platform`은 단위
-  /// 테스트에서 항상 호스트 OS를 보고하기 때문에(예: macOS에서
-  /// `flutter test`를 돌리면 iOS도 Android도 아니다) 테스트에서만
-  /// [forceIOS]로 덮어쓸 수 있게 열어 둔다.
+  /// 생성자의 `forceIOS`가 없으면 `Platform.isIOS`를 쓴다. `dart:io`의
+  /// `Platform`은 단위 테스트에서 호스트 OS를 보고하므로(macOS에서
+  /// `flutter test`를 돌리면 iOS도 Android도 아니다), 테스트와
+  /// `AlarmService.buildScheduler`가 플랫폼을 명시할 수 있게 한다.
   final bool _isIOS;
 
   /// 저장소 기준 활성 알람 전체를 읽어오는 콜백. 전략이 바뀔 때 그
@@ -55,32 +54,33 @@ class ReminderSchedulerSelector implements ReminderScheduler {
   /// 생성 이후 지정한다(순환 의존 방지).
   Future<List<MedicineAlarm>> Function()? activeAlarmsProvider;
 
-  /// 모든 공개 메서드 호출을 하나의 체인으로 직렬화한다(M3).
-  Future<void> _chain = Future<void>.value();
+  /// 대기 중인 마지막 링크. 대기열이 비면 null로 되돌린다.
+  Future<void>? _tail;
 
-  /// [_serialized]가 이전 링크를 기다리는 최대 시간. 어떤 이유로든(네이티브
-  /// 채널 응답이 영원히 안 오거나, 위젯 테스트 zone이 겹치는 등) 이전
-  /// 링크가 끝나지 않으면 이 체인이 영원히 막혀서 이후의 모든 스케줄링
-  /// 요청이 죽어버린다 — 그런 전역 데드락보다는 순서가 깨지더라도(드문
-  /// 경우) 다음 요청이 진행되는 편이 안전하다.
-  @visibleForTesting
-  static const Duration serializationGateTimeout = Duration(seconds: 5);
-
-  Future<T> _serialized<T>(Future<T> Function() action) {
-    final previous = _chain;
-    final completer = Completer<T>();
-    // 이전 링크 완료를 기다리되(순서 보장), 제한 시간을 넘기면 그냥
-    // 진행한다 — `previous`는 그 자체로 실패하지 않게 짜여 있어(아래
-    // catch) 정상 상황에서는 타임아웃이 발생하지 않는다.
-    final gate = previous.timeout(serializationGateTimeout, onTimeout: () {});
-    _chain = gate.then((_) async {
-      try {
-        completer.complete(await action());
-      } catch (e, st) {
-        completer.completeError(e, st);
-      }
-    });
-    return completer.future;
+  /// 모든 공개 메서드 호출을 엄격하게 하나씩 실행한다(M3).
+  ///
+  /// 제한 시간을 두지 않는다. 이전 링크가 오래 걸린다고 다음 링크를 함께
+  /// 실행하면 iOS 로컬 알림 전체 재계산이 서로 섞여 중복 알림이 생기고,
+  /// AlarmKit은 같은 알람에 UUID가 두 개 생겨 하나는 영원히 취소할 수 없게
+  /// 된다(2차 리뷰 Major 1).
+  ///
+  /// 대기열이 비면 [_tail]을 null로 되돌려, 다음 호출이 이미 끝난 이전
+  /// Future에 리스너를 붙이지 않게 한다. 끝난 Future에 붙인 콜백은 그 Future가
+  /// 만들어진 zone에서 실행되는데, 위젯 테스트의 FakeAsync zone이 이미
+  /// 끝났다면 영원히 실행되지 않는다. 테스트에서 보였던 멈춤의 원인이 이것이다.
+  ///
+  /// 주의: 링크 안에서 이 클래스의 공개 메서드를 다시 부르면 교착된다.
+  Future<T> _serialized<T>(Future<T> Function() action) async {
+    final previous = _tail;
+    final done = Completer<void>();
+    _tail = done.future;
+    try {
+      if (previous != null) await previous;
+      return await action();
+    } finally {
+      if (identical(_tail, done.future)) _tail = null;
+      done.complete();
+    }
   }
 
   AlarmKitReminderScheduler? get alarmKit => _alarmKit;
