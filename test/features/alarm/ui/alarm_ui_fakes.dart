@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:after30/core/design/design.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
+import 'package:after30/core/platform/device_alarm_settings.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'package:after30/features/alarm/ui/alarm_permission_gate.dart';
 
 /// 알람 UI 테스트 공용 가짜 서비스/헬퍼. 네트워크/채널을 쓰지 않는다.
 class FakeScheduleService implements ScheduleService {
@@ -168,3 +170,44 @@ Map<String, dynamic> scheduleJson(
       'repeat_days': days,
       'is_active': active,
     };
+
+/// 권한 창구 가짜. 시스템 상태([current])를 직접 제어한다. 사전 설명에서
+/// 허용하면 상태가 authorized로 바뀐다.
+class FakeGate extends AlarmPermissionGate {
+  FakeGate({
+    this.current = NotificationAuthorizationStatus.notDetermined,
+    this.onRequest,
+  });
+
+  NotificationAuthorizationStatus current;
+  bool Function()? onRequest;
+  bool grantOnRequest = true;
+  int requestCalls = 0;
+  int alarmKitCalls = 0;
+  int settingsCalls = 0;
+  final List<String> events = [];
+
+  @override
+  Future<NotificationAuthorizationStatus> status() async => current;
+
+  @override
+  Future<bool> requestWithRationale(BuildContext context) async {
+    requestCalls++;
+    events.add('request');
+    final granted = onRequest?.call() ?? grantOnRequest;
+    if (granted) current = NotificationAuthorizationStatus.authorized;
+    return granted;
+  }
+
+  @override
+  Future<void> ensureAlarmKit() async {
+    alarmKitCalls++;
+    events.add('alarmKit');
+  }
+
+  @override
+  Future<bool> openSettings() async {
+    settingsCalls++;
+    return true;
+  }
+}

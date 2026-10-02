@@ -39,10 +39,12 @@ void main() {
         initialAlarm: initial,
         scheduleService: schedule,
         alarmService: alarms,
-        requestPermission: (context) async {
-          permissionCalls++;
-          return permissionResult;
-        },
+        permissionGate: FakeGate(
+          onRequest: () {
+            permissionCalls++;
+            return permissionResult;
+          },
+        ),
       ),
       onResult: (r) => popped = r,
     );
@@ -251,10 +253,12 @@ void main() {
         MedicineRegisterPage(
           scheduleService: schedule,
           alarmService: alarms,
-          requestPermission: (context) async {
-            order.add('permission:created=${schedule.created.length}');
-            return true;
-          },
+          permissionGate: FakeGate(
+            onRequest: () {
+              order.add('permission:created=${schedule.created.length}');
+              return true;
+            },
+          ),
         ),
       );
       await tester.enterText(find.byType(CupertinoTextField), '혈압약');

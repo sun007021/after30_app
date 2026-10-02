@@ -1,20 +1,15 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/core/design/design.dart';
-import 'package:after30/features/alarm/data/reminder_permission_flow.dart';
+import 'package:after30/core/platform/device_alarm_settings.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
+import 'package:after30/features/alarm/ui/alarm_permission_gate.dart';
 import 'package:after30/features/alarm/ui/widgets/budget_warning_listener.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/utils/responsive.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
-
-/// 첫 약 등록 직전에 알림 권한을 사전 설명과 함께 요청하는 함수 형태.
-/// 실제 앱은 [ReminderPermissionFlow.requestWithRationale]을 쓰고, 테스트는
-/// 가짜 함수를 주입한다.
-typedef ReminderPermissionRequester = Future<bool> Function(BuildContext context);
 
 class MedicineRegisterPage extends StatefulWidget {
   final MedicineAlarm? initialAlarm;
@@ -22,7 +17,7 @@ class MedicineRegisterPage extends StatefulWidget {
   /// 테스트/프리뷰용 주입 지점. 지정하지 않으면 실제 서비스를 쓴다.
   final ScheduleService? scheduleService;
   final AlarmService? alarmService;
-  final ReminderPermissionRequester? requestPermission;
+  final AlarmPermissionGate? permissionGate;
   final Stream<String>? budgetWarnings;
 
   const MedicineRegisterPage({
@@ -30,13 +25,9 @@ class MedicineRegisterPage extends StatefulWidget {
     this.initialAlarm,
     this.scheduleService,
     this.alarmService,
-    this.requestPermission,
+    this.permissionGate,
     this.budgetWarnings,
   });
-
-  /// 첫 등록 사전 설명이 끝났는지(허용까지 받았는지) 기록하는 키.
-  static const String permissionRationaleDoneKey =
-      'alarm_permission_rationale_done';
 
   @override
   State<MedicineRegisterPage> createState() => _MedicineRegisterPageState();
@@ -51,6 +42,14 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
   bool _nfcEnabled = false;
   bool _isLoading = false;
 
+  /// 제출 처리 중 여부. 확인 다이얼로그가 떠 있는 동안에도 켜 둬서 "등록하기"를
+  /// 연타해도 확인창/서버 호출이 중복되지 않게 한다.
+  bool _busy = false;
+
+  /// 이 화면에서 이미 서버에 만든 스케줄 id. 기기 예약이 실패해 같은 화면에서
+  /// 다시 시도할 때 서버 스케줄이 또 만들어지지 않도록 기억한다.
+  int? _createdScheduleId;
+
   int get _currentStep {
     final hasName = _medicineController.text.trim().isNotEmpty;
     final hasDays = _selectedDays.isNotEmpty;
@@ -64,7 +63,9 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     super.initState();
     final alarm = widget.initialAlarm;
     _medicineController = TextEditingController(text: alarm?.name ?? '');
-    _selectedDays = alarm?.days ?? [];
+    // 원본 알람 객체를 변형하지 않도록 복사한다(저장 전에 뒤로 가도 목록 카드가
+    // 바뀌면 안 된다).
+    _selectedDays = List<String>.of(alarm?.days ?? const []);
     _times = alarm != null
         ? List<TimeOfDay>.from(alarm.times)
         : [TimeOfDay(hour: 8, minute: 0)];
@@ -193,36 +194,96 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     setState(() {});
   }
 
-  /// 첫 약 등록 직전에 사전 설명 + 시스템 권한 요청을 한 번 수행한다(iOS).
-  /// 허용까지 받은 뒤에는 다시 묻지 않는다. 반환값은 "알림이 울릴 수 있는
-  /// 상태인가"이며, false면 등록은 그대로 진행하고 저장 후 토스트로 안내한다.
+  AlarmPermissionGate get _gate =>
+      widget.permissionGate ?? const SystemAlarmPermissionGate();
+
+  /// 설정에서 알림이 꺼진 상태(거부)였는지. 저장 후 안내 방식을 가른다.
+  bool _notificationsDenied = false;
+
+  /// 신규 등록 직전에 **실제 시스템 권한 상태**를 확인한다(iOS).
+  /// - 허용됨: 설명 없이 통과(AlarmKit 권한만 미결정이면 이어서 요청).
+  /// - 미결정: 사전 설명 알럿 → 시스템 권한 요청.
+  /// - 거부됨: 시스템 프롬프트를 다시 띄울 수 없으므로 저장 후 안내한다.
+  /// 반환값은 "알림이 울릴 수 있는 상태인가"이며, false여도 등록은 그대로
+  /// 진행한다. Android는 로그인 직후 이미 요청했고 기존 동작을 유지한다.
   Future<bool> _ensureNotificationPermission() async {
-    // Android는 로그인 직후 한 번 이미 요청했고 기존 동작을 유지한다.
     if (!isCupertino(context)) return true;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool(MedicineRegisterPage.permissionRationaleDoneKey) ??
-          false) {
-        return true;
+      final status = await _gate.status();
+      switch (status) {
+        case NotificationAuthorizationStatus.authorized:
+        case NotificationAuthorizationStatus.provisional:
+        case NotificationAuthorizationStatus.ephemeral:
+          await _gate.ensureAlarmKit();
+          return true;
+        case NotificationAuthorizationStatus.denied:
+          _notificationsDenied = true;
+          return false;
+        case NotificationAuthorizationStatus.notDetermined:
+          if (!mounted) return true;
+          return await _gate.requestWithRationale(context);
       }
-      if (!mounted) return true;
-      final request =
-          widget.requestPermission ?? ReminderPermissionFlow.requestWithRationale;
-      final granted = await request(context);
-      if (granted) {
-        await prefs.setBool(MedicineRegisterPage.permissionRationaleDoneKey, true);
-      }
-      return granted;
     } catch (_) {
       return true;
     }
   }
 
+  /// 알림이 꺼져 있어 알람이 울리지 않을 때의 안내. 설정에서 거부한 경우에는
+  /// 설정 앱을 바로 열 수 있게 확인창을 먼저 보여준다.
+  Future<void> _warnNotificationsOff() async {
+    if (_notificationsDenied) {
+      final openSettings = await showAppConfirm(
+        context: context,
+        title: '알림이 꺼져 있어요',
+        message: '알림 권한이 꺼져 있으면 복약 알람이 울리지 않아요. 설정에서 알림을 허용해주세요.',
+        cancelLabel: '나중에',
+        confirmLabel: '설정 열기',
+      );
+      if (openSettings) {
+        await _gate.openSettings();
+        return;
+      }
+      if (!mounted) return;
+    }
+    AppToast.show(
+      context,
+      '알림 권한이 꺼져 있어 허용하기 전까지 알람이 울리지 않아요.',
+      type: AppToastType.error,
+    );
+  }
+
   Future<void> _showError(String title, String message) {
-    return showAppAlert(context: context, title: title, message: message);
+    if (isCupertino(context)) {
+      return showAppAlert(context: context, title: title, message: message);
+    }
+    // Android는 기존 Material AlertDialog 외형을 그대로 유지한다.
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        backgroundColor: Colors.white,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await _submitInner();
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _submitInner() async {
     final name = _medicineController.text.trim();
     final times = _dedupeAndSortTimes(_times);
     final hasMissing = name.isEmpty || _selectedDays.isEmpty || times.isEmpty;
@@ -254,8 +315,11 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     );
     if (!confirmed || !mounted) return;
 
-    // 수정이 아닌 신규 등록에서만 첫 1회 권한 흐름을 거친다.
-    final canNotify = isEdit ? true : await _ensureNotificationPermission();
+    // 신규 등록에서만 권한 상태를 확인한다(이미 서버에 만든 뒤 재시도할 때와
+    // 수정 화면은 제외).
+    final canNotify = (isEdit || _createdScheduleId != null)
+        ? true
+        : await _ensureNotificationPermission();
     if (!mounted) return;
 
     late final MedicineAlarm alarm;
@@ -291,12 +355,27 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
         'medication_name': name,
         'times': timeStrings,
         'repeat_days': repeatDays,
-        if (widget.initialAlarm == null) 'start_date': startDate,
+        if (widget.initialAlarm == null && _createdScheduleId == null)
+          'start_date': startDate,
       };
-      if (widget.initialAlarm == null) {
+      if (_createdScheduleId != null) {
+        // 앞선 시도에서 서버 스케줄은 이미 만들어졌다. 기기 예약만 다시 하되,
+        // 그 사이 입력이 바뀌었을 수 있으니 서버 내용은 갱신한다.
+        final scheduleId = _createdScheduleId!;
+        await scheduleService.updateSchedule(scheduleId, body);
+        alarm = MedicineAlarm(
+          id: scheduleId.toString(),
+          name: name,
+          times: times,
+          days: List.from(_selectedDays),
+          everyDay: _selectedDays.length == 7,
+          nfcEnabled: _nfcEnabled,
+        );
+      } else if (widget.initialAlarm == null) {
         final created = await scheduleService.createSchedule(body);
         final createdMap = created as Map<String, dynamic>;
         final scheduleId = (createdMap['id'] as num).toInt();
+        _createdScheduleId = scheduleId;
         final everyDay = _selectedDays.length == 7;
         alarm = MedicineAlarm(
           id: scheduleId.toString(),
@@ -343,11 +422,8 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     if (success) {
       AppHaptics.success(context);
       if (!canNotify) {
-        AppToast.show(
-          context,
-          '알림 권한이 꺼져 있어 허용하기 전까지 알람이 울리지 않아요. 설정에서 알림을 허용해주세요.',
-          type: AppToastType.error,
-        );
+        await _warnNotificationsOff();
+        if (!mounted) return;
       }
       Navigator.pop(context, alarm);
     } else {
@@ -426,10 +502,8 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
                     children: [
                       for (var i = 0; i < _times.length; i++)
                         AppSwipeActions(
-                          key: ValueKey('timeSwipe_$i'),
-                          itemKey: ValueKey(
-                            'time_${_times[i].hour}_${_times[i].minute}_$i',
-                          ),
+                          key: ValueKey(_timeKey(i)),
+                          itemKey: ValueKey(_timeKey(i)),
                           // 최소 1개 규칙: 마지막 한 개는 삭제 확인 전에 막는다.
                           confirmDismiss: () async {
                             if (_times.length == 1) {
@@ -483,6 +557,17 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
         ],
       ),
     );
+  }
+
+  /// 시간 행의 안정적인 키: 시각 값 + 같은 시각 중 몇 번째인지. 목록이
+  /// 정렬/삭제로 재배열돼도 같은 시각의 행은 같은 키를 유지한다.
+  String _timeKey(int index) {
+    final t = _times[index];
+    var occurrence = 0;
+    for (var i = 0; i < index; i++) {
+      if (_times[i].hour == t.hour && _times[i].minute == t.minute) occurrence++;
+    }
+    return 'time_${t.hour}_${t.minute}_$occurrence';
   }
 
   String _formatHHmm(TimeOfDay t) =>
