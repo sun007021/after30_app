@@ -17,28 +17,51 @@ import 'package:after30/features/family/ui/widgets/family_empty_state.dart';
 import 'package:after30/features/family/ui/widgets/family_invitation_banner.dart';
 import 'package:after30/features/family/ui/widgets/family_member_row.dart';
 import 'package:after30/features/common/widgets/phone_register_dialog.dart';
+import 'package:after30/features/family/ui/widgets/family_phone_banner.dart';
 import 'package:after30/core/storage/user_store.dart';
-import 'package:after30/app/app_shell.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
+import 'package:after30/features/my/data/user_service.dart';
 import 'package:after30/utils/responsive.dart';
 
 class FamilyPage extends StatefulWidget {
   final int? initialGroupId;
 
-  const FamilyPage({super.key, this.initialGroupId});
+  /// 테스트/프리뷰용 주입 지점. 지정하지 않으면 실제 서비스를 쓴다.
+  final FamilyService? familyService;
+  final MyProfileService? profileService;
+  final UserService? userService;
+
+  /// 선택한 멤버의 해당 날짜 복약 목록 조회를 대체한다(기본: 실제 API).
+  final Future<List<Medication>> Function(int userId, DateTime day)?
+      fetchMemberMedications;
+
+  const FamilyPage({
+    super.key,
+    this.initialGroupId,
+    this.familyService,
+    this.profileService,
+    this.userService,
+    this.fetchMemberMedications,
+  });
 
   @override
   State<FamilyPage> createState() => _FamilyPageState();
 }
 
 class _FamilyPageState extends State<FamilyPage> {
-  final FamilyService _familyService = FamilyService();
-  final MyProfileService _profileService = MyProfileService();
+  late final FamilyService _familyService =
+      widget.familyService ?? FamilyService();
+  late final MyProfileService _profileService =
+      widget.profileService ?? MyProfileService();
 
   bool _isLoading = true;
   int? _processingInvitationId;
   bool _isLoadingMedications = false;
-  bool _hasCheckedPhoneRegistration = false;
+  /// 내 전화번호 등록 여부(null: 아직 모름). 배너 표시 판단용.
+  bool? _hasPhone;
+  /// 안내 배너를 닫았는지. 가족 탭은 앱 셸에서 상태가 유지되므로 앱을 다시
+  /// 켜기 전까지(세션 동안) 닫은 상태가 유지된다.
+  bool _phoneBannerDismissed = false;
   String? _errorMessage;
 
   List<FamilyGroup> _groups = [];
@@ -72,46 +95,37 @@ class _FamilyPageState extends State<FamilyPage> {
   void initState() {
     super.initState();
     _loadPageData();
-    _checkMyPhoneRegistration();
+    _loadPhoneStatus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _recalculateSheetFractions();
     });
   }
 
-  Future<void> _checkMyPhoneRegistration() async {
-    if (_hasCheckedPhoneRegistration) return;
-    _hasCheckedPhoneRegistration = true;
-
+  /// 내 전화번호 등록 여부를 확인한다. 강제 모달 대신 안내 배너에만 쓴다
+  /// (plan §2 D11). 조회 실패 시에는 배너를 띄우지 않는다.
+  Future<void> _loadPhoneStatus() async {
     try {
       final profile = await _profileService.getMyProfile();
-      if (!mounted || profile.hasPhoneNumber) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _showPhoneRegisterPopup();
-      });
+      if (!mounted) return;
+      setState(() => _hasPhone = profile.hasPhoneNumber);
     } catch (_) {}
   }
 
-  void _leaveFamilyPage() {
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-      return;
-    }
-    // 앱 셸 안에서는 다른 탭 화면으로 push하는 대신 홈 탭으로 전환한다
-    // (plan §6 W10 5/6항).
-    AppShell.of(context).switchTab(AppShellTab.home);
+  /// 전화번호가 필요한 동작 직전에 호출한다. 이미 있으면 true, 없으면 그
+  /// 자리에서 등록 시트를 열고 성공 여부를 돌려준다.
+  Future<bool> _ensurePhone(String reason) async {
+    final ok = await ensurePhoneRegistered(
+      context,
+      profileService: _profileService,
+      userService: widget.userService,
+      reason: reason,
+    );
+    if (ok && mounted && _hasPhone != true) setState(() => _hasPhone = true);
+    return ok;
   }
 
-  Future<void> _showPhoneRegisterPopup() async {
-    await PhoneRegisterDialog.show(
-      context: context,
-      onCancel: _leaveFamilyPage,
-      onGoToMyPage: () {
-        // 앱 셸 안에서는 마이페이지 탭으로 전환한다(plan §6 W10 5/6항).
-        AppShell.of(context).switchTab(AppShellTab.my);
-      },
-    );
+  Future<void> _onTapRegisterPhone() async {
+    await _ensurePhone('가족이 나를 초대하고 내가 가족을 초대하려면 전화번호가 필요해요.');
   }
 
   @override
@@ -352,6 +366,16 @@ class _FamilyPageState extends State<FamilyPage> {
         _selectedDate.month,
         _selectedDate.day,
       );
+      final injected = widget.fetchMemberMedications;
+      if (injected != null) {
+        final meds = await injected(userId, dayOnly);
+        if (!mounted) return;
+        setState(() {
+          _medications = meds;
+          _isLoadingMedications = false;
+        });
+        return;
+      }
       final currentUserIdStr = await UserStore.getCurrentUserId();
       final currentUserId = int.tryParse(currentUserIdStr ?? '');
       final isOtherMember =
@@ -460,6 +484,12 @@ class _FamilyPageState extends State<FamilyPage> {
     );
     if (!confirmed || !mounted) return;
 
+    // 초대 수락은 전화번호가 있어야 한다(D11). 거절은 필요 없다.
+    if (accept && !await _ensurePhone('초대를 수락하려면 전화번호가 필요해요.')) {
+      return;
+    }
+    if (!mounted) return;
+
     setState(() => _processingInvitationId = invitation.id);
     try {
       if (accept) {
@@ -490,6 +520,9 @@ class _FamilyPageState extends State<FamilyPage> {
       return;
     }
 
+    if (!await _ensurePhone('가족을 초대하려면 전화번호가 필요해요.')) return;
+    if (!mounted) return;
+
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FamilyInviteExistingGroupInvitePage(
@@ -518,6 +551,9 @@ class _FamilyPageState extends State<FamilyPage> {
   }
 
   Future<void> _openCreateGroup() async {
+    if (!await _ensurePhone('그룹을 만들려면 전화번호가 필요해요.')) return;
+    if (!mounted) return;
+
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const FamilyInviteGroupSelectPage()),
     );
@@ -666,6 +702,12 @@ class _FamilyPageState extends State<FamilyPage> {
                     children: [
                       _buildHeader(context),
                       if (_errorMessage != null) _buildErrorBanner(),
+                      if (_hasPhone == false && !_phoneBannerDismissed)
+                        FamilyPhoneBanner(
+                          onRegister: _onTapRegisterPhone,
+                          onDismiss: () =>
+                              setState(() => _phoneBannerDismissed = true),
+                        ),
                       if (_pendingInvitations.isNotEmpty)
                         ..._pendingInvitations.map(
                           (invitation) => FamilyInvitationBanner(

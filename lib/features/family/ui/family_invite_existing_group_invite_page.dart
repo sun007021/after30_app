@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
+import 'package:after30/features/common/widgets/phone_register_dialog.dart';
+import 'package:after30/features/my/data/my_profile_service.dart';
 import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/family/data/phone_util.dart';
 import 'package:after30/app/app_shell.dart';
@@ -13,10 +15,18 @@ class FamilyInviteExistingGroupInvitePage extends StatefulWidget {
   final int? groupId;
   final String groupName;
 
+  /// 테스트/프리뷰용 주입 지점. 지정하지 않으면 실제 서비스를 쓴다.
+  final FamilyService? familyService;
+  final UserService? userService;
+  final MyProfileService? profileService;
+
   const FamilyInviteExistingGroupInvitePage({
     super.key,
     this.groupId,
     required this.groupName,
+    this.familyService,
+    this.userService,
+    this.profileService,
   });
 
   bool get isNewGroup => groupId == null;
@@ -36,8 +46,9 @@ class _InvitePhoneEntry {
 class _FamilyInviteExistingGroupInvitePageState
     extends State<FamilyInviteExistingGroupInvitePage> {
   final TextEditingController _phoneController = TextEditingController();
-  final FamilyService _familyService = FamilyService();
-  final UserService _userService = UserService();
+  late final FamilyService _familyService =
+      widget.familyService ?? FamilyService();
+  late final UserService _userService = widget.userService ?? UserService();
   final List<_InvitePhoneEntry> _entries = [];
   bool _isSending = false;
   bool _isLookingUp = false;
@@ -117,6 +128,20 @@ class _FamilyInviteExistingGroupInvitePageState
       await _showMessageDialog('초대할 전화번호를 추가해 주세요.');
       return;
     }
+
+    // 그룹 생성과 초대 전송은 전화번호가 있어야 한다(D11). 없으면 그 자리에서
+    // 등록 시트를 열고, 등록되면 이어서 전송한다.
+    if (!await ensurePhoneRegistered(
+      context,
+      profileService: widget.profileService,
+      userService: widget.userService,
+      reason: widget.isNewGroup
+          ? '그룹을 만들고 가족을 초대하려면 전화번호가 필요해요.'
+          : '가족을 초대하려면 전화번호가 필요해요.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     setState(() => _isSending = true);
 
