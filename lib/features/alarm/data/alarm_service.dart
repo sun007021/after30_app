@@ -556,7 +556,7 @@ class AlarmService {
       );
       await _scheduler.rescheduleAll(await _activeAlarmsFromStorage());
     } catch (e) {
-      print('알람 일괄 동기화 실패: $e');
+      debugPrint('알람 일괄 동기화 실패: $e');
     }
   }
 

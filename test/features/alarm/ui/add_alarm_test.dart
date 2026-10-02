@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -307,6 +309,27 @@ void main() {
       await tester.pump();
       await register(tester);
       expect(permissionCalls, 2);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('등록 화면이 보이는 동안 예산 경고를 AppToast로 보여준다', (tester) async {
+      final warnings = StreamController<String>.broadcast();
+      addTearDown(warnings.close);
+      await pumpPushedPage(
+        tester,
+        TargetPlatform.iOS,
+        MedicineRegisterPage(
+          scheduleService: schedule,
+          alarmService: alarms,
+          budgetWarnings: warnings.stream,
+        ),
+      );
+
+      warnings.add('알림은 64개까지만 예약돼요');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('알림은 64개까지만 예약돼요'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
     });

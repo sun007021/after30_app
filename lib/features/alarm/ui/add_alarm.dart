@@ -6,6 +6,7 @@ import 'package:after30/features/alarm/data/reminder_permission_flow.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/data/schedule_service.dart';
+import 'package:after30/features/alarm/ui/widgets/budget_warning_listener.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/utils/responsive.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
@@ -22,6 +23,7 @@ class MedicineRegisterPage extends StatefulWidget {
   final ScheduleService? scheduleService;
   final AlarmService? alarmService;
   final ReminderPermissionRequester? requestPermission;
+  final Stream<String>? budgetWarnings;
 
   const MedicineRegisterPage({
     super.key,
@@ -29,6 +31,7 @@ class MedicineRegisterPage extends StatefulWidget {
     this.scheduleService,
     this.alarmService,
     this.requestPermission,
+    this.budgetWarnings,
   });
 
   /// 첫 등록 사전 설명이 끝났는지(허용까지 받았는지) 기록하는 키.
@@ -357,9 +360,12 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     _medicineController.removeListener(_medicineListener);
     _medicineController.addListener(_medicineListener);
 
-    return isCupertino(context)
-        ? _buildCupertino(context)
-        : _buildMaterial(context);
+    return BudgetWarningListener(
+      warnings: widget.budgetWarnings,
+      child: isCupertino(context)
+          ? _buildCupertino(context)
+          : _buildMaterial(context),
+    );
   }
 
   // ---------------------------------------------------------------------

@@ -40,7 +40,10 @@ class FakeScheduleService implements ScheduleService {
   }
 
   @override
-  Future<void> deleteSchedule(int scheduleId) async => deleted.add(scheduleId);
+  Future<void> deleteSchedule(int scheduleId) async {
+    deleted.add(scheduleId);
+    schedules = schedules.where((s) => (s as Map)['id'] != scheduleId).toList();
+  }
 
   @override
   Future<dynamic> deactivateSchedule(int scheduleId) async {
@@ -133,3 +136,19 @@ Future<void> pumpPushedPage(
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
 }
+
+/// 서버 응답 형태의 스케줄 JSON.
+Map<String, dynamic> scheduleJson(
+  int id,
+  String name, {
+  List<String> times = const ['08:00'],
+  List<String> days = const ['MON', 'TUE'],
+  bool active = true,
+}) =>
+    {
+      'id': id,
+      'medication_name': name,
+      'times': times,
+      'repeat_days': days,
+      'is_active': active,
+    };

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/utils/responsive.dart';
 
@@ -10,12 +11,19 @@ class AlarmCard extends StatelessWidget {
   final void Function() onEdit;
   final void Function() onDelete;
 
+  /// iOS 전용: 스와이프로 삭제할 때 호출(확인은 [confirmSwipeDelete]에서 받은
+  /// 뒤). Android는 팝업 메뉴의 [onDelete]를 그대로 쓴다.
+  final void Function()? onSwipeDelete;
+  final Future<bool> Function()? confirmSwipeDelete;
+
   const AlarmCard({
     super.key,
     required this.alarm,
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
+    this.onSwipeDelete,
+    this.confirmSwipeDelete,
   });
 
   String _formatTimeHHmm(TimeOfDay t) {
@@ -58,6 +66,117 @@ class AlarmCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
+    return _buildMaterial(context);
+  }
+
+  // ---------------------------------------------------------------------
+  // iOS
+  // ---------------------------------------------------------------------
+
+  Widget _cupertinoChip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: alarm.isActive ? Colors.white : AppColors.groupedBackground,
+        borderRadius: BorderRadius.circular(AppRadius.capsule),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: alarm.isActive ? AppColors.label : AppColors.secondaryLabel,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCupertino(BuildContext context) {
+    final content = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onEdit,
+      child: Container(
+        color: alarm.isActive ? AppColors.primaryTint : AppColors.surface,
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SvgPicture.asset(
+                  alarm.isActive
+                      ? 'assets/images/alarmList_active.svg'
+                      : 'assets/images/alarmList_deactive.svg',
+                  width: 44,
+                  height: 44,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    alarm.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.title.copyWith(
+                      color: alarm.isActive
+                          ? AppColors.label
+                          : AppColors.secondaryLabel,
+                    ),
+                  ),
+                ),
+                AppSwitch(value: alarm.isActive, onChanged: (_) => onToggle()),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // 가로 스크롤 대신 줄바꿈 칩으로 둬서 좌우 스와이프 삭제와
+            // 제스처가 겹치지 않게 한다.
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _cupertinoChip(alarm.everyDay ? '매일' : _formatDays(alarm.days)),
+                ...alarm.times.map((t) => _cupertinoChip(_formatTimeHHmm(t))),
+              ],
+            ),
+            if (alarm.nfcEnabled) ...[
+              const SizedBox(height: 8),
+              const Row(
+                children: [
+                  Icon(Icons.nfc, size: 16, color: AppColors.primary),
+                  SizedBox(width: 4),
+                  Text(
+                    'NFC 연동됨',
+                    style: TextStyle(fontSize: 12, color: AppColors.primary),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: onSwipeDelete == null
+            ? content
+            : AppSwipeActions(
+                itemKey: ValueKey('alarmSwipe_${alarm.id}'),
+                confirmDismiss: confirmSwipeDelete,
+                onDelete: onSwipeDelete!,
+                child: content,
+              ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Android(기존 외형 그대로)
+  // ---------------------------------------------------------------------
+
+  Widget _buildMaterial(BuildContext context) {
     return Card(
       margin: EdgeInsets.symmetric(
         vertical: Responsive.responsiveValue(context, 8),
