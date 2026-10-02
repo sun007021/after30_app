@@ -21,11 +21,19 @@ class FamilyPhoneBanner extends StatelessWidget {
       padding: Responsive.responsivePaddingLTRB(context, 20, 0, 20, 12),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+        // 배경이 연한 파랑(#EAF2FF)인 가족 탭 위에서도 카드 경계가 보이도록
+        // 흰 카드 + 브랜드 테두리를 쓴다.
         decoration: ShapeDecoration(
-          color: AppColors.primaryTint,
+          color: AppColors.surface,
           shape: cupertino
-              ? RoundedSuperellipseBorder(borderRadius: AppRadius.borderRadius(AppRadius.sm))
-              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ? RoundedSuperellipseBorder(
+                  borderRadius: AppRadius.borderRadius(AppRadius.sm),
+                  side: const BorderSide(color: AppColors.primary, width: 1),
+                )
+              : RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: AppColors.primary, width: 1),
+                ),
         ),
         child: Row(
           children: [
@@ -42,18 +50,21 @@ class FamilyPhoneBanner extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 6),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: onRegister,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        '등록하기',
-                        style: TextStyle(
-                          fontSize: Responsive.responsiveFontSize(context, 13),
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
+                    // 탭 영역은 최소 44pt(HIG)로 확보한다.
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '등록하기',
+                          style: TextStyle(
+                            fontSize: Responsive.responsiveFontSize(context, 13),
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                     ),

@@ -31,7 +31,9 @@ void main() {
   testWidgets('iOS: AppTextField(전화 패드, 완료 바, 포매터, 자동완성)와 추가 버튼', (tester) async {
     await _pump(tester, TargetPlatform.iOS);
 
-    final field = tester.widget<AppTextField>(find.byType(AppTextField));
+    final field = tester.widget<AppTextField>(find.byType(AppTextField).last);
+    // 그룹 이름 표시창도 iOS 토큰 입력창(읽기 전용)이다.
+    expect(tester.widget<AppTextField>(find.byType(AppTextField).first).readOnly, isTrue);
     expect(field.keyboardType, TextInputType.phone);
     expect(field.showKeyboardDoneBar, isTrue);
     expect(field.autofillHints, contains(AutofillHints.telephoneNumber));

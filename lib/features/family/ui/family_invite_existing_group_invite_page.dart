@@ -48,6 +48,8 @@ class _InvitePhoneEntry {
 class _FamilyInviteExistingGroupInvitePageState
     extends State<FamilyInviteExistingGroupInvitePage> {
   final TextEditingController _phoneController = TextEditingController();
+  late final TextEditingController _groupNameController =
+      TextEditingController(text: widget.groupName);
   late final FamilyService _familyService =
       widget.familyService ?? FamilyService();
   late final UserService _userService = widget.userService ?? UserService();
@@ -59,6 +61,7 @@ class _FamilyInviteExistingGroupInvitePageState
   @override
   void dispose() {
     _phoneController.dispose();
+    _groupNameController.dispose();
     super.dispose();
   }
 
@@ -369,17 +372,26 @@ class _FamilyInviteExistingGroupInvitePageState
                             28,
                             0,
                           ),
-                          child: SizedBox(
-                            height: Responsive.responsiveHeight(context, 66),
-                            child: TextFormField(
-                              readOnly: true,
-                              initialValue: widget.groupName,
-                              decoration: _fieldDecoration(
-                                context: context,
-                                hintText: widget.groupName,
-                              ),
-                            ),
-                          ),
+                          child: isCupertino(context)
+                              // iOS: 읽기 전용 토큰 입력창(표시 전용).
+                              ? AppTextField(
+                                  controller: _groupNameController,
+                                  readOnly: true,
+                                )
+                              : SizedBox(
+                                  height: Responsive.responsiveHeight(
+                                    context,
+                                    66,
+                                  ),
+                                  child: TextFormField(
+                                    readOnly: true,
+                                    initialValue: widget.groupName,
+                                    decoration: _fieldDecoration(
+                                      context: context,
+                                      hintText: widget.groupName,
+                                    ),
+                                  ),
+                                ),
                         ),
                         SizedBox(
                           height: Responsive.responsiveHeight(context, 20),

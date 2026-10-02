@@ -41,6 +41,27 @@ void main() {
         expect(find.text('등록된 가족이 없어요'), findsOneWidget);
       });
 
+      testWidgets('배너는 흰 카드 + 브랜드 테두리이고 등록하기 탭 영역은 44pt 이상이다', (tester) async {
+        await pumpFamilyPage(
+          tester,
+          platform: platform,
+          familyService: FakeFamilyService(),
+          profileService: FakeProfileService(),
+        );
+
+        final card = tester.widget<Container>(
+          find.descendant(of: find.byType(FamilyPhoneBanner), matching: find.byType(Container)).first,
+        );
+        final shape = (card.decoration! as ShapeDecoration);
+        expect(shape.color, AppColors.surface);
+        expect((shape.shape as OutlinedBorder).side.color, AppColors.primary);
+
+        final link = tester.getSize(
+          find.ancestor(of: find.text('등록하기'), matching: find.byType(ConstrainedBox)).first,
+        );
+        expect(link.height, greaterThanOrEqualTo(44));
+      });
+
       testWidgets('배너를 닫으면 사라진다', (tester) async {
         await pumpFamilyPage(
           tester,
