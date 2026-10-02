@@ -87,11 +87,8 @@ Future<void> _runScene() async {
   if (context == null || navigator == null) return;
   switch (_scene) {
     case 'sheet':
-      final profile = await _profile.getMyProfile();
-      if (!context.mounted) return;
       showPhoneRegisterSheet(
         context: context,
-        profile: profile,
         profileService: _profile,
         userService: _users,
       );
@@ -315,13 +312,8 @@ class _PreviewProfileService extends MyProfileService {
   Future<MyProfile> getMyProfile() async => MyProfile(name: '나', gender: '남', phoneNumber: _phone);
 
   @override
-  Future<MyProfile> updateMyProfile({
-    required String name,
-    required String gender,
-    required String phoneNumber,
-  }) async {
+  Future<void> updatePhoneNumber(String phoneNumber) async {
     _phone = phoneNumber;
-    return MyProfile(name: name, gender: gender, phoneNumber: phoneNumber);
   }
 }
 

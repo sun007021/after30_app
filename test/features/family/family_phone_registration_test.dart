@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:after30/core/design/design.dart';
@@ -272,8 +273,31 @@ void main() {
       expect(users.checkedPhones, isEmpty);
     });
 
-    testWidgets('성별 정보가 없으면 시트에서 함께 받는다', (tester) async {
-      final profile = FakeProfileService(gender: null);
+    testWidgets('성별/이름과 무관하게 전화번호만 보낸다(성별 질문 없음)', (tester) async {
+      // 성별이 비어 있거나 '기타'인 사용자도 등록할 수 있어야 한다.
+      for (final gender in [null, '기타']) {
+        final profile = FakeProfileService(gender: gender);
+        await openSheet(
+          tester,
+          platform: TargetPlatform.android,
+          profile: profile,
+          users: FakeUserService(),
+        );
+        expect(find.text('남'), findsNothing);
+        expect(find.text('여'), findsNothing);
+
+        await _register(tester, '010-1234-5678');
+        expect(profile.patchedPhones, ['010-1234-5678']);
+        expect(find.text(_sheetTitle), findsNothing);
+      }
+    });
+
+    testWidgets('422 오류를 번호 형식 탓으로만 돌리지 않는다', (tester) async {
+      final profile = FakeProfileService()
+        ..saveError = DioException(
+          requestOptions: RequestOptions(path: '/users/me'),
+          response: Response(requestOptions: RequestOptions(path: '/users/me'), statusCode: 422),
+        );
       await openSheet(
         tester,
         platform: TargetPlatform.android,
@@ -282,13 +306,25 @@ void main() {
       );
 
       await _register(tester, '010-1234-5678');
-      expect(find.text('성별을 선택해 주세요.'), findsOneWidget);
+      expect(find.text('전화번호 형식이 올바르지 않습니다.'), findsNothing);
+      expect(find.textContaining('다시 확인해 주세요'), findsOneWidget);
+    });
 
-      await tester.tap(find.text('여'));
-      await tester.pump();
-      await tester.tap(find.text('등록하기').last);
-      await tester.pumpAndSettle();
-      expect(profile.savedPhones, ['010-1234-5678']);
+    testWidgets('409는 중복 번호 안내를 보여준다', (tester) async {
+      final profile = FakeProfileService()
+        ..saveError = DioException(
+          requestOptions: RequestOptions(path: '/users/me'),
+          response: Response(requestOptions: RequestOptions(path: '/users/me'), statusCode: 409),
+        );
+      await openSheet(
+        tester,
+        platform: TargetPlatform.iOS,
+        profile: profile,
+        users: FakeUserService(),
+      );
+
+      await _register(tester, '010-1234-5678');
+      expect(find.text('이미 사용 중인 번호입니다.'), findsOneWidget);
     });
   });
 }

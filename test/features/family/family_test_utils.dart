@@ -167,15 +167,18 @@ class FakeProfileService extends MyProfileService {
     return snapshot;
   }
 
+  /// 저장 요청에 쓰인 값(전화번호만 보내는지 확인용).
+  final List<String> patchedPhones = [];
+  /// 지정하면 저장이 이 오류로 실패한다.
+  Object? saveError;
+
   @override
-  Future<MyProfile> updateMyProfile({
-    required String name,
-    required String gender,
-    required String phoneNumber,
-  }) async {
+  Future<void> updatePhoneNumber(String phoneNumber) async {
+    await Future<void>.delayed(saveDelay);
+    if (saveError != null) throw saveError!;
     savedPhones.add(phoneNumber);
+    patchedPhones.add(phoneNumber);
     phone = phoneNumber;
-    return MyProfile(name: name, gender: gender, phoneNumber: phoneNumber);
   }
 }
 
