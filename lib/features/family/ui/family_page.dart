@@ -338,6 +338,13 @@ class _FamilyPageState extends State<FamilyPage> {
       if (!mounted || seq != _groupSeq) return;
       // 응답을 기다리는 사이 사용자가 멤버/날짜를 바꿨다면 그 선택을 유지한다.
       final selectionUnchanged = sel == _selSeq;
+      // 다만 그룹을 바꾼 직후에는 선택된 멤버가 비어 있다(_onGroupSelected가
+      // null로 만든다). 이 사이 사용자가 날짜만 바꿨다면 멤버는 고른 적이
+      // 없으므로 기본 멤버를 지정하고 로드를 이어간다. 그렇지 않으면 시트가
+      // 멤버 없이 빈 채로 남는다(재검토 R4).
+      final currentMemberValid = _selectedUserId != null &&
+          members.any((member) => member.userId == _selectedUserId);
+      final needsDefaultMember = !selectionUnchanged && !currentMemberValid;
       int? selectedUserId = _selectedUserId;
       if (members.isEmpty) {
         selectedUserId = null;
@@ -354,6 +361,10 @@ class _FamilyPageState extends State<FamilyPage> {
         if (selectionUnchanged) {
           _dashboard = dashboard;
           _selectedUserId = selectedUserId;
+        } else if (needsDefaultMember) {
+          // 날짜는 사용자가 고른 값을 유지하고(그 날짜의 대시보드는
+          // _onDateSelected가 따로 불러온다) 멤버만 기본값으로 채운다.
+          _selectedUserId = selectedUserId;
         }
       });
 
@@ -361,7 +372,8 @@ class _FamilyPageState extends State<FamilyPage> {
         _recalculateSheetFractions();
       });
 
-      if (!selectionUnchanged) return; // 새 선택의 로드가 따로 진행 중이다.
+      // 사용자가 멤버를 직접 바꿨다면 그 선택의 로드가 따로 진행 중이다.
+      if (!selectionUnchanged && !needsDefaultMember) return;
       await Future.wait([
         _loadWeekStats(groupId, selectedUserId),
         _loadMedicationsForSelectedMember(),
