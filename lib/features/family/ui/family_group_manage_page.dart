@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/core/auth/current_user_resolver.dart';
 import 'package:after30/core/storage/user_store.dart';
@@ -8,16 +10,23 @@ import 'package:after30/features/family/data/family_service.dart';
 import 'package:after30/features/family/models/group_member.dart';
 import 'package:after30/features/family/ui/family_invite_existing_group_invite_page.dart';
 import 'package:after30/app/app_shell.dart';
+import 'package:after30/features/family/ui/widgets/family_loader.dart';
 import 'package:after30/utils/responsive.dart';
 
 class FamilyGroupManagePage extends StatefulWidget {
   final int groupId;
   final String groupName;
 
+  /// 테스트/프리뷰용 주입 지점. 지정하지 않으면 실제 서비스/해석기를 쓴다.
+  final FamilyService? familyService;
+  final Future<int?> Function(List<GroupMember> members)? resolveCurrentUserId;
+
   const FamilyGroupManagePage({
     super.key,
     required this.groupId,
     required this.groupName,
+    this.familyService,
+    this.resolveCurrentUserId,
   });
 
   @override
@@ -25,7 +34,8 @@ class FamilyGroupManagePage extends StatefulWidget {
 }
 
 class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
-  final FamilyService _familyService = FamilyService();
+  late final FamilyService _familyService =
+      widget.familyService ?? FamilyService();
 
   bool _isLoading = true;
   bool _isProcessing = false;
@@ -45,9 +55,10 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
     try {
       final storedUserId = await UserStore.getCurrentUserId();
       final members = await _familyService.getGroupMembers(widget.groupId);
-      final currentUserId = await CurrentUserResolver.resolveUserId(
-        members: members,
-      );
+      final resolver = widget.resolveCurrentUserId;
+      final currentUserId = resolver != null
+          ? await resolver(members)
+          : await CurrentUserResolver.resolveUserId(members: members);
       if (!mounted) return;
       setState(() {
         _currentUserId = currentUserId ?? int.tryParse(storedUserId ?? '');
@@ -89,12 +100,24 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
   }
 
   Future<void> _editGroupName() async {
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return _GroupNameEditDialog(initialName: _groupName);
-      },
-    );
+    // iOS: 텍스트 입력 알럿(100자 제한). Android: 기존 수정 다이얼로그 유지.
+    final String? newName;
+    if (isCupertino(context)) {
+      newName = await showAppTextInputAlert(
+        context: context,
+        title: '그룹 이름 수정',
+        initialValue: _groupName,
+        confirmLabel: '저장',
+        maxLength: 100,
+      );
+    } else {
+      newName = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          return _GroupNameEditDialog(initialName: _groupName);
+        },
+      );
+    }
 
     final trimmed = newName?.trim();
     if (trimmed == null || trimmed.isEmpty || trimmed == _groupName) return;
@@ -155,12 +178,14 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
   }
 
   Future<void> _removeMember(GroupMember member) async {
-    final confirmed = await DoubleCheckDialog.show(
+    final confirmed = await showAppConfirm(
       context: context,
       title: '멤버 제거',
       message: '${member.userName ?? '가족'}님을 그룹에서 제거하시겠습니까?',
       cancelLabel: '취소',
       confirmLabel: '제거',
+      // Android 확인 버튼은 기존 브랜드 색을 유지하고, iOS만 파괴적 표시를 쓴다.
+      destructive: isCupertino(context),
     );
     if (!confirmed || !mounted) return;
 
@@ -193,12 +218,13 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
       return;
     }
 
-    final confirmed = await DoubleCheckDialog.show(
+    final confirmed = await showAppConfirm(
       context: context,
       title: '가족 그룹 탈퇴',
       message: '정말 이 가족 그룹에서 탈퇴하시겠습니까?',
       cancelLabel: '취소',
       confirmLabel: '탈퇴',
+      destructive: isCupertino(context),
     );
     if (!confirmed || !mounted) return;
 
@@ -223,6 +249,35 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
       );
     } finally {
       if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// 멤버 행의 "더보기"/길게 누르기 진입점. iOS는 액션 시트(제거=파괴적),
+  /// Android는 기존 팝업 메뉴를 그대로 쓴다.
+  Future<void> _openMemberActions(BuildContext context, GroupMember member) async {
+    if (!isCupertino(context)) {
+      _showMemberMenu(context, member);
+      return;
+    }
+    final action = await showAppActionSheet<String>(
+      context: context,
+      title: member.userName ?? '가족',
+      actions: [
+        if (_isOwner && !member.isOwner)
+          const AppActionSheetAction(label: '가족장 위임', value: 'transfer'),
+        if (_isOwner && member.userId != _currentUserId)
+          const AppActionSheetAction(
+            label: '멤버 제거',
+            value: 'remove',
+            destructive: true,
+          ),
+      ],
+    );
+    if (!mounted) return;
+    if (action == 'transfer') {
+      await _transferOwnership(member);
+    } else if (action == 'remove') {
+      await _removeMember(member);
     }
   }
 
@@ -341,7 +396,7 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
       backgroundColor: const Color(0xFFEBF0FF),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const FamilyLoader()
             : Column(
                 children: [
                   Padding(
@@ -485,7 +540,12 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                             !isSelf &&
                                             !_isProcessing;
 
-                                        return Row(
+                                        return GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onLongPress: showMenu && isCupertino(context)
+                                              ? () => _openMemberActions(context, member)
+                                              : null,
+                                          child: Row(
                                           children: [
                                             _buildAvatar(name, size: 40),
                                             if (isSelf) ...[
@@ -547,6 +607,21 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                             if (showMenu)
                                               Builder(
                                                 builder: (menuContext) {
+                                                  if (isCupertino(menuContext)) {
+                                                    return GestureDetector(
+                                                      behavior: HitTestBehavior.opaque,
+                                                      onTap: () => _openMemberActions(menuContext, member),
+                                                      child: const SizedBox(
+                                                        width: 44,
+                                                        height: 44,
+                                                        child: Icon(
+                                                          CupertinoIcons.ellipsis,
+                                                          size: 20,
+                                                          color: AppColors.secondaryLabel,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
                                                   return GestureDetector(
                                                     onTap: () =>
                                                         _showMemberMenu(
@@ -588,6 +663,7 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                                 },
                                               ),
                                           ],
+                                          ),
                                         );
                                       },
                                     ),
@@ -618,7 +694,9 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                     12,
                                   ),
                                   color: _canLeaveGroup
-                                      ? const Color(0xFFE00000)
+                                      ? (isCupertino(context)
+                                          ? AppColors.destructive
+                                          : const Color(0xFFE00000))
                                       : const Color(0xFFB0B0B0),
                                 ),
                               ),

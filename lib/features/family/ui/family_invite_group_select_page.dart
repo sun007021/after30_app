@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/family/ui/family_invite_existing_group_select_page.dart';
@@ -10,8 +11,11 @@ class FamilyInviteGroupSelectPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cupertino = isCupertino(context);
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+      backgroundColor: cupertino
+          ? AppColors.groupedBackground
+          : const Color.fromARGB(255, 255, 255, 255),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -59,28 +63,33 @@ class FamilyInviteGroupSelectPage extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: Responsive.responsiveHeight(context, 32)),
-                  _GroupSelectTile(
-                    title: '기존 그룹 가족 초대',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const FamilyInviteExistingGroupSelectPage(),
+                  if (cupertino)
+                    // iOS: inset grouped 목록(셰브론 행).
+                    AppGroupedSection(
+                      children: [
+                        AppListTile(
+                          title: '기존 그룹 가족 초대',
+                          showChevron: true,
+                          onTap: _openExistingGroupSelect(context),
                         ),
-                      );
-                    },
-                  ),
-                  SizedBox(height: Responsive.responsiveHeight(context, 30)),
-                  _GroupSelectTile(
-                    title: '새 그룹 생성하기',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const FamilyInviteGroupNamePage(),
+                        AppListTile(
+                          title: '새 그룹 생성하기',
+                          showChevron: true,
+                          onTap: _openGroupName(context),
                         ),
-                      );
-                    },
-                  ),
+                      ],
+                    )
+                  else ...[
+                    _GroupSelectTile(
+                      title: '기존 그룹 가족 초대',
+                      onTap: _openExistingGroupSelect(context),
+                    ),
+                    SizedBox(height: Responsive.responsiveHeight(context, 30)),
+                    _GroupSelectTile(
+                      title: '새 그룹 생성하기',
+                      onTap: _openGroupName(context),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -91,6 +100,23 @@ class FamilyInviteGroupSelectPage extends StatelessWidget {
     );
   }
 
+  VoidCallback _openExistingGroupSelect(BuildContext context) {
+    return () {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const FamilyInviteExistingGroupSelectPage(),
+        ),
+      );
+    };
+  }
+
+  VoidCallback _openGroupName(BuildContext context) {
+    return () {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const FamilyInviteGroupNamePage()),
+      );
+    };
+  }
 }
 
 class _GroupSelectTile extends StatelessWidget {
