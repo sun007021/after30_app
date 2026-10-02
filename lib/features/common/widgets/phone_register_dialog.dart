@@ -153,8 +153,11 @@ class _PhoneRegisterSheetContentState extends State<PhoneRegisterSheetContent> {
 
   @override
   Widget build(BuildContext context) {
+    // iOS 전화 패드 위의 "완료" 바(44pt)가 시트 하단 버튼을 가리지 않게
+    // 키보드가 올라와 있는 동안 그만큼 아래 여백을 더한다.
+    final doneBarGap = isCupertino(context) && MediaQuery.viewInsetsOf(context).bottom > 0 ? 44.0 : 0.0;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+      padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + doneBarGap),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
