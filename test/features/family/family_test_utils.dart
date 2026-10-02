@@ -39,6 +39,10 @@ class FakeFamilyService extends FamilyService {
   final List<int> leftGroupIds = [];
   final List<String> renamedTo = [];
 
+  /// 네트워크 지연 흉내(경쟁 상태 회귀 테스트용).
+  Duration createDelay = Duration.zero;
+  Duration acceptDelay = Duration.zero;
+
   /// 지정하면 [getUserGroups] 응답을 이 Completer가 풀릴 때까지 미룬다.
   Future<void> Function()? groupsGate;
 
@@ -93,6 +97,7 @@ class FakeFamilyService extends FamilyService {
 
   @override
   Future<void> acceptInvitation(int invitationId) async {
+    await Future<void>.delayed(acceptDelay);
     acceptedInvitationIds.add(invitationId);
   }
 
@@ -101,6 +106,7 @@ class FakeFamilyService extends FamilyService {
 
   @override
   Future<FamilyGroup> createGroup(String name) async {
+    await Future<void>.delayed(createDelay);
     createdGroupNames.add(name);
     return fakeGroup(id: 99, name: name);
   }
@@ -134,17 +140,31 @@ class FakeFamilyService extends FamilyService {
 
 /// 가짜 프로필 서비스. [phone]이 비어 있으면 미등록 사용자다.
 class FakeProfileService extends MyProfileService {
-  FakeProfileService({this.phone, this.gender = '남'});
+  FakeProfileService({
+    this.phone,
+    this.gender = '남',
+    this.getDelay = Duration.zero,
+    this.saveDelay = Duration.zero,
+  });
+
+  /// 네트워크 지연 흉내(경쟁 상태 회귀 테스트용).
+  final Duration getDelay;
+  final Duration saveDelay;
 
   String? phone;
   String? gender;
   int getCalls = 0;
+  /// true면 프로필 조회가 실패한다.
+  bool failGet = false;
   final List<String> savedPhones = [];
 
   @override
   Future<MyProfile> getMyProfile() async {
     getCalls++;
-    return MyProfile(name: '나', gender: gender, phoneNumber: phone);
+    if (failGet) throw Exception('network');
+    final snapshot = MyProfile(name: '나', gender: gender, phoneNumber: phone);
+    await Future<void>.delayed(getDelay);
+    return snapshot;
   }
 
   @override

@@ -126,26 +126,34 @@ class _FamilyInviteExistingGroupInvitePageState
   }
 
   Future<void> _inviteAll() async {
+    // 번호 확인(네트워크)을 기다리는 동안에도 더블탭이 중복 생성/전송을
+    // 일으키지 않도록 진입 즉시 막는다.
+    if (_isSending) return;
     if (_entries.isEmpty) {
       await _showMessageDialog('초대할 전화번호를 추가해 주세요.');
       return;
     }
+    setState(() => _isSending = true);
 
     // 그룹 생성과 초대 전송은 전화번호가 있어야 한다(D11). 없으면 그 자리에서
     // 등록 시트를 열고, 등록되면 이어서 전송한다.
-    if (!await ensurePhoneRegistered(
-      context,
-      profileService: widget.profileService,
-      userService: widget.userService,
-      reason: widget.isNewGroup
-          ? '그룹을 만들고 가족을 초대하려면 전화번호가 필요해요.'
-          : '가족을 초대하려면 전화번호가 필요해요.',
-    )) {
+    var registered = false;
+    try {
+      registered = await ensurePhoneRegistered(
+        context,
+        profileService: widget.profileService,
+        userService: widget.userService,
+        reason: widget.isNewGroup
+            ? '그룹을 만들고 가족을 초대하려면 전화번호가 필요해요.'
+            : '가족을 초대하려면 전화번호가 필요해요.',
+      );
+    } catch (_) {
+      registered = false;
+    }
+    if (!registered || !mounted) {
+      if (mounted) setState(() => _isSending = false);
       return;
     }
-    if (!mounted) return;
-
-    setState(() => _isSending = true);
 
     var groupId = widget.groupId ?? _createdGroupId;
     if (groupId == null) {
