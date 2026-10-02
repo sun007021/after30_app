@@ -534,26 +534,45 @@ class AlarmService {
     return false;
   }
 
-  /// 서버에서 내려받은 활성 알람 전체를 저장소에 반영하고 **한 번만** 전체
-  /// 재예약한다(W5). 알람마다 [scheduleAlarm]을 부르면 iOS에서는 매번 64개
-  /// 예산 전체를 다시 계산하므로, 새 기기/재설치 후 동기화처럼 여러 알람이
-  /// 한꺼번에 필요할 때는 이 메서드를 쓴다.
-  Future<void> syncActiveAlarms(List<MedicineAlarm> activeAlarms) async {
+  /// 서버에서 내려받은 알람 **전체 목록**(비활성 포함)으로 로컬 저장소를
+  /// 맞추고 기기 예약을 **한 번만** 전체 재예약한다(W5).
+  ///
+  /// 알람마다 [scheduleAlarm]을 부르면 iOS에서는 매번 64개 예산 전체를
+  /// 다시 계산하므로, 새 기기/재설치 후 동기화처럼 여러 알람이 한꺼번에
+  /// 필요할 때 쓴다. 다른 기기에서 삭제된 알람(서버 목록에 없는 id)은
+  /// 저장소에서 제거하고 예약을 취소하며, 비활성화된 알람은 서버의
+  /// `isActive`를 따라 저장한 뒤 예약을 취소한다. 서버에 없는 로컬 전용
+  /// 값(NFC 등)과 알림 id/사용자 네임스페이스는 그대로 보존한다.
+  Future<void> syncFromServer(List<MedicineAlarm> serverAlarms) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final stored = await getAlarms();
-      for (final alarm in activeAlarms) {
-        final index = stored.indexWhere((a) => a.id == alarm.id);
-        if (index >= 0) {
-          stored[index] = alarm;
-        } else {
-          stored.add(alarm);
-        }
-      }
+      final byId = {for (final a in stored) a.id: a};
+      final serverIds = serverAlarms.map((a) => a.id).toSet();
+
+      final merged = serverAlarms
+          .map((a) => a.copyWith(
+            nfcEnabled: byId[a.id]?.nfcEnabled ?? a.nfcEnabled,
+            familyNotify: byId[a.id]?.familyNotify ?? a.familyNotify,
+          ))
+          .toList();
+
+      // 사라졌거나 비활성이 된 알람의 기기 예약을 정리한다.
+      final toCancel = <String>[
+        for (final old in stored)
+          if (old.isActive &&
+              (!serverIds.contains(old.id) ||
+                  !serverAlarms.firstWhere((s) => s.id == old.id).isActive))
+            old.id,
+      ];
+
       await prefs.setString(
         _alarmsKeyForUserStatic(),
-        json.encode(stored.map((a) => a.toJson()).toList()),
+        json.encode(merged.map((a) => a.toJson()).toList()),
       );
+      for (final id in toCancel) {
+        await _scheduler.cancel(id);
+      }
       await _scheduler.rescheduleAll(await _activeAlarmsFromStorage());
     } catch (e) {
       debugPrint('알람 일괄 동기화 실패: $e');

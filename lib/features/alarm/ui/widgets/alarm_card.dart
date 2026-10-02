@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/core/design/design.dart';
@@ -5,7 +6,7 @@ import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/utils/responsive.dart';
 
 /// 알람 카드 위젯
-class AlarmCard extends StatelessWidget {
+class AlarmCard extends StatefulWidget {
   final MedicineAlarm alarm;
   final void Function() onToggle;
   final void Function() onEdit;
@@ -25,6 +26,53 @@ class AlarmCard extends StatelessWidget {
     this.onSwipeDelete,
     this.confirmSwipeDelete,
   });
+
+  @override
+  State<AlarmCard> createState() => _AlarmCardState();
+}
+
+class _AlarmCardState extends State<AlarmCard> {
+  MedicineAlarm get alarm => widget.alarm;
+  void Function() get onToggle => widget.onToggle;
+  void Function() get onEdit => widget.onEdit;
+  void Function() get onDelete => widget.onDelete;
+  void Function()? get onSwipeDelete => widget.onSwipeDelete;
+  Future<bool> Function()? get confirmSwipeDelete => widget.confirmSwipeDelete;
+
+  // iOS 카드 탭(수정) 감지용. GestureDetector 대신 Listener를 쓰는 이유:
+  // 스와이프로 열린 행의 본문을 탭하면 AppSwipeActions가 행을 닫아야 하는데,
+  // 안쪽 GestureDetector(onTap)가 제스처 경쟁에서 이겨 버리면 닫히지 않고
+  // 수정 화면이 열린다. Listener는 경쟁에 참여하지 않는다.
+  final GlobalKey _clipKey = GlobalKey();
+  final GlobalKey _contentKey = GlobalKey();
+  Offset? _downPosition;
+  bool _downOnSwitch = false;
+  bool _startedOnSwitch = false;
+
+  /// 행이 스와이프로 (일부라도) 열려 있는지: 본문이 클립 영역보다 왼쪽으로
+  /// 밀려 있으면 열린 상태다.
+  bool get _isOpen {
+    final clip = _clipKey.currentContext?.findRenderObject() as RenderBox?;
+    final content = _contentKey.currentContext?.findRenderObject() as RenderBox?;
+    if (clip == null || content == null) return false;
+    return content.localToGlobal(Offset.zero).dx <
+        clip.localToGlobal(Offset.zero).dx - 2;
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    _downPosition = e.position;
+    _startedOnSwitch = _downOnSwitch;
+    _downOnSwitch = false;
+  }
+
+  void _onPointerUp(PointerUpEvent e) {
+    final down = _downPosition;
+    _downPosition = null;
+    if (down == null || _startedOnSwitch) return;
+    if ((e.position - down).distance > kTouchSlop) return;
+    if (_isOpen) return; // 열린 행은 AppSwipeActions가 닫는다.
+    onEdit();
+  }
 
   String _formatTimeHHmm(TimeOfDay t) {
     final h = t.hour.toString().padLeft(2, '0');
@@ -93,10 +141,12 @@ class AlarmCard extends StatelessWidget {
   }
 
   Widget _buildCupertino(BuildContext context) {
-    final content = GestureDetector(
+    final content = Listener(
       behavior: HitTestBehavior.opaque,
-      onTap: onEdit,
+      onPointerDown: _onPointerDown,
+      onPointerUp: _onPointerUp,
       child: Container(
+        key: _contentKey,
         color: alarm.isActive ? AppColors.primaryTint : AppColors.surface,
         padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
         child: Column(
@@ -124,7 +174,14 @@ class AlarmCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                AppSwitch(value: alarm.isActive, onChanged: (_) => onToggle()),
+                // 스위치를 누른 포인터는 카드 탭(수정)으로 처리하지 않는다.
+                Listener(
+                  onPointerDown: (_) => _downOnSwitch = true,
+                  child: AppSwitch(
+                    value: alarm.isActive,
+                    onChanged: (_) => onToggle(),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -159,6 +216,7 @@ class AlarmCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: ClipRSuperellipse(
+        key: _clipKey,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         child: onSwipeDelete == null
             ? content

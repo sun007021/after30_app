@@ -82,9 +82,25 @@ class FakeAlarmService implements AlarmService {
   @override
   Future<void> cancelAlarm(String alarmId) async => cancelled.add(alarmId);
 
+  /// 로컬 저장소에 들어 있다고 답할 알람.
+  List<MedicineAlarm> stored = [];
+  final List<String> deletedLocal = [];
+  final List<String> toggledOff = [];
+
   @override
-  Future<void> syncActiveAlarms(List<MedicineAlarm> activeAlarms) async {
-    synced.add(List.of(activeAlarms));
+  Future<List<MedicineAlarm>> getAlarms() async => stored;
+
+  @override
+  Future<void> deleteAlarm(String alarmId) async => deletedLocal.add(alarmId);
+
+  @override
+  Future<void> toggleAlarm(String alarmId, bool isActive) async {
+    if (!isActive) toggledOff.add(alarmId);
+  }
+
+  @override
+  Future<void> syncFromServer(List<MedicineAlarm> serverAlarms) async {
+    synced.add(List.of(serverAlarms));
   }
 
   @override

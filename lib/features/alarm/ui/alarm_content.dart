@@ -51,6 +51,13 @@ class AlarmContentState extends State<AlarmContent> {
   int _loadSeq = 0;
   bool _syncing = false;
 
+  /// 동기화 도중 새로 도착한 목록. 현재 동기화가 끝나면 한 번 더 처리한다.
+  List<MedicineAlarm>? _pendingSync;
+
+  /// 삭제/토글이 진행 중인 알람 키('del:id', 'tog:id'). 같은 알람에 대한
+  /// 중복 요청을 막는다.
+  final Set<String> _busyIds = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -118,10 +125,15 @@ class AlarmContentState extends State<AlarmContent> {
         );
       }).toList();
 
+      // 삭제 진행 중인 알람은 서버가 아직 지우기 전의 응답에 들어 있어도
+      // 다시 보이지 않게 한다.
+      final visible = mapped
+          .where((a) => !_busyIds.contains('del:${a.id}'))
+          .toList();
       setState(() {
         _alarms
           ..clear()
-          ..addAll(mapped);
+          ..addAll(visible);
         _isLoading = false;
         _initialLoadDone = true;
       });
@@ -138,44 +150,69 @@ class AlarmContentState extends State<AlarmContent> {
     }
   }
 
-  /// 활성 알람 중 기기에 예약된 알림이 없는 항목이 있으면 기기 예약을
-  /// 복구한다(새 기기/재설치 후 동기화).
+  /// 기기 예약을 서버 목록에 맞춘다(새 기기/재설치 복구, 다른 기기에서의
+  /// 삭제/비활성화 반영).
   ///
   /// iOS는 알람 하나를 예약할 때마다 64개 알림 예산 전체를 다시 계산하므로,
-  /// 알람마다 `scheduleAlarm`을 부르지 않고 `syncActiveAlarms`를 **한 번만**
-  /// 호출한다(저장소 반영 + 전체 1회 재예약). Android는 알람별 예약이 가볍고
-  /// 기존 동작이므로 누락된 알람만 하나씩 예약한다.
+  /// 알람마다 `scheduleAlarm`을 부르지 않고 `syncFromServer`를 **한 번만**
+  /// 호출한다(저장소 정리 + 전체 재예약 1회). 동기화는 한 번에 한 pass만
+  /// 실행하고, 진행 중에 새 목록이 오면 끝난 뒤 최신 목록으로 한 번 더 돈다.
+  /// Android는 알람별 예약이 가볍고 기존 동작이므로 누락된 알람만 하나씩
+  /// 예약한다.
   Future<void> _syncDeviceSchedules(List<MedicineAlarm> alarms) async {
-    if (_syncing) return;
+    if (_syncing) {
+      _pendingSync = alarms;
+      return;
+    }
     _syncing = true;
     try {
-      final batch = isCupertino(context);
-      final active = alarms.where((a) => a.isActive).toList();
-      final missing = <MedicineAlarm>[];
-      for (final alarm in active) {
-        try {
-          if (!await _alarmService.hasScheduledNotifications(alarm.id)) {
-            missing.add(alarm);
-          }
-        } catch (e) {
-          debugPrint('알람 기기 동기화 확인 실패: id=${alarm.id}, error=$e');
-        }
-      }
-      if (missing.isEmpty) return;
-
-      if (batch) {
-        await _alarmService.syncActiveAlarms(active);
-        return;
-      }
-      for (final alarm in missing) {
-        try {
-          await _alarmService.scheduleAlarm(alarm);
-        } catch (e) {
-          debugPrint('알람 기기 동기화 실패: id=${alarm.id}, error=$e');
-        }
+      List<MedicineAlarm>? next = alarms;
+      while (next != null && mounted) {
+        _pendingSync = null;
+        await _syncOnce(next);
+        next = _pendingSync;
       }
     } finally {
       _syncing = false;
+    }
+  }
+
+  Future<void> _syncOnce(List<MedicineAlarm> alarms) async {
+    final batch = isCupertino(context);
+    final active = alarms.where((a) => a.isActive).toList();
+    final missing = <MedicineAlarm>[];
+    for (final alarm in active) {
+      try {
+        if (!await _alarmService.hasScheduledNotifications(alarm.id)) {
+          missing.add(alarm);
+        }
+      } catch (e) {
+        debugPrint('알람 기기 동기화 확인 실패: id=${alarm.id}, error=$e');
+      }
+    }
+
+    if (batch) {
+      // 누락이 없어도 다른 기기에서 삭제/비활성화된 알람이 로컬 저장소에
+      // 활성으로 남아 있으면 정리해야 한다.
+      var stale = missing.isNotEmpty;
+      if (!stale) {
+        try {
+          final stored = await _alarmService.getAlarms();
+          final server = {for (final a in alarms) a.id: a.isActive};
+          stale =
+              stored.any((s) => s.isActive && server[s.id] != true) ||
+              active.any((a) => !stored.any((s) => s.id == a.id));
+        } catch (_) {}
+      }
+      if (stale) await _alarmService.syncFromServer(alarms);
+      return;
+    }
+    for (final alarm in missing) {
+      try {
+        await _alarmService.scheduleAlarm(alarm);
+      } catch (e) {
+        debugPrint('알람 기기 동기화 실패: id=${alarm.id}, error=$e');
+      }
     }
   }
 
@@ -226,39 +263,65 @@ class AlarmContentState extends State<AlarmContent> {
 
   /// Android: 카드 메뉴의 "알람 삭제" → 확인 다이얼로그 → 삭제.
   Future<void> _deleteAlarm(MedicineAlarm alarm) async {
+    if (_busyIds.contains('del:${alarm.id}')) return;
     final confirmed = await _confirmDelete();
     if (confirmed == true && mounted) {
       await _performDelete(alarm);
     }
   }
 
-  /// 서버 삭제 → 기기 예약 취소 → 목록 갱신. 확인은 호출자가 이미 받았다.
+  /// 낙관적 삭제: 목록에서 먼저 지우고 서버 삭제 → 로컬 저장소/기기 예약
+  /// 삭제 순으로 진행한다. 서버 삭제가 실패하면 원래 위치에 되돌린다.
+  /// 확인은 호출자가 이미 받았다.
   Future<void> _performDelete(MedicineAlarm alarm) async {
-    try {
-      final scheduleId = int.tryParse(alarm.id);
-      if (scheduleId != null) {
-        await _scheduleService.deleteSchedule(scheduleId);
-      }
-    } catch (e) {
-      if (mounted) {
-        AppToast.show(context, '서버 삭제 실패: $e', type: AppToastType.error);
-      }
-      return;
+    final key = 'del:${alarm.id}';
+    if (!_busyIds.add(key)) return;
+    final index = _alarms.indexWhere((a) => a.id == alarm.id);
+    if (index >= 0) {
+      setState(() => _alarms.removeAt(index));
     }
-
     try {
-      await _alarmService.cancelAlarm(alarm.id);
-    } catch (_) {}
+      try {
+        final scheduleId = int.tryParse(alarm.id);
+        if (scheduleId != null) {
+          await _scheduleService.deleteSchedule(scheduleId);
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            if (!_alarms.any((a) => a.id == alarm.id)) {
+              _alarms.insert(
+                index < 0 ? 0 : index.clamp(0, _alarms.length),
+                alarm,
+              );
+            }
+          });
+          AppToast.show(context, '서버 삭제 실패: $e', type: AppToastType.error);
+        }
+        return;
+      }
+
+      // 로컬 저장소와 기기 예약을 함께 지운다(저장소에 남으면 iOS 복귀/Android
+      // 재시작 때 삭제된 알람이 다시 예약된다).
+      try {
+        await _alarmService.deleteAlarm(alarm.id);
+      } catch (_) {}
+    } finally {
+      _busyIds.remove(key);
+    }
     if (!mounted) return;
-    await _loadAlarms(showSpinner: !isCupertino(context));
+    await _loadAlarms(showSpinner: false);
   }
 
   Future<void> _toggleAlarm(MedicineAlarm target) async {
     final index = _alarms.indexWhere((a) => a.id == target.id);
-    if (index < 0) return;
+    final busyKey = 'tog:${target.id}';
+    if (index < 0 || _busyIds.contains(busyKey)) return;
     final alarm = _alarms[index];
     final newState = !alarm.isActive;
 
+    // 확인 다이얼로그가 떠 있는 동안에도 같은 알람의 다른 토글을 막는다.
+    _busyIds.add(busyKey);
     if (!newState) {
       final confirmed = await DoubleCheckDialog.show(
         context: context,
@@ -267,7 +330,10 @@ class AlarmContentState extends State<AlarmContent> {
         cancelLabel: '아니요',
         confirmLabel: '중단하기',
       );
-      if (!confirmed || !mounted) return;
+      if (!confirmed || !mounted) {
+        _busyIds.remove(busyKey);
+        return;
+      }
     }
 
     void setActive(bool value) {
@@ -286,6 +352,8 @@ class AlarmContentState extends State<AlarmContent> {
         if (scheduleId != null) {
           await _scheduleService.deactivateSchedule(scheduleId);
         }
+        // 저장소의 isActive를 끄고 기기 예약을 취소한다.
+        await _alarmService.toggleAlarm(alarm.id, false);
         await _alarmService.cancelAlarm(alarm.id);
         // 비활성화 날짜를 로컬에 기록 (달력 표시 컷오프 기준)
         try {
@@ -303,7 +371,8 @@ class AlarmContentState extends State<AlarmContent> {
         if (scheduleId != null) {
           await _scheduleService.activateSchedule(scheduleId);
         }
-        await _alarmService.scheduleAlarm(alarm);
+        // 켜진 상태로 저장/예약해야 한다(토글 전 객체는 isActive=false다).
+        await _alarmService.scheduleAlarm(alarm.copyWith(isActive: true));
         // 재활성화 시 비활성 기준일 제거
         try {
           final prefs = await SharedPreferences.getInstance();
@@ -317,9 +386,11 @@ class AlarmContentState extends State<AlarmContent> {
         } catch (_) {}
       }
 
+      _busyIds.remove(busyKey);
       if (!mounted) return;
       await _loadAlarms(showSpinner: !isCupertino(context));
     } catch (e) {
+      _busyIds.remove(busyKey);
       if (!mounted) return;
       setActive(!newState);
       AppToast.show(context, '상태 변경 동기화 실패: $e', type: AppToastType.error);

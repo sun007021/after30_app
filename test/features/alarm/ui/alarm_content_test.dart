@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:after30/core/design/design.dart';
+import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/features/alarm/ui/alarm_content.dart';
 import 'package:after30/features/alarm/ui/widgets/alarm_card.dart';
 import 'package:after30/features/alarm/ui/widgets/empty_alarm_section.dart';
@@ -81,7 +82,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(schedule.deleted, [1]);
-      expect(alarms.cancelled, ['1']);
+      expect(alarms.deletedLocal, ['1']);
       expect(find.byType(EmptyAlarmSection), findsOneWidget);
     });
 
@@ -180,7 +181,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(schedule.deleted, [1]);
-      expect(alarms.cancelled, ['1']);
+      expect(alarms.deletedLocal, ['1']);
       expect(find.text('혈압약'), findsNothing);
       expect(find.text('비타민'), findsOneWidget);
     });
@@ -196,6 +197,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(schedule.deactivated, [1]);
+      expect(alarms.toggledOff, ['1']);
       expect(alarms.cancelled, ['1']);
     });
 
@@ -291,12 +293,17 @@ void main() {
 
       expect(alarms.scheduled, isEmpty, reason: '알람마다 scheduleAlarm을 부르면 64개 예산을 매번 재계산한다');
       expect(alarms.synced, hasLength(1));
-      expect(alarms.synced.single.map((a) => a.id), ['1', '2', '3']);
+      // 서버 전체 목록(비활성 포함)을 넘겨 저장소를 서버와 맞춘다.
+      expect(alarms.synced.single.map((a) => a.id), ['1', '2', '3', '4']);
     });
 
     testWidgets('iOS 동기화: 모두 이미 관리 중이면 재예약하지 않는다', (tester) async {
       schedule.schedules = [scheduleJson(1, 'A'), scheduleJson(2, 'B')];
       alarms.hasSchedule = {'1', '2'};
+      alarms.stored = [
+        MedicineAlarm(id: '1', name: 'A', times: const [TimeOfDay(hour: 8, minute: 0)], days: const ['월', '화']),
+        MedicineAlarm(id: '2', name: 'B', times: const [TimeOfDay(hour: 8, minute: 0)], days: const ['월', '화']),
+      ];
       await pumpContent(tester, TargetPlatform.iOS);
       await tester.pumpAndSettle();
 
