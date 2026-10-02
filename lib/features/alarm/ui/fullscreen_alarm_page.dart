@@ -33,9 +33,12 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
   }
 
   Future<void> _onCheckOthers(BuildContext context) async {
-    // 알림(소리/진동) 정지
+    // 알림(소리/진동) 정지. `cancel()`은 표시된 알림뿐 아니라 반복 예약까지
+    // 취소해 버려서(리뷰 B1), 요일이 합쳐진 iOS 매일 알람은 한 번만 눌러도
+    // 7일치가 전부 사라졌다. 지금 울리고 있는 알림만 닫는 `dismiss()`로
+    // 바꾼다.
     try {
-      await AwesomeNotifications().cancel(widget.notificationId);
+      await AwesomeNotifications().dismiss(widget.notificationId);
     } catch (_) {}
     // 홈으로 이동하면서 기존 스택 제거 -> 뒤로가기 시 풀스크린으로 돌아오지 않도록
     if (context.mounted) {
@@ -67,7 +70,9 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
       return false;
     }
     try {
-      await AwesomeNotifications().cancel(widget.notificationId);
+      // 리뷰 B1: `cancel()`은 반복 예약까지 지워버리므로 `dismiss()`로
+      // 지금 표시된 알림만 닫는다.
+      await AwesomeNotifications().dismiss(widget.notificationId);
     } catch (_) {}
     if (context.mounted) {
       // 스택을 정리하고 홈으로 이동하여 스타트업 스피너(무한 로딩) 상태를 피한다
