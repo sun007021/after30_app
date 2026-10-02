@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:after30/app/app_shell.dart';
+import 'package:after30/features/calendar/models/medication.dart';
 
 import 'family_test_utils.dart';
 
@@ -151,5 +152,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('가족이 나를 초대하려면 전화번호가 필요해요'), findsNothing);
+  });
+
+  testWidgets('재활성화 새로고침의 늦은 복약 응답이 새로 고른 멤버 위에 덮어쓰지 않는다', (tester) async {
+    final service = _service();
+    final gate = Completer<void>();
+    var holdFirstMemberCall = false;
+    Future<List<Medication>> fetch(int userId, DateTime day) async {
+      if (userId == 1 && holdFirstMemberCall) {
+        holdFirstMemberCall = false;
+        await gate.future;
+      }
+      return [
+        Medication(
+          id: 'm$userId',
+          name: userId == 1 ? '나약' : '엄마약',
+          dosage: '1정',
+          time: '08:00',
+          date: DateTime(day.year, day.month, day.day),
+          status: 'pending',
+          scheduleId: userId,
+        ),
+      ];
+    }
+
+    await pumpFamilyShell(
+      tester,
+      familyService: service,
+      profileService: FakeProfileService(phone: '010-1111-2222'),
+      fetchMemberMedications: fetch,
+    );
+    expect(find.text('나약', skipOffstage: false), findsOneWidget);
+
+    // 재활성화 새로고침의 "나" 복약 조회가 느리게 응답한다.
+    holdFirstMemberCall = true;
+    final shell = tester.state<AppShellState>(find.byType(AppShell));
+    shell.switchTab(AppShellTab.alarm);
+    await tester.pumpAndSettle();
+    shell.switchTab(AppShellTab.family);
+    await tester.pump();
+    await tester.pump();
+
+    // 그 사이 사용자가 "엄마"를 고른다.
+    await tester.tap(find.text('엄마').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('엄마약', skipOffstage: false), findsOneWidget);
+
+    // 뒤늦게 도착한 "나" 응답은 버려진다.
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('엄마약', skipOffstage: false), findsOneWidget);
+    expect(find.text('나약', skipOffstage: false), findsNothing);
   });
 }

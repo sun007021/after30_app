@@ -68,6 +68,9 @@ class _FamilyPageState extends State<FamilyPage> {
   /// 그룹 상세(멤버/대시보드) 요청 일련번호. 그룹을 바꾸거나 새로고침하면
   /// 이전 그룹의 늦은 응답이 화면을 덮어쓰지 않게 한다.
   int _groupSeq = 0;
+  /// 멤버/날짜/그룹 선택 일련번호. 선택이 바뀌면 이전 선택에 대한 늦은
+  /// 응답(예: 조용한 재활성화 새로고침)이 새 선택 위에 덮어쓰지 않게 한다.
+  int _selSeq = 0;
   bool _pageLoadInFlight = false;
 
   /// initialGroupId는 첫 로드에만 적용한다(이후 새로고침이 사용자가 고른
@@ -300,6 +303,7 @@ class _FamilyPageState extends State<FamilyPage> {
 
   Future<void> _loadGroupData(int groupId) async {
     final seq = ++_groupSeq;
+    final sel = _selSeq;
     try {
       final membersFuture = _familyService.getGroupMembers(groupId);
       final today = _todayDate;
@@ -332,6 +336,8 @@ class _FamilyPageState extends State<FamilyPage> {
       }
 
       if (!mounted || seq != _groupSeq) return;
+      // 응답을 기다리는 사이 사용자가 멤버/날짜를 바꿨다면 그 선택을 유지한다.
+      final selectionUnchanged = sel == _selSeq;
       int? selectedUserId = _selectedUserId;
       if (members.isEmpty) {
         selectedUserId = null;
@@ -345,14 +351,17 @@ class _FamilyPageState extends State<FamilyPage> {
         _members = members;
         _groupPendingInvitations = pendingSent;
         _todayDashboard = todayDashboard;
-        _dashboard = dashboard;
-        _selectedUserId = selectedUserId;
+        if (selectionUnchanged) {
+          _dashboard = dashboard;
+          _selectedUserId = selectedUserId;
+        }
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _recalculateSheetFractions();
       });
 
+      if (!selectionUnchanged) return; // 새 선택의 로드가 따로 진행 중이다.
       await Future.wait([
         _loadWeekStats(groupId, selectedUserId),
         _loadMedicationsForSelectedMember(),
@@ -366,6 +375,7 @@ class _FamilyPageState extends State<FamilyPage> {
   }
 
   Future<void> _loadWeekStats(int groupId, int? userId) async {
+    final sel = _selSeq;
     if (userId == null) {
       if (!mounted) return;
       setState(() {
@@ -398,7 +408,7 @@ class _FamilyPageState extends State<FamilyPage> {
       }),
     );
 
-    if (!mounted) return;
+    if (!mounted || sel != _selSeq) return;
     setState(() {
       _totalByDay = totalByDay;
       _doneByDay = doneByDay;
@@ -407,6 +417,7 @@ class _FamilyPageState extends State<FamilyPage> {
 
   Future<void> _loadMedicationsForSelectedMember() async {
     final userId = _selectedUserId;
+    final sel = _selSeq;
     if (userId == null) {
       if (!mounted) return;
       setState(() => _medications = []);
@@ -423,7 +434,7 @@ class _FamilyPageState extends State<FamilyPage> {
       final injected = widget.fetchMemberMedications;
       if (injected != null) {
         final meds = await injected(userId, dayOnly);
-        if (!mounted) return;
+        if (!mounted || sel != _selSeq) return;
         setState(() {
           _medications = meds;
           _isLoadingMedications = false;
@@ -442,13 +453,13 @@ class _FamilyPageState extends State<FamilyPage> {
             )
           : await MedicationService.fetchMedications(dayOnly, dayOnly);
 
-      if (!mounted) return;
+      if (!mounted || sel != _selSeq) return;
       setState(() {
         _medications = meds;
         _isLoadingMedications = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || sel != _selSeq) return;
       setState(() {
         _medications = [];
         _isLoadingMedications = false;
@@ -459,6 +470,7 @@ class _FamilyPageState extends State<FamilyPage> {
   Future<void> _onMemberSelected(int userId) async {
     if (_selectedUserId == userId) return;
 
+    final sel = ++_selSeq;
     setState(() {
       _selectedUserId = userId;
       _selectedDate = DateTime.now();
@@ -472,7 +484,7 @@ class _FamilyPageState extends State<FamilyPage> {
         groupId: groupId,
         targetDate: _todayDate,
       );
-      if (mounted) {
+      if (mounted && sel == _selSeq) {
         setState(() {
           _todayDashboard = dashboard;
           _dashboard = dashboard;
@@ -480,6 +492,7 @@ class _FamilyPageState extends State<FamilyPage> {
       }
     } catch (_) {}
 
+    if (!mounted || sel != _selSeq) return;
     await Future.wait([
       _loadWeekStats(groupId, userId),
       _loadMedicationsForSelectedMember(),
@@ -487,6 +500,7 @@ class _FamilyPageState extends State<FamilyPage> {
   }
 
   Future<void> _onGroupSelected(FamilyGroup group) async {
+    _selSeq++;
     setState(() {
       _selectedGroup = group;
       _selectedUserId = null;
@@ -496,6 +510,7 @@ class _FamilyPageState extends State<FamilyPage> {
   }
 
   Future<void> _onDateSelected(DateTime date) async {
+    final sel = ++_selSeq;
     setState(() => _selectedDate = date);
     final groupId = _selectedGroup?.id;
     if (groupId == null) return;
@@ -505,7 +520,7 @@ class _FamilyPageState extends State<FamilyPage> {
         groupId: groupId,
         targetDate: date,
       );
-      if (!mounted) return;
+      if (!mounted || sel != _selSeq) return;
       setState(() => _dashboard = dashboard);
       await Future.wait([
         _loadWeekStats(groupId, _selectedUserId),

@@ -281,6 +281,7 @@ Future<void> pumpFamilyShell(
   required FakeProfileService profileService,
   int initialIndex = AppShellTab.family,
   TargetPlatform? platform,
+  Future<List<Medication>> Function(int userId, DateTime day)? fetchMemberMedications,
 }) async {
   useTallPhoneViewport(tester);
   final builders = testPageBuilders();
@@ -288,7 +289,7 @@ Future<void> pumpFamilyShell(
         familyService: familyService,
         profileService: profileService,
         userService: FakeUserService(),
-        fetchMemberMedications: noMedications,
+        fetchMemberMedications: fetchMemberMedications ?? noMedications,
       );
   await tester.pumpWidget(
     MaterialApp(
