@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/family/ui/family_invite_existing_group_invite_page.dart';
@@ -124,18 +125,7 @@ class _FamilyInviteGroupNamePageState extends State<FamilyInviteGroupNamePage> {
                       28,
                       0,
                     ),
-                    child: SizedBox(
-                      height: Responsive.responsiveHeight(context, 66),
-                      child: TextField(
-                        controller: _groupNameController,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _goToNextStep(),
-                        decoration: _fieldDecoration(
-                          context: context,
-                          hintText: '최가족',
-                        ),
-                      ),
-                    ),
+                    child: _buildNameField(context),
                   ),
                       ],
                     ),
@@ -178,6 +168,29 @@ class _FamilyInviteGroupNamePageState extends State<FamilyInviteGroupNamePage> {
         ),
       ),
       bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 1),
+    );
+  }
+
+  /// 그룹 이름 입력창. iOS는 [AppTextField](100자 제한), Android는 기존
+  /// [TextField] 외형을 그대로 유지한다.
+  Widget _buildNameField(BuildContext context) {
+    if (isCupertino(context)) {
+      return AppTextField(
+        controller: _groupNameController,
+        placeholder: '최가족',
+        maxLength: 100,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _goToNextStep(),
+      );
+    }
+    return SizedBox(
+      height: Responsive.responsiveHeight(context, 66),
+      child: TextField(
+        controller: _groupNameController,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _goToNextStep(),
+        decoration: _fieldDecoration(context: context, hintText: '최가족'),
+      ),
     );
   }
 

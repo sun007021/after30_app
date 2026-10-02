@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/core/auth/current_user_resolver.dart';
 import 'package:after30/core/storage/user_store.dart';
@@ -14,10 +15,16 @@ class FamilyGroupManagePage extends StatefulWidget {
   final int groupId;
   final String groupName;
 
+  /// 테스트/프리뷰용 주입 지점. 지정하지 않으면 실제 서비스/해석기를 쓴다.
+  final FamilyService? familyService;
+  final Future<int?> Function(List<GroupMember> members)? resolveCurrentUserId;
+
   const FamilyGroupManagePage({
     super.key,
     required this.groupId,
     required this.groupName,
+    this.familyService,
+    this.resolveCurrentUserId,
   });
 
   @override
@@ -25,7 +32,8 @@ class FamilyGroupManagePage extends StatefulWidget {
 }
 
 class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
-  final FamilyService _familyService = FamilyService();
+  late final FamilyService _familyService =
+      widget.familyService ?? FamilyService();
 
   bool _isLoading = true;
   bool _isProcessing = false;
@@ -45,9 +53,10 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
     try {
       final storedUserId = await UserStore.getCurrentUserId();
       final members = await _familyService.getGroupMembers(widget.groupId);
-      final currentUserId = await CurrentUserResolver.resolveUserId(
-        members: members,
-      );
+      final resolver = widget.resolveCurrentUserId;
+      final currentUserId = resolver != null
+          ? await resolver(members)
+          : await CurrentUserResolver.resolveUserId(members: members);
       if (!mounted) return;
       setState(() {
         _currentUserId = currentUserId ?? int.tryParse(storedUserId ?? '');
@@ -89,12 +98,21 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
   }
 
   Future<void> _editGroupName() async {
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return _GroupNameEditDialog(initialName: _groupName);
-      },
-    );
+    // iOS: 텍스트 입력 알럿(100자 제한). Android: 기존 수정 다이얼로그 유지.
+    final newName = isCupertino(context)
+        ? await showAppTextInputAlert(
+            context: context,
+            title: '그룹 이름 수정',
+            initialValue: _groupName,
+            confirmLabel: '저장',
+            maxLength: 100,
+          )
+        : await showDialog<String>(
+            context: context,
+            builder: (dialogContext) {
+              return _GroupNameEditDialog(initialName: _groupName);
+            },
+          );
 
     final trimmed = newName?.trim();
     if (trimmed == null || trimmed.isEmpty || trimmed == _groupName) return;
