@@ -101,20 +101,23 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
 
   Future<void> _editGroupName() async {
     // iOS: 텍스트 입력 알럿(100자 제한). Android: 기존 수정 다이얼로그 유지.
-    final newName = isCupertino(context)
-        ? await showAppTextInputAlert(
-            context: context,
-            title: '그룹 이름 수정',
-            initialValue: _groupName,
-            confirmLabel: '저장',
-            maxLength: 100,
-          )
-        : await showDialog<String>(
-            context: context,
-            builder: (dialogContext) {
-              return _GroupNameEditDialog(initialName: _groupName);
-            },
-          );
+    final String? newName;
+    if (isCupertino(context)) {
+      newName = await showAppTextInputAlert(
+        context: context,
+        title: '그룹 이름 수정',
+        initialValue: _groupName,
+        confirmLabel: '저장',
+        maxLength: 100,
+      );
+    } else {
+      newName = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          return _GroupNameEditDialog(initialName: _groupName);
+        },
+      );
+    }
 
     final trimmed = newName?.trim();
     if (trimmed == null || trimmed.isEmpty || trimmed == _groupName) return;
