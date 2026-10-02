@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/alarm/ui/widgets/step_header.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/family/data/family_service.dart';
@@ -7,7 +8,10 @@ import 'package:after30/features/family/ui/family_invite_existing_group_invite_p
 import 'package:after30/utils/responsive.dart';
 
 class FamilyInviteExistingGroupSelectPage extends StatefulWidget {
-  const FamilyInviteExistingGroupSelectPage({super.key});
+  /// 테스트/프리뷰용 주입 지점. 지정하지 않으면 실제 서비스를 쓴다.
+  final FamilyService? familyService;
+
+  const FamilyInviteExistingGroupSelectPage({super.key, this.familyService});
 
   @override
   State<FamilyInviteExistingGroupSelectPage> createState() =>
@@ -16,7 +20,8 @@ class FamilyInviteExistingGroupSelectPage extends StatefulWidget {
 
 class _FamilyInviteExistingGroupSelectPageState
     extends State<FamilyInviteExistingGroupSelectPage> {
-  final FamilyService _familyService = FamilyService();
+  late final FamilyService _familyService =
+      widget.familyService ?? FamilyService();
 
   List<FamilyGroupDetail> _groups = [];
   int? _pressedGroupId;
@@ -74,7 +79,8 @@ class _FamilyInviteExistingGroupSelectPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor:
+          isCupertino(context) ? AppColors.groupedBackground : Colors.white,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -151,7 +157,16 @@ class _FamilyInviteExistingGroupSelectPageState
               ),
             ),
             SizedBox(height: Responsive.responsiveHeight(context, 12)),
-            TextButton(onPressed: _loadGroups, child: const Text('다시 시도')),
+            if (isCupertino(context))
+              AppButton(
+                label: '다시 시도',
+                variant: AppButtonVariant.tinted,
+                size: AppButtonSize.medium,
+                expand: false,
+                onPressed: _loadGroups,
+              )
+            else
+              TextButton(onPressed: _loadGroups, child: const Text('다시 시도')),
           ],
         ),
       );
@@ -166,6 +181,30 @@ class _FamilyInviteExistingGroupSelectPageState
             color: const Color(0xFF737373),
           ),
         ),
+      );
+    }
+
+    if (isCupertino(context)) {
+      // iOS: inset grouped 목록. 탭하면 체크 표시가 잠깐 켜지고 다음 단계로 간다.
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 16),
+        children: [
+          AppGroupedSection(
+            children: [
+              for (final groupDetail in _groups)
+                AppListTile(
+                  title: groupDetail.group.name,
+                  subtitle:
+                      '${groupDetail.memberCountLabel} · ${groupDetail.memberNamesLabel}',
+                  trailing: AppCheckmark(
+                    checked: _pressedGroupId == groupDetail.group.id,
+                    onChanged: null,
+                  ),
+                  onTap: () => _onGroupTap(groupDetail),
+                ),
+            ],
+          ),
+        ],
       );
     }
 

@@ -204,6 +204,14 @@ class _FamilyInviteExistingGroupInvitePageState
 
   Future<void> _showLookupErrorDialog() async {
     if (!mounted) return;
+    if (isCupertino(context)) {
+      await showAppAlert(
+        context: context,
+        title: '조회할 수 없습니다',
+        message: '초대할 사용자가 전화번호를 등록해야\n초대가 가능합니다.',
+      );
+      return;
+    }
     await showDialog<void>(
       context: context,
       barrierColor: const Color(0x80C8C8C8),

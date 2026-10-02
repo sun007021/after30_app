@@ -690,7 +690,9 @@ class _FamilyGroupManagePageState extends State<FamilyGroupManagePage> {
                                     12,
                                   ),
                                   color: _canLeaveGroup
-                                      ? const Color(0xFFE00000)
+                                      ? (isCupertino(context)
+                                          ? AppColors.destructive
+                                          : const Color(0xFFE00000))
                                       : const Color(0xFFB0B0B0),
                                 ),
                               ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/calendar/data/medication_service.dart';
 import 'package:after30/features/calendar/models/medication.dart';
 import 'package:after30/features/calendar/ui/widgets/calendar_utils.dart';
@@ -566,6 +567,11 @@ class _FamilyPageState extends State<FamilyPage> {
       return;
     }
 
+    if (isCupertino(context)) {
+      _showGroupActionSheet();
+      return;
+    }
+
     final buttonContext = _groupDropdownKey.currentContext;
     if (buttonContext == null) return;
 
@@ -650,6 +656,33 @@ class _FamilyPageState extends State<FamilyPage> {
         }
       }
     });
+  }
+
+  /// iOS: 그룹 전환/새 그룹 만들기를 액션 시트로 보여준다(선택된 그룹에 ✓).
+  Future<void> _showGroupActionSheet() async {
+    final value = await showAppActionSheet<String>(
+      context: context,
+      actions: [
+        for (final group in _groups)
+          AppActionSheetAction(
+            label: _selectedGroup?.id == group.id ? '✓ ${group.name}' : group.name,
+            value: 'group_${group.id}',
+          ),
+        const AppActionSheetAction(label: '새 그룹 생성하기', value: 'create'),
+      ],
+    );
+    if (value == null || !mounted) return;
+    if (value == 'create') {
+      await _openCreateGroup();
+      return;
+    }
+    final groupId = int.tryParse(value.substring(6));
+    for (final group in _groups) {
+      if (group.id == groupId) {
+        await _onGroupSelected(group);
+        break;
+      }
+    }
   }
 
   Map<int, MemberMedicationSummary> get _summariesByUserId {
@@ -895,7 +928,7 @@ class _FamilyPageState extends State<FamilyPage> {
       child: Text(
         _errorMessage!,
         style: TextStyle(
-          color: Colors.red[700],
+          color: isCupertino(context) ? AppColors.destructive : Colors.red[700],
           fontSize: Responsive.responsiveFontSize(context, 13),
         ),
       ),

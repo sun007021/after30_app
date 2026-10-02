@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/features/family/models/family_invitation.dart';
 import 'package:after30/utils/responsive.dart';
@@ -22,6 +23,7 @@ class FamilyInvitationBanner extends StatelessWidget {
     const primaryBlue = Color(0xFF235DFF);
     final inviter = invitation.inviterName?.trim();
     final groupName = invitation.groupName?.trim();
+    if (isCupertino(context)) return _buildCupertino(context, inviter, groupName);
 
     return Padding(
       padding: Responsive.responsivePaddingLTRB(context, 20, 0, 20, 12),
@@ -107,6 +109,65 @@ class FamilyInvitationBanner extends StatelessWidget {
                   label: '거절하기',
                   filled: false,
                   onTap: isProcessing ? null : onDecline,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+extension on FamilyInvitationBanner {
+  /// iOS: 테두리 없는 토큰 카드 + 하단 버튼 두 개(거절=tinted, 수락=filled).
+  Widget _buildCupertino(BuildContext context, String? inviter, String? groupName) {
+    final message = inviter != null && inviter.isNotEmpty && groupName != null
+        ? '$inviter님이 \'$groupName\' 그룹에 초대했어요.'
+        : '가족 그룹 초대가 도착했습니다.';
+    return Padding(
+      padding: Responsive.responsivePaddingLTRB(context, 20, 0, 20, 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: ShapeDecoration(
+          color: AppColors.surface,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: AppRadius.borderRadius(AppRadius.md),
+          ),
+          shadows: const [
+            BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 2)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '그룹 초대가 왔어요!',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.label),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              message,
+              style: const TextStyle(fontSize: 15, color: AppColors.secondaryLabel, height: 1.3),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton(
+                    label: '거절하기',
+                    variant: AppButtonVariant.tinted,
+                    size: AppButtonSize.medium,
+                    onPressed: isProcessing ? null : onDecline,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: AppButton(
+                    label: '수락하기',
+                    size: AppButtonSize.medium,
+                    onPressed: isProcessing ? null : onAccept,
+                  ),
                 ),
               ],
             ),
