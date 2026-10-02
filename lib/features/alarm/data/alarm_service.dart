@@ -31,13 +31,41 @@ class AlarmService {
   static String? _currentUserId; // 사용자 네임스페이스
   static GlobalKey<NavigatorState>? _navigatorKey; // 전체화면 네비게이션용
 
-  static final ReminderSchedulerSelector _scheduler = ReminderSchedulerSelector(
-    local: AwesomeReminderScheduler(
-      notificationIdsKeyFor: _notificationIdsKeyForStatic,
-      deviceNotificationsAllowed: MySettingsStore.getAllowDeviceNotifications,
-      onBudgetWarning: (message) => _budgetWarningController.add(message),
-    )..activeAlarmsProvider = () => AlarmService()._activeAlarmsFromStorage(),
+  static final ReminderSchedulerSelector _scheduler = buildScheduler(
+    isIOS: Platform.isIOS,
   );
+
+  /// 실제 앱이 쓰는 스케줄러 구성. 테스트가 같은 구성으로 검증할 수 있게
+  /// 분리했다(2차 리뷰 Major 2, 3).
+  ///
+  /// - AlarmKit에도 앱 내 "디바이스 알람 허용" 설정을 넘긴다. 넘기지 않으면
+  ///   기본값(항상 허용)이 쓰여, 설정을 꺼도 다음 포그라운드 복귀 때
+  ///   AlarmKit 알람이 다시 등록된다(M5).
+  /// - 활성 알람 공급자는 로컬 스케줄러와 선택기 양쪽에 연결한다. 선택기에
+  ///   연결하지 않으면 전략 전환 시 전체 재등록(M6)이 실행되지 않는다.
+  @visibleForTesting
+  static ReminderSchedulerSelector buildScheduler({
+    required bool isIOS,
+    Future<List<MedicineAlarm>> Function()? activeAlarms,
+  }) {
+    final provider =
+        activeAlarms ?? () => AlarmService()._activeAlarmsFromStorage();
+    return ReminderSchedulerSelector(
+      local: AwesomeReminderScheduler(
+        notificationIdsKeyFor: _notificationIdsKeyForStatic,
+        deviceNotificationsAllowed: MySettingsStore.getAllowDeviceNotifications,
+        onBudgetWarning: (message) => _budgetWarningController.add(message),
+      )..activeAlarmsProvider = provider,
+      alarmKit: isIOS
+          ? AlarmKitReminderScheduler(
+              deviceNotificationsAllowed:
+                  MySettingsStore.getAllowDeviceNotifications,
+            )
+          : null,
+      activeAlarmsProvider: provider,
+      forceIOS: isIOS,
+    );
+  }
 
   static final StreamController<String> _budgetWarningController =
       StreamController<String>.broadcast();
@@ -286,7 +314,18 @@ class AlarmService {
   /// `DateTime.weekday`(1=월 ... 7=일)를 한국어 요일로 바꾼다.
   static String _koreanWeekdayFor(DateTime d) => _weekdayKor[d.weekday];
 
-  static Future<void> _drainAlarmKitCompletions() async {
+  /// 진행 중인 완료 기록 처리. 세션 준비와 앱 복귀가 겹쳐도 한 번에 하나만
+  /// 실행해, 같은 기록을 두 번 읽어 복용 완료 요청이 중복으로 나가지 않게
+  /// 한다(2차 리뷰 m4).
+  static Future<void>? _drainInFlight;
+
+  static Future<void> _drainAlarmKitCompletions() {
+    return _drainInFlight ??= _drainAlarmKitCompletionsOnce().whenComplete(() {
+      _drainInFlight = null;
+    });
+  }
+
+  static Future<void> _drainAlarmKitCompletionsOnce() async {
     final alarmKit = _scheduler.alarmKit;
     if (alarmKit == null) return;
     try {
