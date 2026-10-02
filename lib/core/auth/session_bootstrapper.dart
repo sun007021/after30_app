@@ -49,8 +49,11 @@ class SessionBootstrapper {
 
     // 사용자 네임스페이스가 정리된 뒤 저장된 활성 알람을 기기에 재예약한다.
     await AlarmService().rescheduleAllActiveFromStorage();
-    // 로그인 성공 시 FCM 토큰을 백엔드로 동기화한다(홈 진입 전에 완료).
-    await FcmService.syncTokenToBackend();
+    // 로그인 성공 시 FCM 토큰을 백엔드로 동기화한다. 기다리지 않는다:
+    // iOS는 APNs 토큰을 최대 16.5초 기다리므로, 기다리면 APNs가 늦는
+    // 네트워크에서 로그인 후 홈 진입이 그만큼 멈춘다(W4 2차 리뷰 m3).
+    // 늦게 온 토큰은 onTokenRefresh가 다시 동기화한다.
+    unawaited(FcmService.syncTokenToBackend());
 
     if (!context.mounted) return;
     _enterShell(context);

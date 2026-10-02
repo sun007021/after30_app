@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:after30/app/app_routes.dart';
 import 'package:after30/app/widgets/app_tab_bar.dart';
 import 'package:after30/core/design/app_platform.dart';
 import 'package:after30/core/design/tokens/app_haptics.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/alarm/ui/alarm_list.dart';
 import 'package:after30/features/calendar/ui/calendar_page.dart';
 import 'package:after30/features/family/ui/family_page.dart';
 import 'package:after30/features/home/ui/home.dart';
 import 'package:after30/features/my/my_page.dart';
+import 'package:after30/features/alarm/data/reminder_permission_flow.dart';
 
 /// 탭 인덱스 상수(plan §6 W10 1항). 0:알람 1:가족 2:홈 3:기록 4:마이.
 class AppShellTab {
@@ -215,6 +219,18 @@ class AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _tabArguments[_currentIndex] = widget.initialArguments;
     _lastKnownDate = _today();
     WidgetsBinding.instance.addObserver(this);
+    // 로그인 후 앱 셸에 처음 들어왔을 때 1회 알림 권한을 요청한다(plan §6
+    // W4 2항 — 콜드 런치 시점 요청 제거, HIG 대응). 첫 프레임 이후로
+    // 미뤄야 다이얼로그가 셸 빌드와 겹치지 않는다.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ReminderPermissionFlow.ensureRequestedAfterLogin(context);
+        // 리뷰 M8/m4: AlarmKit 완료 기록 처리와 "지금 울리고 있는 알람"
+        // 조회는 세션이 복원돼 `_currentUserId`/네비게이터 키가 준비된
+        // 뒤에만 의미가 있다 — 이 셸이 처음 그려진 지금이 그 시점이다.
+        unawaited(AlarmService.handleSessionReady());
+      }
+    });
   }
 
   @override
