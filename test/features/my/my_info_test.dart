@@ -75,7 +75,7 @@ void main() {
   });
 
   group('내 정보 조회 - iOS', () {
-    for (final entry in {'kakao': '카카오톡', 'email': '이메일', 'apple': 'Apple'}.entries) {
+    for (final entry in {'kakao': '카카오톡', 'email': '이메일', 'local': '이메일', 'apple': 'Apple'}.entries) {
       testWidgets('inset grouped 행과 provider 표시명: ${entry.key} -> ${entry.value}', (tester) async {
         final service = FakeMyProfileService(
           profile: MyProfile(
