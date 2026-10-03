@@ -7,18 +7,28 @@ import 'package:after30/features/login/ui/kakao_login_button.dart';
 import 'package:after30/utils/responsive.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({
+    super.key,
+    this.kakaoClientFactory = KakaoAuthProviderClient.new,
+  });
+
+  /// 테스트에서 카카오 SDK 대신 가짜 클라이언트를 주입하기 위한 팩토리.
+  final AuthProviderClient Function() kakaoClientFactory;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
+  /// 카카오 로그인 진행 중 여부. 시트가 닫히는 동안 연속 탭이 들어와도 로그인과
+  /// 시트 pop이 두 번 일어나지 않게 한다(실패/취소 후에는 다시 시도할 수 있다).
+  bool _kakaoInFlight = false;
+
   Future<void> _handleKakaoLogin() async {
     try {
       await SessionBootstrapper.completeLogin(
         context,
-        KakaoAuthProviderClient(),
+        widget.kakaoClientFactory(),
       );
     } catch (e) {
       if (!mounted) return;
@@ -58,9 +68,15 @@ class _LoginPageState extends State<LoginPage> {
     return [
       KakaoLoginButton(
         isLoading: false,
-        onPressed: () {
+        onPressed: () async {
+          if (_kakaoInFlight) return;
+          _kakaoInFlight = true;
           Navigator.of(sheetContext).pop();
-          _handleKakaoLogin();
+          try {
+            await _handleKakaoLogin();
+          } finally {
+            _kakaoInFlight = false;
+          }
         },
       ),
       SizedBox(height: Responsive.responsiveHeight(sheetContext, 12)),
