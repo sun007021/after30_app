@@ -4,15 +4,17 @@ import 'package:after30/core/design/design.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/common/widgets/phone_register_dialog.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
+import 'package:after30/features/my/data/user_service.dart';
 import 'package:after30/features/family/data/phone_util.dart';
 import 'package:after30/features/my/ui/widgets/my_info_widgets.dart';
 import 'package:after30/utils/responsive.dart';
 
 class MyInfoPage extends StatefulWidget {
-  const MyInfoPage({super.key, this.profileService});
+  const MyInfoPage({super.key, this.profileService, this.userService});
 
   /// 테스트에서 주입. 기본값은 실제 백엔드 서비스.
   final MyProfileService? profileService;
+  final UserService? userService;
 
   @override
   State<MyInfoPage> createState() => _MyInfoPageState();
@@ -142,6 +144,7 @@ class _MyInfoPageState extends State<MyInfoPage> {
       final phone = await showPhoneRegisterSheet(
         context: context,
         profileService: _profileService,
+        userService: widget.userService,
       );
       if (!mounted || phone == null) return;
       await _loadProfile();
