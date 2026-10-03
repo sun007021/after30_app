@@ -51,6 +51,7 @@ void main() {
       required String hhmm,
     }) markTaken,
     double textScale = 1.0,
+    Future<void> Function(String alarmId)? stopAlarmKit,
   }) async {
     tester.view.physicalSize = const Size(390, 844) * 3;
     tester.view.devicePixelRatio = 3;
@@ -74,6 +75,7 @@ void main() {
                     day: '월',
                     notificationId: 42,
                     markTaken: markTaken,
+                    stopAlarmKit: stopAlarmKit,
                   ),
                 ),
               ),
@@ -131,6 +133,36 @@ void main() {
     await slide(tester, '슬라이드하여 복용 완료');
     await tester.pumpAndSettle();
     expect(hapticCalls, contains('HapticFeedbackType.mediumImpact'));
+  });
+
+  testWidgets('복용 완료 성공 시 울리는 AlarmKit 알람을 알람 id로 멈춘다', (tester) async {
+    final stopped = <String>[];
+    await pumpPage(
+      tester,
+      TargetPlatform.iOS,
+      markTaken: ok,
+      stopAlarmKit: (id) async => stopped.add(id),
+    );
+
+    await slide(tester, '슬라이드하여 복용 완료');
+    await tester.pumpAndSettle();
+    expect(stopped, ['a1']);
+  });
+
+  testWidgets('서버 기록이 실패하면 AlarmKit 알람을 멈추지 않는다', (tester) async {
+    final stopped = <String>[];
+    await pumpPage(
+      tester,
+      TargetPlatform.iOS,
+      markTaken: fail,
+      stopAlarmKit: (id) async => stopped.add(id),
+    );
+
+    await slide(tester, '슬라이드하여 복용 완료');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(stopped, isEmpty);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('iOS: 약 체크하러 가기 슬라이더는 success 햅틱을 재생하지 않는다', (tester) async {

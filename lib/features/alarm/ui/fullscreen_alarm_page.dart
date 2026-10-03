@@ -21,6 +21,10 @@ class FullscreenAlarmPage extends StatefulWidget {
   /// 지정하지 않으면 실제 [AlarmService.markTakenFromUi]를 쓴다.
   final MarkTakenFn? markTaken;
 
+  /// 울리고 있는 AlarmKit 알람을 멈추는 함수(알람 id 전달). 지정하지 않으면
+  /// iOS의 실제 AlarmKit 스케줄러를 쓴다(Android는 아무 일도 하지 않음).
+  final Future<void> Function(String alarmId)? stopAlarmKit;
+
   const FullscreenAlarmPage({
     super.key,
     required this.alarm,
@@ -28,6 +32,7 @@ class FullscreenAlarmPage extends StatefulWidget {
     required this.day,
     required this.notificationId,
     this.markTaken,
+    this.stopAlarmKit,
   });
 
   @override
@@ -88,6 +93,13 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
       // 리뷰 B1: `cancel()`은 반복 예약까지 지워버리므로 `dismiss()`로
       // 지금 표시된 알림만 닫는다.
       await AwesomeNotifications().dismiss(widget.notificationId);
+    } catch (_) {}
+    // AlarmKit 알람이 울리는 중이면 소리/진동도 함께 멈춘다(반복 예약은 유지).
+    try {
+      await (widget.stopAlarmKit ??
+          (id) async => AlarmService.alarmKitScheduler?.stopAlerting(id))(
+        widget.alarm.id,
+      );
     } catch (_) {}
     if (context.mounted) {
       // 스택을 정리하고 홈으로 이동하여 스타트업 스피너(무한 로딩) 상태를 피한다

@@ -102,6 +102,17 @@ enum AlarmKitBridge {
         result(await alertingAlarm())
       }
 
+    case "stopAlerting":
+      guard let args = call.arguments as? [String: Any],
+        let scheduleId = args["scheduleId"] as? String
+      else {
+        result(false)
+        return
+      }
+      Task { @MainActor in
+        result(await stopAlertingAlarm(scheduleId: scheduleId))
+      }
+
     case "peekCompletions":
       result(peekPendingCompletions())
 
@@ -154,6 +165,11 @@ enum AlarmKitBridge {
   private static func cancelAlarm(scheduleId: String) async -> Bool {
     guard #available(iOS 26.0, *) else { return false }
     return await AlarmKitWorker.shared.cancel(scheduleId: scheduleId)
+  }
+
+  private static func stopAlertingAlarm(scheduleId: String) async -> Bool {
+    guard #available(iOS 26.0, *) else { return false }
+    return await AlarmKitWorker.shared.stopAlerting(scheduleId: scheduleId)
   }
 
   private static func cancelAllAlarms() async -> Bool {
@@ -358,6 +374,23 @@ actor AlarmKitWorker {
     }
     saveRecords(records)
     return didCancel
+  }
+
+  /// 지금 울리고 있는 해당 알람만 멈춘다(앱 안에서 복용 완료를 처리했을 때).
+  /// `cancel`과 달리 기록과 반복 예약은 그대로 둔다.
+  func stopAlerting(scheduleId: String) -> Bool {
+    guard let alarms = try? AlarmManager.shared.alarms else { return false }
+    let records = loadRecords()
+    var stopped = false
+    for alarm in alarms where alarm.state == .alerting {
+      guard
+        records.values.contains(where: {
+          $0.scheduleId == scheduleId && $0.alarmUUID == alarm.id.uuidString
+        })
+      else { continue }
+      if (try? AlarmManager.shared.stop(id: alarm.id)) != nil { stopped = true }
+    }
+    return stopped
   }
 
   /// 우리 기록뿐 아니라 `AlarmManager.shared.alarms`에 실제로 남아 있는

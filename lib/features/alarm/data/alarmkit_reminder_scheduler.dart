@@ -95,6 +95,16 @@ class AlarmKitReminderScheduler implements ReminderScheduler {
     }
   }
 
+  /// 지금 울리고 있는 해당 알람만 멈춘다. 앱 안에서 복용 완료를 처리했을 때
+  /// 쓰며, [cancel]과 달리 반복 예약은 그대로 둔다.
+  Future<void> stopAlerting(String alarmId) async {
+    try {
+      await _channel.invokeMethod<bool>('stopAlerting', {'scheduleId': alarmId});
+    } catch (e) {
+      print('AlarmKit 정지 실패: $e');
+    }
+  }
+
   @override
   Future<void> cancelAll() async {
     try {
