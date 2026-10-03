@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/core/auth/alarm_namespace_migrator.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
 import 'package:after30/core/auth/current_user_resolver.dart';
+import 'package:after30/core/storage/token_store.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
@@ -62,7 +63,25 @@ class SessionBootstrapper {
   /// 앱 시작 시 세션 복원(`StartupPage`)에서 호출한다. 리프레시 성공
   /// 여부를 반환하며, 실패하면 후처리를 수행하지 않는다(호출부가 온보딩/
   /// 로그인 화면으로 보낸다).
-  static Future<bool> restore() async {
+  /// 앱 시작 시 저장된 세션을 복원한다.
+  ///
+  /// Keychain 읽기 오류(예: 일시적 접근 불가)와 "토큰 없음"을 구분한다.
+  /// 읽기 오류면 [retryDelay] 뒤 1회 재시도하고, 그래도 실패하면 토큰을 지우지
+  /// 않은 채 false를 반환한다(로그인 화면으로 가더라도 다음 실행에서 복원 가능).
+  static Future<bool> restore({
+    Duration retryDelay = const Duration(milliseconds: 300),
+  }) async {
+    try {
+      await TokenStore.getRefreshTokenOrThrow();
+    } catch (_) {
+      await Future<void>.delayed(retryDelay);
+      try {
+        await TokenStore.getRefreshTokenOrThrow();
+      } catch (_) {
+        return false;
+      }
+    }
+
     final refreshed = await BackendAuthService().refreshSession();
     if (!refreshed) return false;
 

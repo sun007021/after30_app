@@ -179,12 +179,18 @@ class TokenStore {
 
   static Future<String?> getRefreshToken() async {
     try {
-      await _ensureMigrated();
-      return await _secure.read(_kRefreshTokenKey);
+      return await getRefreshTokenOrThrow();
     } catch (e) {
       debugPrint('TokenStore: 리프레시 토큰 읽기 실패: $e');
       return null;
     }
+  }
+
+  /// [getRefreshToken]과 같지만 저장소 읽기 오류를 삼키지 않는다. "토큰
+  /// 없음"(null)과 "일시적 읽기 오류"(예외)를 구분해야 하는 세션 복원용이다.
+  static Future<String?> getRefreshTokenOrThrow() async {
+    await _ensureMigrated();
+    return _secure.read(_kRefreshTokenKey);
   }
 
   /// 로그아웃/탈퇴 시 호출된다. 최선을 다해 지우되(best-effort), 저장소

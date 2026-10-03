@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
@@ -56,6 +57,24 @@ class _FakeAuthProviderClient implements AuthProviderClient {
       refreshExpiresIn: result.tokens.refreshExpiresIn,
     );
     return result;
+  }
+}
+
+/// 처음 [failReads]번의 read만 PlatformException을 던지는 가짜 저장소.
+class _FlakySecureStorage extends FakeSecureStorage {
+  _FlakySecureStorage(this.failReads);
+
+  int failReads;
+  int readCalls = 0;
+
+  @override
+  Future<String?> read(String key) async {
+    readCalls++;
+    if (failReads > 0) {
+      failReads--;
+      throw PlatformException(code: 'keychain');
+    }
+    return super.read(key);
   }
 }
 
@@ -266,4 +285,74 @@ void main() {
       expect(prefs.getString('medicine_alarms_77'), '[]');
     },
   );
+
+  group('restore(): Keychain 읽기 오류 처리', () {
+    void stubRefreshOk() {
+      ApiClient().dio.interceptors.remove(blockNetworkInterceptor);
+      final fakeRefresh = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.path == '/auth/token/refresh') {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'access_token': _fakeJwt({'sub': 5}),
+                  'access_expires_in': 3600,
+                },
+              ),
+            );
+            return;
+          }
+          handler.reject(
+            DioException(requestOptions: options, message: '테스트 환경 네트워크 차단'),
+          );
+        },
+      );
+      ApiClient().dio.interceptors.add(fakeRefresh);
+      addTearDown(() => ApiClient().dio.interceptors.remove(fakeRefresh));
+    }
+
+    test('일시적 읽기 오류 1회는 재시도해서 세션을 복원한다', () async {
+      final flaky = _FlakySecureStorage(0);
+      TokenStore.debugOverrideSecureStorage(flaky);
+      await TokenStore.saveTokens(
+        accessToken: 'a',
+        refreshToken: 'valid-refresh',
+        accessExpiresIn: 0,
+        refreshExpiresIn: 86400,
+      );
+      flaky.failReads = 1;
+      stubRefreshOk();
+
+      final restored = await SessionBootstrapper.restore(
+        retryDelay: Duration.zero,
+      );
+
+      expect(restored, isTrue);
+      expect(await UserStore.getCurrentUserId(), '5');
+    });
+
+    test('재시도도 실패하면 false를 반환하되 토큰은 지우지 않는다', () async {
+      final flaky = _FlakySecureStorage(0);
+      TokenStore.debugOverrideSecureStorage(flaky);
+      await TokenStore.saveTokens(
+        accessToken: 'a',
+        refreshToken: 'valid-refresh',
+        accessExpiresIn: 0,
+        refreshExpiresIn: 86400,
+      );
+      flaky.failReads = 2;
+      flaky.readCalls = 0;
+
+      final restored = await SessionBootstrapper.restore(
+        retryDelay: Duration.zero,
+      );
+
+      expect(restored, isFalse);
+      expect(flaky.readCalls, 2);
+      expect(flaky.store['refresh_token'], 'valid-refresh');
+      expect(flaky.store['access_token'], 'a');
+    });
+  });
 }
