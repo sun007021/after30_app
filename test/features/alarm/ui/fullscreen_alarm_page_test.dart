@@ -133,6 +133,15 @@ void main() {
     expect(hapticCalls, contains('HapticFeedbackType.mediumImpact'));
   });
 
+  testWidgets('iOS: 약 체크하러 가기 슬라이더는 success 햅틱을 재생하지 않는다', (tester) async {
+    await pumpPage(tester, TargetPlatform.iOS, markTaken: ok);
+
+    await slide(tester, '슬라이드하여 약 체크하러 가기');
+    await tester.pumpAndSettle();
+    expect(hapticCalls, isEmpty);
+    expect(find.text('home'), findsOneWidget);
+  });
+
   testWidgets('Android: 햅틱을 재생하지 않는다', (tester) async {
     await pumpPage(tester, TargetPlatform.android, markTaken: ok);
 

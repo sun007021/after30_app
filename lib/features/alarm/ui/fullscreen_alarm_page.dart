@@ -188,6 +188,8 @@ class _FullscreenAlarmPageState extends State<FullscreenAlarmPage> {
             },
             icon: Icons.arrow_forward_rounded,
             iconColor: Colors.white,
+            // 복용 기록이 아니므로 success 햅틱은 울리지 않는다.
+            successHaptic: false,
           ),
           const SizedBox(height: 24),
         ],
@@ -220,6 +222,8 @@ class _SlideToActButton extends StatefulWidget {
   final Color backgroundColor;
   final IconData icon;
   final Color iconColor;
+  // 완료 시 success 햅틱을 울릴지 여부("복용 완료"에서만 true).
+  final bool successHaptic;
 
   const _SlideToActButton({
     required this.label,
@@ -227,6 +231,7 @@ class _SlideToActButton extends StatefulWidget {
     required this.backgroundColor,
     required this.icon,
     required this.iconColor,
+    this.successHaptic = true,
   });
 
   @override
@@ -288,7 +293,7 @@ class _SlideToActButtonState extends State<_SlideToActButton> {
                       final success = await widget.onCompleted();
                       if (!context.mounted) return;
                       if (success) {
-                        AppHaptics.success(context);
+                        if (widget.successHaptic) AppHaptics.success(context);
                       } else {
                         // 실패 시 잠금을 풀고 위치를 되돌려 재시도할 수 있게 한다.
                         setState(() {
