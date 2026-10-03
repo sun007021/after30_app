@@ -30,6 +30,9 @@ class SessionBootstrapper {
     // 옮길 수 있다. 이를 막으려고 signIn 전에 UserStore를 비운다(로그인 화면에
     // 있다는 것은 유효한 세션이 없다는 뜻이고, 레거시 ID 이전은 아래에서
     // legacyUserIds로 따로 처리한다). 취소/실패하면 원래 값을 되돌린다.
+    // 트레이드오프: signIn 직후 강제 종료되면 같은 사람의 레거시 ID 이전도
+    // 이번 restore()에서는 건너뛴다. 이전 완료 표시가 남지 않으므로 다음
+    // 로그인 때 legacyUserIds로 복구된다(PR #39 리뷰 m2).
     final previousUserId = await UserStore.getCurrentUserId();
     await UserStore.clear();
     final AuthSignInResult? result;
