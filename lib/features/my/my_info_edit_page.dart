@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/common/navigationBar.dart';
 import 'package:after30/features/family/data/phone_util.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
@@ -8,7 +9,11 @@ import 'package:after30/features/my/ui/widgets/my_info_widgets.dart';
 import 'package:after30/utils/responsive.dart';
 
 class MyInfoEditPage extends StatefulWidget {
-  const MyInfoEditPage({super.key});
+  const MyInfoEditPage({super.key, this.profileService, this.userService});
+
+  /// 테스트에서 주입. 기본값은 실제 백엔드 서비스.
+  final MyProfileService? profileService;
+  final UserService? userService;
 
   @override
   State<MyInfoEditPage> createState() => _MyInfoEditPageState();
@@ -19,11 +24,12 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _ssoController = TextEditingController();
-  final _userService = UserService();
+  late final UserService _userService = widget.userService ?? UserService();
 
   String? _gender;
   String _initialPhone = '';
   bool _isKakaoLoggedIn = false;
+  bool _argsApplied = false;
   bool _isSaving = false;
   bool _isCheckingPhone = false;
   bool _isPhoneVerified = false;
@@ -39,6 +45,10 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // 라우트 상태가 바뀔 때마다 다시 불리므로, 입력 중인 값을 덮어쓰지 않게
+    // 인자는 처음 한 번만 반영한다.
+    if (_argsApplied) return;
+    _argsApplied = true;
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map) {
       _nameController.text = (args['name'] as String?) ?? '';
@@ -47,7 +57,10 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
       _emailController.text = (args['email'] as String?) ?? '';
       _gender = _normalizeGender(args['gender'] as String?);
       _isKakaoLoggedIn = (args['isKakaoLoggedIn'] as bool?) ?? false;
-      _ssoController.text = _isKakaoLoggedIn ? '카카오톡' : '이메일';
+      final provider = args['provider'] as String?;
+      _ssoController.text = provider != null
+          ? MyProfile.providerDisplayNameFor(provider)
+          : (_isKakaoLoggedIn ? '카카오톡' : '이메일');
       _isPhoneVerified = _initialPhone.isNotEmpty;
     }
   }
@@ -123,15 +136,11 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
   Future<void> _checkPhone() async {
     final phone = _phoneController.text.trim();
     if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('전화번호를 입력해주세요.')),
-      );
+      AppToast.show(context, '전화번호를 입력해주세요.', type: AppToastType.error);
       return;
     }
     if (!PhoneUtil.isValidPhoneNumber(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('유효한 전화번호 형식이 아닙니다.')),
-      );
+      AppToast.show(context, '유효한 전화번호 형식이 아닙니다.', type: AppToastType.error);
       return;
     }
 
@@ -189,39 +198,29 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
     final phone = _phoneController.text.trim();
 
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('성명을 입력해주세요.')),
-      );
+      AppToast.show(context, '성명을 입력해주세요.', type: AppToastType.error);
       return;
     }
     if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('전화번호를 입력해주세요.')),
-      );
+      AppToast.show(context, '전화번호를 입력해주세요.', type: AppToastType.error);
       return;
     }
     if (!PhoneUtil.isValidPhoneNumber(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('유효한 전화번호 형식이 아닙니다.')),
-      );
+      AppToast.show(context, '유효한 전화번호 형식이 아닙니다.', type: AppToastType.error);
       return;
     }
     if (!_isPhoneVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('전화번호 확인을 먼저 진행해주세요.')),
-      );
+      AppToast.show(context, '전화번호 확인을 먼저 진행해주세요.', type: AppToastType.error);
       return;
     }
     if (_gender == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('성별을 선택해주세요.')),
-      );
+      AppToast.show(context, '성별을 선택해주세요.', type: AppToastType.error);
       return;
     }
 
     setState(() => _isSaving = true);
     try {
-      final updated = await MyProfileService().updateMyProfile(
+      final updated = await (widget.profileService ?? MyProfileService()).updateMyProfile(
         name: name,
         gender: _gender!,
         phoneNumber: PhoneUtil.toApiPhoneQuery(phone),
@@ -230,14 +229,10 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
       Navigator.of(context).pop(updated);
     } on DioException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_saveErrorMessage(e))),
-      );
+      AppToast.show(context, _saveErrorMessage(e), type: AppToastType.error);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('정보 수정에 실패했습니다. 다시 시도해주세요.')),
-      );
+      AppToast.show(context, '정보 수정에 실패했습니다. 다시 시도해주세요.', type: AppToastType.error);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -245,6 +240,115 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
+    return _buildMaterial(context);
+  }
+
+  // ---------------------------------------------------------------------
+  // iOS: 내비게이션 바 "완료" + 디자인 시스템 컴포넌트
+  // ---------------------------------------------------------------------
+
+  Widget _fieldLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 13, color: AppColors.secondaryLabel),
+    ),
+  );
+
+  Widget _buildCupertino(BuildContext context) {
+    final genderValue = (_gender == '남' || _gender == '여') ? _gender : null;
+    return Scaffold(
+      backgroundColor: AppColors.groupedBackground,
+      appBar: AppNavBar(
+        title: '내 정보 수정',
+        actions: [
+          // 저장 중에는 버튼을 비활성화한다(_onSave도 같은 플래그로 막는다).
+          MyInfoNavAction(
+            label: '완료',
+            loading: _isSaving,
+            onPressed: _isSaving ? null : _onSave,
+          ),
+        ],
+      ),
+      body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          _fieldLabel('성명'),
+          AppTextField(
+            controller: _nameController,
+            placeholder: '이름',
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.name],
+            autocorrect: false,
+            enableSuggestions: false,
+          ),
+          const SizedBox(height: 20),
+          _fieldLabel('전화번호'),
+          Row(
+            children: [
+              Expanded(
+                child: AppTextField(
+                  controller: _phoneController,
+                  placeholder: '010-0000-0000',
+                  keyboardType: TextInputType.phone,
+                  showKeyboardDoneBar: true,
+                  inputFormatters: [PhoneNumberFormatter()],
+                  autofillHints: const [AutofillHints.telephoneNumber],
+                  autocorrect: false,
+                  enableSuggestions: false,
+                ),
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                label: '번호확인',
+                variant: AppButtonVariant.tinted,
+                size: AppButtonSize.medium,
+                expand: false,
+                loading: _isCheckingPhone,
+                onPressed: _isCheckingPhone ? null : _checkPhone,
+              ),
+            ],
+          ),
+          if (_phoneCheckMessage != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _phoneCheckMessage!,
+              style: TextStyle(fontSize: 12, color: _phoneCheckColor),
+            ),
+          ],
+          const SizedBox(height: 20),
+          _fieldLabel('성별'),
+          SizedBox(
+            width: double.infinity,
+            child: AppSegmentedControl<String>(
+              options: const [
+                AppSegmentedOption(value: '남', label: '남'),
+                AppSegmentedOption(value: '여', label: '여'),
+              ],
+              value: genderValue,
+              onChanged: (v) => setState(() => _gender = v),
+            ),
+          ),
+          const SizedBox(height: 28),
+          AppGroupedSection(
+            children: [
+              MyInfoReadRow(label: '이메일 주소', value: _emailController.text.isEmpty ? '-' : _emailController.text),
+              MyInfoReadRow(label: '연동된 SSO', value: _ssoController.text),
+            ],
+          ),
+        ],
+      ),
+      bottomNavigationBar: const AlarmBottomNavigation(currentIndex: 4),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Android: 기존 외형 그대로
+  // ---------------------------------------------------------------------
+
+  Widget _buildMaterial(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFEBF0FF),
       body: SafeArea(
