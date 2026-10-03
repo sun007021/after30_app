@@ -732,18 +732,28 @@ class AlarmService {
     String day, {
     int notificationId = 0,
   }) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FullscreenAlarmPage(
-          alarm: alarm,
-          time: time,
-          day: day,
-          notificationId: notificationId,
-        ),
-        fullscreenDialog: true,
+    // AlarmKit 복귀(resume) 경로와 알림 탭 경로가 같은 알람으로 겹쳐 호출돼도
+    // 풀스크린이 중복으로 쌓이지 않도록, 이미 떠 있는 같은 알람이면 무시한다.
+    final key = '${alarm.id}|${time.hour}:${time.minute}|$day';
+    if (_shownFullscreenKey == key && _shownFullscreenRoute?.isActive == true) {
+      return;
+    }
+    final route = MaterialPageRoute<void>(
+      builder: (context) => FullscreenAlarmPage(
+        alarm: alarm,
+        time: time,
+        day: day,
+        notificationId: notificationId,
       ),
+      fullscreenDialog: true,
     );
+    _shownFullscreenKey = key;
+    _shownFullscreenRoute = route;
+    Navigator.of(context).push(route);
   }
+
+  static String? _shownFullscreenKey;
+  static Route<void>? _shownFullscreenRoute;
 }
 
 /// iOS 로컬 알림 64개 예산 롤링 재예약(plan §7)과 AlarmKit 완료 기록 반영을
