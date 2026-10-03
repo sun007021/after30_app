@@ -361,6 +361,12 @@ void main() {
       expect(find.text('처음 약을 등록할 때 알림 권한을 요청해요.'), findsOneWidget);
     });
 
+    testWidgets('큰 제목 바 배경이 grouped 배경과 이어진다', (tester) async {
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService()), platform: TargetPlatform.iOS);
+      final bar = tester.widget<CupertinoSliverNavigationBar>(find.byType(CupertinoSliverNavigationBar));
+      expect(bar.backgroundColor, AppColors.groupedBackground);
+    });
+
     testWidgets('AlarmKit이 허용이면 알림 권한이 꺼져 있어도 설정 안내를 띄우지 않는다', (tester) async {
       const status = MyDeviceAlarmStatus(
         notification: NotificationAuthorizationStatus.denied,

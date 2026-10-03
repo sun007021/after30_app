@@ -167,6 +167,7 @@ class _MyInfoPageState extends State<MyInfoPage> {
       appBar: cupertino
           ? AppNavBar(
               title: '내 정보',
+              backgroundColor: AppColors.groupedBackground,
               actions: [
                 MyInfoNavAction(label: '수정', onPressed: _openEditPage),
               ],

@@ -373,7 +373,11 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
     final status = _deviceStatus;
     return CustomScrollView(
       slivers: [
-        const AppSliverNavBar(title: '마이페이지', showBackButton: false),
+        const AppSliverNavBar(
+          title: '마이페이지',
+          showBackButton: false,
+          backgroundColor: AppColors.groupedBackground,
+        ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           sliver: SliverList(

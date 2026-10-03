@@ -262,6 +262,7 @@ class _MyInfoEditPageState extends State<MyInfoEditPage> {
       backgroundColor: AppColors.groupedBackground,
       appBar: AppNavBar(
         title: '내 정보 수정',
+        backgroundColor: AppColors.groupedBackground,
         actions: [
           // 저장 중에는 버튼을 비활성화한다(_onSave도 같은 플래그로 막는다).
           MyInfoNavAction(
