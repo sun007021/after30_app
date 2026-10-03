@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +25,18 @@ class _SlowCancelClient implements AuthProviderClient {
     calls++;
     await Future<void>.delayed(delay);
     return null; // 사용자 취소
+  }
+}
+
+/// 사용자가 카카오톡에서 승인/취소 없이 돌아온 상황: signIn이 끝나지 않는다.
+class _NeverCompletingClient implements AuthProviderClient {
+  int calls = 0;
+  @override
+  String get providerId => 'fake';
+  @override
+  Future<AuthSignInResult?> signIn() {
+    calls++;
+    return Completer<AuthSignInResult?>().future;
   }
 }
 
@@ -186,35 +200,43 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('500ms 지연 중 150ms 간격으로 두 번 탭해도 로그인은 1회이고 이후 다시 시도할 수 있다', (
+    testWidgets('시트가 닫히는 동안 연타해도 로그인은 1회만 시작한다', (
       tester,
     ) async {
       final client = _SlowCancelClient(const Duration(milliseconds: 500));
       await openSheet(tester, client);
 
-      // 시트가 닫히는 동안 같은 콜백이 연속 호출돼도(연타) 1회만 실행돼야 한다.
-      // (닫히는 시트의 배리어는 포인터를 통과시켜 실제 탭으로는 뒤 화면이 눌릴
-      // 수 있으므로, 버튼 콜백을 직접 두 번 호출한다.)
-      final onPressed = tester
-          .widget<KakaoLoginButton>(find.byType(KakaoLoginButton))
-          .onPressed;
-      onPressed();
-      await tester.pump(const Duration(milliseconds: 150));
-      onPressed();
+      // 시트가 닫히는 동안 버튼을 연타해도 닫히는 라우트가 포인터를 막아
+      // 로그인은 1회만 시작된다.
+      final button = find.text('카카오로 시작하기');
+      final center = tester.getCenter(button);
+      await tester.tapAt(center);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(center);
       await tester.pump(const Duration(milliseconds: 150));
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pumpAndSettle();
 
       expect(client.calls, 1);
-      expect(find.byType(LoginPage), findsOneWidget);
+      // 재시도는 아래 두 테스트(끝나지 않는 signIn, 예외)에서 확인한다. 여기서
+      // 두 번째 탭은 닫히는 시트의 배리어를 통과해 뒤 화면에 닿을 수 있다
+      // (W2 showAppSheet 후속 과제).
+    });
 
-      // 취소 후 재시도 가능
+    testWidgets('signIn이 끝나지 않아도(카카오톡에서 그냥 돌아옴) 다시 탭하면 새 로그인을 시작한다', (tester) async {
+      final client = _NeverCompletingClient();
+      await openSheet(tester, client);
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+      expect(client.calls, 1);
+
       await tester.tap(find.text('로그인'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('카카오로 시작하기'));
-      await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
       expect(client.calls, 2);
+      expect(find.byType(KakaoLoginButton), findsNothing, reason: '시트가 닫혀야 한다');
     });
 
     testWidgets('실패(예외) 후에도 오류 알럿을 보여주고 다시 시도할 수 있다', (tester) async {

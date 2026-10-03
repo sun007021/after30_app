@@ -22,7 +22,6 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   /// 카카오 로그인 진행 중 여부. 시트가 닫히는 동안 연속 탭이 들어와도 로그인과
   /// 시트 pop이 두 번 일어나지 않게 한다(실패/취소 후에는 다시 시도할 수 있다).
-  bool _kakaoInFlight = false;
 
   Future<void> _handleKakaoLogin() async {
     try {
@@ -68,15 +67,13 @@ class _LoginPageState extends State<LoginPage> {
     return [
       KakaoLoginButton(
         isLoading: false,
-        onPressed: () async {
-          if (_kakaoInFlight) return;
-          _kakaoInFlight = true;
+        // 진행 중 플래그로 막지 않는다. 카카오 SDK는 사용자가 카카오톡에서
+        // 승인/취소 없이 돌아오면 signIn이 끝나지 않을 수 있어(PR #39 M2),
+        // 플래그가 영원히 풀리지 않으면 재시도가 불가능해진다. 시트가 닫히는
+        // 동안의 연타는 닫히는 라우트가 포인터를 막으므로 두 번 전달되지 않는다.
+        onPressed: () {
           Navigator.of(sheetContext).pop();
-          try {
-            await _handleKakaoLogin();
-          } finally {
-            _kakaoInFlight = false;
-          }
+          _handleKakaoLogin();
         },
       ),
       SizedBox(height: Responsive.responsiveHeight(sheetContext, 12)),
