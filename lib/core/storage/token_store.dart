@@ -90,9 +90,9 @@ class TokenStore {
   static Future<void>? _migration;
 
   static Future<void> _ensureMigrated() {
-    return _migration ??= _runMigration().catchError((Object e) {
+    return _migration ??= _runMigration().catchError((Object e, StackTrace st) {
       _migration = null; // 실패하면 다음 호출에서 재시도할 수 있게 한다.
-      throw e;
+      Error.throwWithStackTrace(e, st);
     });
   }
 
@@ -128,6 +128,13 @@ class TokenStore {
       // 레거시 토큰도 없고 마커도 없다 = 업그레이드가 아니라 진짜 재설치/
       // 최초 설치다. iOS는 앱 삭제 후에도 Keychain이 남으므로 잔존 값을
       // 지운다.
+      //
+      // 단, 재부팅 후 첫 잠금 해제 전에 푸시 등으로 앱이 백그라운드 실행되면
+      // SharedPreferences(UserDefaults)를 읽지 못해 "마커 없음"으로 잘못
+      // 보일 수 있다. 지우기 전에 보호 데이터에 접근할 수 있는지 읽기로
+      // 확인하고, 예외가 나면 삭제와 마커 쓰기를 모두 건너뛴 채 예외를 그대로
+      // 던진다(`_migration`은 비워져 다음 호출/실행에서 재시도된다).
+      await _secure.read(_kAccessTokenKey);
       await _secure.delete(_kAccessTokenKey);
       await _secure.delete(_kRefreshTokenKey);
       await _secure.delete(_kAccessExpiresInKey);

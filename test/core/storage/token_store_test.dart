@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/core/storage/token_store.dart';
@@ -25,6 +26,25 @@ class _SlowSecureStorage extends FakeSecureStorage {
   Future<void> write(String key, String value) async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await super.write(key, value);
+  }
+}
+
+/// 보호 데이터에 접근할 수 없는 동안(첫 잠금 해제 전) read가 실패하고, 삭제
+/// 호출 횟수를 센다. [locked]를 false로 바꾸면 정상 동작한다.
+class _LockedSecureStorage extends FakeSecureStorage {
+  bool locked = true;
+  int deleteCalls = 0;
+
+  @override
+  Future<String?> read(String key) async {
+    if (locked) throw PlatformException(code: '-25308');
+    return super.read(key);
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    deleteCalls++;
+    await super.delete(key);
   }
 }
 
@@ -219,5 +239,24 @@ void main() {
         throwsException,
       );
     });
+  });
+
+  test('iOS 첫 잠금 해제 전(보호 데이터 접근 불가)에는 Keychain을 지우지 않고 표시도 쓰지 않으며, 다음 호출에서 재시도한다', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    SharedPreferences.setMockInitialValues({});
+    final locked = _LockedSecureStorage()..store['access_token'] = 'old';
+    TokenStore.debugOverrideSecureStorage(locked);
+
+    expect(await TokenStore.getAccessToken(), isNull);
+    expect(locked.deleteCalls, 0);
+    expect(locked.store['access_token'], 'old');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('token_store_installed_marker'), isNull);
+
+    // 잠금 해제 후: 마이그레이션이 실패 상태로 고정되지 않고 정상 재시도된다.
+    locked.locked = false;
+    expect(await TokenStore.getAccessToken(), isNull);
+    expect(locked.deleteCalls, 4);
+    expect(prefs.getBool('token_store_installed_marker'), isTrue);
   });
 }
