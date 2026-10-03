@@ -97,20 +97,17 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     required ValueChanged<bool> onChanged,
     required String url,
   }) {
-    // AppCheckmark에는 시맨틱이 없어 VoiceOver가 동의 여부를 읽도록 행에 붙인다.
-    return Semantics(
+    return AppListTile(
+      title: title,
+      leadingWidth: 44,
+      leading: AppCheckmark(checked: value, onChanged: onChanged),
       checked: value,
-      child: AppListTile(
-        title: title,
-        leadingWidth: 44,
-        leading: AppCheckmark(checked: value, onChanged: onChanged),
-        onTap: () => onChanged(!value),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: const Size(44, 44),
-          onPressed: () => _showTermSheet(title, url),
-          child: const Icon(CupertinoIcons.chevron_forward, size: 18, color: AppColors.secondaryLabel),
-        ),
+      onTap: () => onChanged(!value),
+      trailing: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(44, 44),
+        onPressed: () => _showTermSheet(title, url),
+        child: const Icon(CupertinoIcons.chevron_forward, size: 18, color: AppColors.secondaryLabel),
       ),
     );
   }
@@ -129,17 +126,15 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
       children: [
         AppGroupedSection(
           children: [
-            Semantics(
-              checked: _allRequiredAgreed,
-              child: AppListTile(
-                title: '전체 동의',
-                leadingWidth: 44,
-                leading: AppCheckmark(
-                  checked: _allRequiredAgreed,
-                  onChanged: _toggleAll,
-                ),
-                onTap: () => _toggleAll(!_allRequiredAgreed),
+            AppListTile(
+              title: '전체 동의',
+              leadingWidth: 44,
+              leading: AppCheckmark(
+                checked: _allRequiredAgreed,
+                onChanged: _toggleAll,
               ),
+              checked: _allRequiredAgreed,
+              onTap: () => _toggleAll(!_allRequiredAgreed),
             ),
           ],
         ),

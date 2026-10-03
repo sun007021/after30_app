@@ -175,6 +175,14 @@ void main() {
       expect(checked('전체 동의'), isTrue);
       handle.dispose();
     });
+
+    testWidgets('약관 그룹 구분선은 본문 시작 위치에 맞춰 들여쓴다', (t) async {
+      useIphoneViewport(t);
+      await t.pumpWidget(buildAuthApp(const TermsAgreementPage(), TargetPlatform.iOS));
+      final divider = find.descendant(of: find.byType(AppGroupedSection).last, matching: find.byType(Divider));
+      expect(divider, findsOneWidget);
+      expect(t.getTopLeft(divider).dx, t.getTopLeft(find.text('(필수) 서비스 이용약관')).dx);
+    });
   });
 
   group('m4 약관 전문 링크 실패 처리', () {
