@@ -22,6 +22,7 @@ class AppListTile extends StatelessWidget {
     this.onTap,
     this.destructive = false,
     this.showChevron = false,
+    this.checked,
   });
 
   final String title;
@@ -38,6 +39,10 @@ class AppListTile extends StatelessWidget {
   /// true면 우측에 셰브론을 표시한다(trailing이 없을 때만).
   final bool showChevron;
 
+  /// 체크 목록 행이면 체크 여부. null이 아니면 VoiceOver/TalkBack이 읽도록
+  /// 행 시맨틱에 checked 상태를 붙인다.
+  final bool? checked;
+
   @override
   Widget build(BuildContext context) {
     final cupertino = isCupertino(context);
@@ -49,7 +54,7 @@ class AppListTile extends StatelessWidget {
     // 그려진다. 이 행을 감싸는 별도의 투명 Material이 없으면 위쪽 화면의
     // Material(예: Scaffold)까지 올라가 다른 형제 위젯 밑에 가려 보이지
     // 않을 수 있으므로, 행마다 로컬 Material로 감싼다.
-    return Material(
+    final row = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -88,6 +93,8 @@ class AppListTile extends StatelessWidget {
         ),
       ),
     );
+    if (checked == null) return row;
+    return Semantics(checked: checked, child: row);
   }
 }
 

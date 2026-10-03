@@ -1,6 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:after30/core/design/design.dart';
+import 'package:after30/features/login/ui/auth_form_scaffold.dart';
 import 'package:after30/utils/responsive.dart';
 
 class TermsAgreementPage extends StatefulWidget {
@@ -33,15 +36,132 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
 
   Future<void> _openExternalLink(String url) async {
     final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      debugPrint('Could not launch $url');
+    bool opened;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+      opened = false;
     }
+    if (!opened && mounted) {
+      AppToast.show(context, '약관 페이지를 열지 못했어요. 잠시 후 다시 시도해 주세요.', type: AppToastType.error);
+    }
+  }
+
+  static const _personalInfoUrl =
+      'https://www.notion.so/pysun/2876b9ce737380ccb3bcc6a07f68d682?source=copy_link';
+  static const _serviceTermsUrl =
+      'https://www.notion.so/30-2b2ac07ca4e98040a729c7433c26a896?source=copy_link';
+
+  // iOS: 약관 상세는 시트로 연다. 전문은 시트의 "전문 보기"에서 외부 링크로
+  // 열고, 필수 약관 동의 여부만 CTA를 제어한다(선택 약관은 현재 없음).
+  Future<void> _showTermSheet(String title, String url) {
+    return showAppSheet<void>(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.label),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '서비스 이용을 위해 반드시 동의가 필요한 항목입니다. 자세한 내용은 전문에서 확인할 수 있어요.',
+              style: TextStyle(fontSize: 15, color: AppColors.secondaryLabel, height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            AppButton(
+              label: '전문 보기',
+              variant: AppButtonVariant.tinted,
+              onPressed: () => _openExternalLink(url),
+            ),
+            const SizedBox(height: 8),
+            AppButton(
+              label: '닫기',
+              variant: AppButtonVariant.text,
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cupertinoTermTile({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required String url,
+  }) {
+    return AppListTile(
+      title: title,
+      leadingWidth: 44,
+      leading: AppCheckmark(checked: value, onChanged: onChanged),
+      checked: value,
+      onTap: () => onChanged(!value),
+      trailing: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(44, 44),
+        onPressed: () => _showTermSheet(title, url),
+        child: const Icon(CupertinoIcons.chevron_forward, size: 18, color: AppColors.secondaryLabel),
+      ),
+    );
+  }
+
+  Widget _buildCupertino(BuildContext context) {
+    return AuthFormScaffold(
+      title: '약관 동의',
+      subtitle: '필수 약관에 동의해 주세요',
+      backgroundColor: AppColors.groupedBackground,
+      cta: AppButton(
+        label: '동의하기',
+        onPressed: _allRequiredAgreed
+            ? () => Navigator.of(context).pushNamed('/signup')
+            : null,
+      ),
+      children: [
+        AppGroupedSection(
+          children: [
+            AppListTile(
+              title: '전체 동의',
+              leadingWidth: 44,
+              leading: AppCheckmark(
+                checked: _allRequiredAgreed,
+                onChanged: _toggleAll,
+              ),
+              checked: _allRequiredAgreed,
+              onTap: () => _toggleAll(!_allRequiredAgreed),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        AppGroupedSection(
+          children: [
+            _cupertinoTermTile(
+              title: '(필수) 개인정보 수집 및 이용 동의',
+              value: _agreePersonalInfo,
+              onChanged: (v) => setState(() => _agreePersonalInfo = v),
+              url: _personalInfoUrl,
+            ),
+            _cupertinoTermTile(
+              title: '(필수) 서비스 이용약관',
+              value: _agreeServiceTerms,
+              onChanged: (v) => setState(() => _agreeServiceTerms = v),
+              url: _serviceTermsUrl,
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
     return Scaffold(
       backgroundColor: _primaryBlue,
       body: SafeArea(
