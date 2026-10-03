@@ -25,8 +25,28 @@ class SessionBootstrapper {
     BuildContext context,
     AuthProviderClient providerClient,
   ) async {
-    final result = await providerClient.signIn();
-    if (result == null) return; // 사용자가 로그인을 취소함
+    // signIn()은 토큰을 저장한 뒤 반환한다. 그 직후 강제 종료되면 다음 실행의
+    // restore()가 "이전 UserStore(다른 계정일 수 있음) → 새 백엔드 ID"로 알람을
+    // 옮길 수 있다. 이를 막으려고 signIn 전에 UserStore를 비운다(로그인 화면에
+    // 있다는 것은 유효한 세션이 없다는 뜻이고, 레거시 ID 이전은 아래에서
+    // legacyUserIds로 따로 처리한다). 취소/실패하면 원래 값을 되돌린다.
+    final previousUserId = await UserStore.getCurrentUserId();
+    await UserStore.clear();
+    final AuthSignInResult? result;
+    try {
+      result = await providerClient.signIn();
+    } catch (_) {
+      if (previousUserId != null) {
+        await UserStore.setCurrentUserId(previousUserId);
+      }
+      rethrow;
+    }
+    if (result == null) {
+      if (previousUserId != null) {
+        await UserStore.setCurrentUserId(previousUserId);
+      }
+      return; // 사용자가 로그인을 취소함
+    }
 
     final resolved = await CurrentUserResolver.resolveUserId();
     final newUserId = resolved?.toString() ?? result.fallbackUserId;
