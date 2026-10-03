@@ -34,7 +34,7 @@ void main() {
           .toList();
       expect(fields, hasLength(4));
       expect(fields[0].autofillHints, [AutofillHints.name]);
-      expect(fields[1].autofillHints, [AutofillHints.email]);
+      expect(fields[1].autofillHints, [AutofillHints.email, AutofillHints.username]);
       expect(fields[2].autofillHints, [AutofillHints.newPassword]);
       expect(fields[3].autofillHints, [AutofillHints.newPassword]);
       expect(fields.map((f) => f.textInputAction), [

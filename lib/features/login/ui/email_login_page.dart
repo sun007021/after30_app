@@ -82,7 +82,10 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
         onPressed: _isFormValid && !_submitting ? _onSubmit : null,
       ),
       children: [
+        // 기본값(commit)이면 화면을 닫을 때마다 iOS가 키체인 저장을 제안한다.
+        // 실패했거나 제출하지 않은 값이 저장되지 않게 성공 시에만 직접 commit한다.
         AutofillGroup(
+          onDisposeAction: AutofillContextAction.cancel,
           child: Column(
             children: [
               AppTextField(
