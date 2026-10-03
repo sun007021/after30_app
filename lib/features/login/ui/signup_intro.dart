@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
 import 'package:after30/core/auth/session_bootstrapper.dart';
+import 'package:after30/core/design/design.dart';
+import 'package:after30/features/login/ui/auth_form_scaffold.dart';
 import 'package:after30/utils/responsive.dart';
 
 class SignupIntroPage extends StatefulWidget {
@@ -14,7 +16,12 @@ class SignupIntroPage extends StatefulWidget {
 class _SignupIntroPageState extends State<SignupIntroPage> {
   static const Color _primaryBlue = Color(0xFF235DFF);
 
+  bool _busy = false;
+
   Future<void> _handleKakaoLogin() async {
+    // 더블탭 중복 로그인 방지: await 이전에 동기적으로 막는다.
+    if (_busy) return;
+    _busy = true;
     try {
       // 토큰 저장 → 사용자 ID 통합(백엔드 ID 기준) → 알람 네임스페이스
       // 마이그레이션 → 재스케줄 → FCM 동기화 → 셸 진입까지는
@@ -28,6 +35,14 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
       );
     } catch (e) {
       if (!mounted) return;
+      if (isCupertino(context)) {
+        showAppAlert(
+          context: context,
+          title: '로그인 실패',
+          message: '카카오 로그인 중 오류가 발생했습니다: $e',
+        );
+        return;
+      }
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -43,11 +58,73 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
           );
         },
       );
+    } finally {
+      _busy = false;
     }
+  }
+
+  // iOS: 토큰 스타일(흰 배경, 캡슐 버튼). 카카오는 브랜드 색을 유지한다.
+  Widget _buildCupertino(BuildContext context) {
+    return AuthFormScaffold(
+      title: '회원가입',
+      subtitle: '간편하게 SNS로 가입하세요',
+      children: [
+        Semantics(
+          button: true,
+          label: '카카오로 시작하기',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _handleKakaoLogin,
+            child: Container(
+              height: 50,
+              decoration: const ShapeDecoration(
+                color: Color(0xFFFEE500),
+                shape: StadiumBorder(),
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SvgPicture.asset('assets/images/kakao_chat.svg', width: 18, height: 18),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '카카오로 시작하기',
+                    style: TextStyle(
+                      color: Color(0xFF191919),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 17,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
+        const Row(
+          children: [
+            Expanded(child: Divider(color: AppColors.divider)),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text('또는', style: TextStyle(color: AppColors.secondaryLabel, fontSize: 14)),
+            ),
+            Expanded(child: Divider(color: AppColors.divider)),
+          ],
+        ),
+        const SizedBox(height: 20),
+        AppButton(
+          label: '이메일로 가입하기',
+          variant: AppButtonVariant.outline,
+          onPressed: () => Navigator.of(context).pushNamed('/signup-terms'),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
     return Scaffold(
       backgroundColor: _primaryBlue,
       body: SafeArea(
