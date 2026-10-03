@@ -6,7 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/app/app_shell.dart';
 import 'package:after30/app/widgets/app_tab_bar.dart';
 import 'package:after30/core/design/design.dart';
+import 'package:after30/core/platform/device_alarm_settings.dart';
+import 'package:after30/features/alarm/data/alarmkit_reminder_scheduler.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
+import 'package:after30/features/my/device_alarm_gateway.dart';
 import 'package:after30/features/my/ui/widgets/card_container.dart';
 import 'package:after30/features/my/ui/widgets/link_list.dart';
 import 'package:after30/features/my/ui/widgets/switch_row.dart';
@@ -356,6 +359,54 @@ void main() {
       expect(find.text('미결정'), findsNWidgets(3));
       expect(find.text('설정에서 허용하기'), findsNothing);
       expect(find.text('처음 약을 등록할 때 알림 권한을 요청해요.'), findsOneWidget);
+    });
+
+    testWidgets('AlarmKit이 허용이면 알림 권한이 꺼져 있어도 설정 안내를 띄우지 않는다', (tester) async {
+      const status = MyDeviceAlarmStatus(
+        notification: NotificationAuthorizationStatus.denied,
+        timeSensitiveAllowed: false,
+        alarmKit: AlarmKitAuthorizationStatus.authorized,
+      );
+      expect(status.alarmsReady, isTrue);
+      expect(status.needsSettings, isFalse);
+      expect(FakeDeviceAlarmGateway.deniedStatus.alarmsReady, isFalse);
+      expect(FakeDeviceAlarmGateway.deniedStatus.needsSettings, isTrue);
+
+      final device = FakeDeviceAlarmGateway(status: status);
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService(), device: device), platform: TargetPlatform.iOS);
+      expect(find.text('설정에서 허용하기'), findsNothing);
+    });
+
+    testWidgets('앱 셸 안에서는 foreground 복귀 때 마이 탭에서만 한 번 다시 읽는다', (tester) async {
+      void resume() {
+        for (final s in [
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+          AppLifecycleState.hidden,
+          AppLifecycleState.inactive,
+          AppLifecycleState.resumed,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(s);
+        }
+      }
+
+      final device = FakeDeviceAlarmGateway();
+      await pumpShellWith(tester, buildMyPage(profile: FakeMyProfileService(), device: device), platform: TargetPlatform.iOS);
+      var before = device.loadCalls;
+      resume();
+      await tester.pump();
+      await tester.pump();
+      expect(device.loadCalls - before, 1, reason: '마이 탭이 활성일 때 복귀하면 한 번만 읽는다');
+
+      final shell = tester.state<AppShellState>(find.byType(AppShell));
+      shell.switchTab(AppShellTab.home);
+      await tester.pump();
+      before = device.loadCalls;
+      resume();
+      await tester.pump();
+      await tester.pump();
+      expect(device.loadCalls, before, reason: '다른 탭에 있으면 읽지 않는다');
     });
 
     testWidgets('foreground로 돌아오면 권한 행이 갱신된다', (tester) async {

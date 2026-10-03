@@ -124,6 +124,24 @@ void main() {
       await _drainToasts(tester);
     });
 
+    testWidgets('등록에 성공했는데 재조회가 실패해도 "미등록"이 남지 않는다', (tester) async {
+      final service = FakeMyProfileService(profile: MyProfile(name: '홍길동', provider: 'email'));
+      await pumpScreen(tester, buildInfoPage(service), platform: TargetPlatform.iOS);
+
+      await tester.tap(find.text('미등록'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(EditableText), '01012345678');
+      await tester.pump();
+      service.failGet = true;
+      await tester.tap(find.text('등록하기'));
+      await tester.pumpAndSettle();
+
+      expect(service.phoneUpdateCalls, 1);
+      expect(find.text('미등록'), findsNothing);
+      expect(find.text('010-1234-5678'), findsOneWidget);
+      await _drainToasts(tester);
+    });
+
     testWidgets('미등록 행을 연속으로 눌러도 시트는 하나만 열린다', (tester) async {
       final service = FakeMyProfileService(profile: MyProfile(name: '홍길동', provider: 'email'));
       await pumpScreen(tester, buildInfoPage(service), platform: TargetPlatform.iOS);

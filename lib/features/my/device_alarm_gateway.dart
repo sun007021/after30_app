@@ -18,12 +18,20 @@ class MyDeviceAlarmStatus {
       notification == NotificationAuthorizationStatus.provisional ||
       notification == NotificationAuthorizationStatus.ephemeral;
 
+  bool get alarmKitAuthorized => alarmKit == AlarmKitAuthorizationStatus.authorized;
+
+  /// 알람이 실제로 울릴 수 있는지. AlarmKit이 허용되면 스케줄러가 AlarmKit
+  /// 전략을 고르므로 알림 권한과 상관없이 울린다(`ReminderSchedulerSelector`).
+  bool get alarmsReady => alarmKitAuthorized || notificationAllowed;
+
   /// 사용자가 설정 앱에서 직접 바꿔야 풀리는 상태인지. 미결정은 앱이 시스템
-  /// 권한 창을 띄울 수 있으므로 포함하지 않는다.
+  /// 권한 창을 띄울 수 있으므로 포함하지 않는다. AlarmKit이 허용돼 있으면
+  /// 알람은 울리므로 설정 안내를 띄우지 않는다.
   bool get needsSettings =>
-      notification == NotificationAuthorizationStatus.denied ||
+      !alarmKitAuthorized &&
+      (notification == NotificationAuthorizationStatus.denied ||
       alarmKit == AlarmKitAuthorizationStatus.denied ||
-      (notificationAllowed && !timeSensitiveAllowed);
+      (notificationAllowed && !timeSensitiveAllowed));
 }
 
 /// [DeviceAlarmSettings](정적 API)를 마이페이지에서 주입 가능한 형태로 감싼

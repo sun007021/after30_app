@@ -116,7 +116,9 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    // 앱 셸 안에서는 셸이 포그라운드 복귀를 활성 탭에만 알리므로
+    // (_onTabActivated) 여기서 또 부르면 중복이고 다른 탭에 있어도 불린다.
+    if (state == AppLifecycleState.resumed && AppShell.maybeOf(context) == null) {
       // 설정 앱에서 권한을 바꾸고 돌아온 경우 상태 행을 갱신한다.
       _refreshDeviceAlarmState();
     }
@@ -142,11 +144,12 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
   /// Android: 정확한 알람/배터리 최적화 준비 여부(기존 판정). iOS: 알림 권한
   /// 상태를 새로 읽어 상태 행에 반영하고, 알림이 허용돼 있으면 준비 완료로 본다.
   Future<bool> _refreshDeviceAlarmState() async {
+    if (!mounted) return false;
     if (isCupertino(context)) {
       final status = await widget.deviceAlarm.loadStatus();
-      if (!mounted) return status.notificationAllowed;
+      if (!mounted) return status.alarmsReady;
       setState(() => _deviceStatus = status);
-      return status.notificationAllowed;
+      return status.alarmsReady;
     }
     return widget.deviceAlarm.isAndroidReady();
   }
@@ -272,6 +275,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
 
     await AlarmService().rescheduleAllActiveFromStorage();
 
+    if (!mounted) return;
     final ready = await _refreshDeviceAlarmState();
     if (!mounted) return;
     if (ready) {

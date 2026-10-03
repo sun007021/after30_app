@@ -147,6 +147,8 @@ class _MyInfoPageState extends State<MyInfoPage> {
         userService: widget.userService,
       );
       if (!mounted || phone == null) return;
+      // 재조회가 실패해도 "미등록"이 남지 않게 저장된 번호를 먼저 반영한다.
+      setState(() => _phoneNumber = phone);
       await _loadProfile();
       if (!mounted) return;
       AppToast.show(context, '전화번호가 등록되었습니다.', type: AppToastType.success);
