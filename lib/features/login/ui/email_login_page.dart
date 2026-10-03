@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
 import 'package:after30/core/auth/session_bootstrapper.dart';
+import 'package:after30/core/design/design.dart';
+import 'package:after30/features/login/ui/auth_form_scaffold.dart';
 import 'package:after30/utils/responsive.dart';
 
 class EmailLoginPage extends StatefulWidget {
@@ -29,6 +32,9 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePw = true;
   bool _submitting = false;
+  final FocusNode _passwordFocus = FocusNode();
+  // iOS 인라인 오류(Android는 기존처럼 SnackBar)
+  String? _errorText;
 
   bool get _isFormValid {
     final email = _emailController.text.trim();
@@ -45,18 +51,75 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   }
 
   void _onChanged() {
-    setState(() {});
+    setState(() {
+      _errorText = null;
+    });
   }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
+    return _buildMaterial(context);
+  }
+
+  // iOS: 토큰 스타일 폼. 자동완성 그룹으로 묶어 iCloud 키체인이 자격 증명을
+  // 제안하게 하고, CTA는 키보드 위에 고정한다.
+  Widget _buildCupertino(BuildContext context) {
+    return AuthFormScaffold(
+      title: '로그인',
+      subtitle: '이메일과 비밀번호를 입력해주세요',
+      cta: AppButton(
+        label: '로그인',
+        loading: _submitting,
+        onPressed: _isFormValid && !_submitting ? _onSubmit : null,
+      ),
+      children: [
+        // 기본값(commit)이면 화면을 닫을 때마다 iOS가 키체인 저장을 제안한다.
+        // 실패했거나 제출하지 않은 값이 저장되지 않게 성공 시에만 직접 commit한다.
+        AutofillGroup(
+          onDisposeAction: AutofillContextAction.cancel,
+          child: Column(
+            children: [
+              AppTextField(
+                controller: _emailController,
+                label: '이메일',
+                placeholder: '이메일 주소',
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _passwordFocus.requestFocus(),
+              ),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: _passwordController,
+                focusNode: _passwordFocus,
+                label: '비밀번호',
+                placeholder: '비밀번호',
+                obscureText: true,
+                showObscureToggle: true,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                errorText: _errorText,
+                onSubmitted: (_) {
+                  if (_isFormValid && !_submitting) _onSubmit();
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMaterial(BuildContext context) {
     return Scaffold(
       backgroundColor: _primaryBlue,
       body: SafeArea(
@@ -333,10 +396,14 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   }
 
   Future<void> _onSubmit() async {
+    // 더블탭/키보드 완료 중복 제출 방지: await 이전에 동기적으로 막는다.
+    if (_submitting) return;
+    final cupertino = isCupertino(context);
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     setState(() {
       _submitting = true;
+      _errorText = null;
     });
     try {
       // 토큰 저장 → 사용자 ID 통합(구 카카오ID/이메일 폴백 → 백엔드 ID) →
@@ -347,12 +414,16 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
         context,
         EmailAuthProviderClient(email: email, password: password),
       );
+      // 로그인 성공: iCloud 키체인에 자격 증명 저장 제안을 띄운다.
+      if (cupertino) TextInput.finishAutofillContext();
     } catch (e) {
       if (!mounted) return;
       final friendly = _friendlyLoginErrorMessage(e);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(friendly)));
+      if (cupertino) {
+        setState(() => _errorText = friendly);
+      } else {
+        AppToast.show(context, friendly);
+      }
     } finally {
       if (mounted) {
         setState(() {

@@ -47,6 +47,8 @@ class DeleteAccountDialog {
       case 'kakao':
         await _showKakaoDeleteDialog(context);
         break;
+      // 백엔드는 이메일 가입 계정을 provider='local'로 저장한다.
+      case 'local':
       case 'email':
         await _showEmailDeleteDialog(context);
         break;

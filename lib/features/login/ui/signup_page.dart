@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
 import 'package:after30/core/storage/token_store.dart';
+import 'package:after30/core/design/design.dart';
+import 'package:after30/features/login/ui/auth_form_scaffold.dart';
 import 'package:after30/utils/responsive.dart';
 
 class SignupPage extends StatefulWidget {
@@ -22,6 +25,9 @@ class _SignupPageState extends State<SignupPage> {
   bool _obscurePw = true;
   bool _obscurePwConfirm = true;
   bool _submitting = false;
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _confirmFocus = FocusNode();
 
   static const Color _primaryBlue = Color(0xFF235DFF);
   BorderRadius _fieldRadius(BuildContext context) => BorderRadius.all(
@@ -80,11 +86,120 @@ class _SignupPageState extends State<SignupPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
+    return _buildMaterial(context);
+  }
+
+  // iOS: 이름 → 성별(세그먼트) → 이메일 → 비밀번호 → 확인 순서. 이름/이메일/
+  // 비밀번호는 자동완성 그룹으로 묶어 iOS가 강력한 비밀번호를 제안하게 한다.
+  Widget _buildCupertino(BuildContext context) {
+    return AuthFormScaffold(
+      title: '회원가입',
+      subtitle: '식후 30분과 함께 복약 습관을 시작해요',
+      cta: AppButton(
+        label: '등록',
+        loading: _submitting,
+        onPressed: _isFormValid && !_submitting ? _onSubmit : null,
+      ),
+      children: [
+        // 기본값(commit)이면 화면을 닫을 때마다 iOS가 키체인 저장을 제안한다.
+        // 실패했거나 제출하지 않은 값이 저장되지 않게 성공 시에만 직접 commit한다.
+        AutofillGroup(
+          onDisposeAction: AutofillContextAction.cancel,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppTextField(
+                controller: _nameController,
+                label: '이름',
+                placeholder: '이름을 입력하세요',
+                autofillHints: const [AutofillHints.name],
+                textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.words,
+                onSubmitted: (_) => _emailFocus.requestFocus(),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '성별',
+                style: TextStyle(fontSize: 13, color: AppColors.secondaryLabel),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: AppSegmentedControl<String>(
+                  options: const [
+                    AppSegmentedOption(value: '남', label: '남'),
+                    AppSegmentedOption(value: '여', label: '여'),
+                  ],
+                  value: _selectedGender,
+                  onChanged: (v) => setState(() => _selectedGender = v),
+                ),
+              ),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: _emailController,
+                focusNode: _emailFocus,
+                label: '이메일',
+                placeholder: '이메일을 입력하세요',
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _passwordFocus.requestFocus(),
+              ),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: _passwordController,
+                focusNode: _passwordFocus,
+                label: '비밀번호',
+                placeholder: '비밀번호를 8자 이상 입력하세요',
+                obscureText: true,
+                showObscureToggle: true,
+                autofillHints: const [AutofillHints.newPassword],
+                textInputAction: TextInputAction.next,
+                errorText: _passwordTooShort ? '비밀번호는 최소 8자 이상이어야 합니다' : null,
+                onSubmitted: (_) => _confirmFocus.requestFocus(),
+              ),
+              if (!_passwordTooShort)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '8자 이상으로 입력해주세요',
+                    style: TextStyle(fontSize: 12, color: AppColors.secondaryLabel),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: _confirmPasswordController,
+                focusNode: _confirmFocus,
+                label: '비밀번호 재입력',
+                placeholder: '비밀번호를 다시 입력해주세요',
+                obscureText: true,
+                showObscureToggle: true,
+                autofillHints: const [AutofillHints.newPassword],
+                textInputAction: TextInputAction.done,
+                errorText: _passwordMismatch ? '비밀번호가 일치하지 않습니다' : null,
+                onSubmitted: (_) {
+                  if (_isFormValid && !_submitting) _onSubmit();
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMaterial(BuildContext context) {
     return Scaffold(
       backgroundColor: _primaryBlue,
       body: SafeArea(
@@ -486,6 +601,9 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   Future<void> _onSubmit() async {
+    // 더블탭/키보드 완료 중복 제출 방지: await 이전에 동기적으로 막는다.
+    if (_submitting) return;
+    final cupertino = isCupertino(context);
     final name = _nameController.text.trim();
     final gender = _selectedGender ?? '';
     final email = _emailController.text.trim();
@@ -503,8 +621,12 @@ class _SignupPageState extends State<SignupPage> {
       // 가입 후에는 토큰/세션을 정리하고 로그인 화면으로 유도
       await TokenStore.clear();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('회원가입이 완료되었습니다. 로그인 화면으로 이동합니다.')),
+      // 가입 성공: 키체인에 새 자격 증명 저장 제안을 띄운다.
+      if (cupertino) TextInput.finishAutofillContext();
+      AppToast.show(
+        context,
+        '회원가입이 완료되었습니다. 로그인 화면으로 이동합니다.',
+        type: AppToastType.success,
       );
       await Future.delayed(const Duration(milliseconds: 800));
       Navigator.of(
@@ -513,7 +635,7 @@ class _SignupPageState extends State<SignupPage> {
     } catch (e) {
       if (!mounted) return;
       final msg = _onlyMessage(e);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppToast.show(context, msg, type: AppToastType.error);
     } finally {
       if (mounted) {
         setState(() {

@@ -11,6 +11,10 @@ void main() {
       expect(MyProfile.providerDisplayNameFor('email'), '이메일');
     });
 
+    test('local(백엔드 이메일 가입 계정) -> 이메일', () {
+      expect(MyProfile.providerDisplayNameFor('local'), '이메일');
+    });
+
     test('apple -> Apple(W3b에서 로그인이 추가되기 전에도 표시명은 준비돼 있다)', () {
       expect(MyProfile.providerDisplayNameFor('apple'), 'Apple');
     });

@@ -1,3 +1,4 @@
+import 'package:after30/core/design/design.dart';
 import 'package:after30/core/storage/onboarding_store.dart';
 import 'package:after30/utils/responsive.dart';
 import 'package:flutter/material.dart';
@@ -111,36 +112,47 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ),
               _buildDots(context),
               SizedBox(height: Responsive.responsiveHeight(context, 24)),
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: Responsive.responsiveValue(context, 39),
-                ),
-                child: SizedBox(
-                  height: Responsive.responsiveValue(context, 45),
-                  width: double.infinity,
-                  child: ElevatedButton(
+              if (isCupertino(context))
+                // iOS: 하단 캡슐 CTA. 홈 인디케이터 영역은 SafeArea가 처리한다.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                  child: AppButton(
+                    label: _index == _slides.length - 1 ? '시작하기' : '다음',
                     onPressed: _onNext,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primaryBlue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          Responsive.responsiveValue(context, 12),
+                  ),
+                )
+              else ...[
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.responsiveValue(context, 39),
+                  ),
+                  child: SizedBox(
+                    height: Responsive.responsiveValue(context, 45),
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _onNext,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryBlue,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            Responsive.responsiveValue(context, 12),
+                          ),
                         ),
                       ),
-                    ),
-                    child: Text(
-                      '다음',
-                      style: TextStyle(
-                        fontSize: Responsive.responsiveFontSize(context, 16),
-                        fontWeight: FontWeight.w700,
+                      child: Text(
+                        '다음',
+                        style: TextStyle(
+                          fontSize: Responsive.responsiveFontSize(context, 16),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              SizedBox(height: Responsive.responsiveHeight(context, 22)),
+                SizedBox(height: Responsive.responsiveHeight(context, 22)),
+              ],
             ],
           ),
         ),
@@ -192,6 +204,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Widget _buildDots(BuildContext context) {
+    // iOS 페이지 컨트롤: 7pt 점, 현재 페이지는 라벨 색, 나머지는 옅은 회색
+    // (현재 페이지 크기 변화 없이 색만 부드럽게 바뀐다).
+    if (isCupertino(context)) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(_slides.length, (i) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: i == _index
+                    ? AppColors.primary
+                    : AppColors.secondaryLabel.withValues(alpha: 0.4),
+              ),
+            ),
+          );
+        }),
+      );
+    }
     final size = Responsive.responsiveValue(context, 8);
     final gap = Responsive.responsiveValue(context, 8);
     return Row(

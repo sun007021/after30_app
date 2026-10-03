@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/utils/responsive.dart';
 
 class MyInfoHeader extends StatelessWidget {
@@ -149,6 +150,20 @@ class MyInfoReadRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // iOS: inset grouped 목록 행(AppGroupedSection 안에서 사용).
+    if (isCupertino(context)) {
+      return AppListTile(
+        title: label,
+        trailing: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontSize: 17, color: AppColors.secondaryLabel),
+          ),
+        ),
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -342,6 +357,54 @@ class MyInfoMarketingSwitchRow extends StatelessWidget {
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ],
+    );
+  }
+}
+
+/// 내비게이션 바 trailing에 놓는 44pt 텍스트 버튼(iOS).
+class MyInfoNavAction extends StatelessWidget {
+  const MyInfoNavAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.loading = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: loading
+                  ? const AppActivityIndicator()
+                  : Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: onPressed == null
+                            ? AppColors.secondaryLabel
+                            : AppColors.primary,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

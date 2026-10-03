@@ -84,6 +84,8 @@ class MyProfile {
     switch (provider?.trim().toLowerCase()) {
       case 'kakao':
         return '카카오톡';
+      // 백엔드는 이메일 가입 계정을 provider='local'로 저장한다.
+      case 'local':
       case 'email':
         return '이메일';
       case 'apple':

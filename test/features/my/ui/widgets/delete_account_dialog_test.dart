@@ -114,6 +114,19 @@ void main() {
     expect(find.byType(CupertinoTextField), findsNothing);
   });
 
+  testWidgets('provider=local(백엔드 이메일 가입 계정): 비밀번호 입력 다이얼로그로 간다', (tester) async {
+    mockMyProfile('local');
+    final context = await pumpHost(tester, TargetPlatform.android);
+
+    unawaited(DeleteAccountDialog.show(context));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('계정 탈퇴'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
   testWidgets('provider=email + iOS: 비밀번호 입력을 위한 Cupertino 알럿을 보여준다', (tester) async {
     mockMyProfile('email');
     final context = await pumpHost(tester, TargetPlatform.iOS);
