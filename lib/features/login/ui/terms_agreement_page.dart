@@ -36,10 +36,15 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
 
   Future<void> _openExternalLink(String url) async {
     final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      debugPrint('Could not launch $url');
+    bool opened;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+      opened = false;
+    }
+    if (!opened && mounted) {
+      AppToast.show(context, '약관 페이지를 열지 못했어요. 잠시 후 다시 시도해 주세요.', type: AppToastType.error);
     }
   }
 
@@ -92,16 +97,20 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
     required ValueChanged<bool> onChanged,
     required String url,
   }) {
-    return AppListTile(
-      title: title,
-      leadingWidth: 44,
-      leading: AppCheckmark(checked: value, onChanged: onChanged),
-      onTap: () => onChanged(!value),
-      trailing: CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: const Size(44, 44),
-        onPressed: () => _showTermSheet(title, url),
-        child: const Icon(CupertinoIcons.chevron_forward, size: 18, color: AppColors.secondaryLabel),
+    // AppCheckmark에는 시맨틱이 없어 VoiceOver가 동의 여부를 읽도록 행에 붙인다.
+    return Semantics(
+      checked: value,
+      child: AppListTile(
+        title: title,
+        leadingWidth: 44,
+        leading: AppCheckmark(checked: value, onChanged: onChanged),
+        onTap: () => onChanged(!value),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(44, 44),
+          onPressed: () => _showTermSheet(title, url),
+          child: const Icon(CupertinoIcons.chevron_forward, size: 18, color: AppColors.secondaryLabel),
+        ),
       ),
     );
   }
@@ -120,14 +129,17 @@ class _TermsAgreementPageState extends State<TermsAgreementPage> {
       children: [
         AppGroupedSection(
           children: [
-            AppListTile(
-              title: '전체 동의',
-              leadingWidth: 44,
-              leading: AppCheckmark(
-                checked: _allRequiredAgreed,
-                onChanged: _toggleAll,
+            Semantics(
+              checked: _allRequiredAgreed,
+              child: AppListTile(
+                title: '전체 동의',
+                leadingWidth: 44,
+                leading: AppCheckmark(
+                  checked: _allRequiredAgreed,
+                  onChanged: _toggleAll,
+                ),
+                onTap: () => _toggleAll(!_allRequiredAgreed),
               ),
-              onTap: () => _toggleAll(!_allRequiredAgreed),
             ),
           ],
         ),

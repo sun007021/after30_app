@@ -88,12 +88,15 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
                 children: [
                   SvgPicture.asset('assets/images/kakao_chat.svg', width: 18, height: 18),
                   const SizedBox(width: 8),
-                  const Text(
-                    '카카오로 시작하기',
-                    style: TextStyle(
-                      color: Color(0xFF191919),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 17,
+                  const Flexible(
+                    child: Text(
+                      '카카오로 시작하기',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Color(0xFF191919),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 17,
+                      ),
                     ),
                   ),
                 ],

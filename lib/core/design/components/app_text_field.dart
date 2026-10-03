@@ -40,6 +40,8 @@ class AppTextField extends StatefulWidget {
     this.enabled = true,
     this.autofocus = false,
     this.textCapitalization = TextCapitalization.none,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
     this.style,
     this.prefix,
     this.suffix,
@@ -74,6 +76,11 @@ class AppTextField extends StatefulWidget {
   final bool enabled;
   final bool autofocus;
   final TextCapitalization textCapitalization;
+
+  /// iOS 전용. 이메일처럼 자동 수정이 방해되는 입력에서 false로 둔다
+  /// (Android 경로는 기존 동작 유지를 위해 무시한다).
+  final bool autocorrect;
+  final bool enableSuggestions;
   final TextStyle? style;
 
   /// 입력창 앞/뒤에 붙는 위젯(예: 국가 코드, 단위 텍스트).
@@ -247,9 +254,14 @@ class _AppTextFieldState extends State<AppTextField> {
                   autofillHints: widget.autofillHints,
                   autofocus: widget.autofocus,
                   textCapitalization: widget.textCapitalization,
+                  autocorrect: widget.autocorrect,
+                  enableSuggestions: widget.enableSuggestions,
                   onSubmitted: widget.onSubmitted,
                   onChanged: widget.onChanged,
                   onEditingComplete: widget.onEditingComplete,
+                  // 캐럿을 화면에 띄울 때 입력 상자 아래 여백(8)과 에러 문구
+                  // (6 + 한 줄)까지 보이도록 기본 20보다 아래쪽을 넓게 잡는다.
+                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 60),
                   padding: EdgeInsets.zero,
                   style: widget.style ?? const TextStyle(fontSize: 17, color: AppColors.label),
                   placeholderStyle: const TextStyle(fontSize: 17, color: AppColors.secondaryLabel),
