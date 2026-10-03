@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:after30/core/storage/token_store.dart';
 
 import '../../support/fake_secure_storage.dart';
@@ -253,10 +254,30 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('token_store_installed_marker'), isNull);
 
-    // 잠금 해제 후: 마이그레이션이 실패 상태로 고정되지 않고 정상 재시도된다.
+    // 잠금 해제 후: 실제 저장소(UserDefaults)에는 기존 설치 표시가 있지만 같은
+    // 프로세스의 SharedPreferences 캐시는 잠금 전에 읽은 빈 값이다. 마이그레이션은
+    // 실패 상태로 고정되지 않고 재시도되며, 실제 저장소를 다시 읽어 토큰을 보존한다.
+    SharedPreferencesStorePlatform.instance = InMemorySharedPreferencesStore.withData({
+      'flutter.token_store_installed_marker': true,
+    });
+    locked.locked = false;
+    expect(await TokenStore.getAccessToken(), 'old');
+    expect(locked.deleteCalls, 0);
+  });
+
+  test('iOS 잠금 해제 후 재시도에서도 실제로 설치 표시가 없으면(재설치) 기존처럼 정리한다', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    SharedPreferences.setMockInitialValues({});
+    final locked = _LockedSecureStorage()..store['access_token'] = 'old';
+    TokenStore.debugOverrideSecureStorage(locked);
+
+    expect(await TokenStore.getAccessToken(), isNull);
+    expect(locked.deleteCalls, 0);
+
     locked.locked = false;
     expect(await TokenStore.getAccessToken(), isNull);
     expect(locked.deleteCalls, 4);
+    final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('token_store_installed_marker'), isTrue);
   });
 }
