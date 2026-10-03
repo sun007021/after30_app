@@ -20,6 +20,7 @@ class AppNavBar extends StatelessWidget implements PreferredSizeWidget {
     this.showBackButton = true,
     this.onBack,
     this.largeTitle = false,
+    this.backgroundColor,
   });
 
   final String? title;
@@ -33,6 +34,10 @@ class AppNavBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// true면 컴팩트 바 아래에 Large Title을 추가로 표시한다.
   final bool largeTitle;
+
+  /// 바 배경색(기본 흰색 surface). grouped 목록 화면은 본문과 이어지도록
+  /// `AppColors.groupedBackground`를 넘긴다.
+  final Color? backgroundColor;
 
   static const double _compactHeight = 44;
   static const double _largeTitleExtra = 64;
@@ -52,7 +57,7 @@ class AppNavBar extends StatelessWidget implements PreferredSizeWidget {
     final showBack = showBackButton && (onBack != null || canPop);
 
     return Material(
-      color: AppColors.surface,
+      color: backgroundColor ?? AppColors.surface,
       child: SafeArea(
         bottom: false,
         child: SizedBox(
@@ -149,6 +154,7 @@ class AppSliverNavBar extends StatelessWidget {
     this.actions = const [],
     this.showBackButton = true,
     this.onBack,
+    this.backgroundColor,
   });
 
   final String? title;
@@ -156,12 +162,16 @@ class AppSliverNavBar extends StatelessWidget {
   final bool showBackButton;
   final VoidCallback? onBack;
 
+  /// iOS 바 배경색(기본 흰색 surface). grouped 목록 화면은 큰 제목 영역이
+  /// 본문과 끊기지 않도록 `AppColors.groupedBackground`를 넘긴다.
+  final Color? backgroundColor;
+
   @override
   Widget build(BuildContext context) {
     if (isCupertino(context)) {
       return CupertinoSliverNavigationBar(
         largeTitle: title != null ? Text(title!) : null,
-        backgroundColor: AppColors.surface,
+        backgroundColor: backgroundColor ?? AppColors.surface,
         leading: showBackButton
             ? CupertinoButton(
                 padding: EdgeInsets.zero,
