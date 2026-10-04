@@ -16,6 +16,33 @@ void main() {
       await pumpWithPlatform(tester, TargetPlatform.android, const Material(child: AppActivityIndicator()));
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
+
+    testWidgets('Android 값은 기존 기본 CircularProgressIndicator(36x36, 두께 4, 테마 색)와 같다', (tester) async {
+      await pumpWithPlatform(
+        tester,
+        TargetPlatform.android,
+        const Material(child: Center(child: AppActivityIndicator())),
+      );
+      final finder = find.byType(CircularProgressIndicator);
+      final indicator = tester.widget<CircularProgressIndicator>(finder);
+      // 값을 지정하지 않으면 Material 3 기본값(두께 4, 테마 primary)이 적용된다.
+      expect(indicator.strokeWidth, isNull);
+      expect(indicator.color, isNull);
+      expect(indicator.value, isNull);
+      expect(tester.getSize(finder), const Size(36, 36));
+      expect(find.descendant(of: find.byType(AppActivityIndicator), matching: find.byType(SizedBox)), findsNothing);
+    });
+
+    testWidgets('Android에서 color를 넘기면 그 색만 바뀐다', (tester) async {
+      await pumpWithPlatform(
+        tester,
+        TargetPlatform.android,
+        const Material(child: Center(child: AppActivityIndicator(color: Colors.white, radius: 8))),
+      );
+      final finder = find.byType(CircularProgressIndicator);
+      expect(tester.widget<CircularProgressIndicator>(finder).color, Colors.white);
+      expect(tester.getSize(finder), const Size(36, 36));
+    });
   });
 
   group('AppCheckmark', () {
