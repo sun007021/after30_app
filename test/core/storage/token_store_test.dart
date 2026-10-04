@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:shared_preferences_platform_interface/types.dart';
+import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/core/storage/token_store.dart';
 
 import '../../support/fake_secure_storage.dart';
@@ -46,6 +48,49 @@ class _LockedSecureStorage extends FakeSecureStorage {
   Future<void> delete(String key) async {
     deleteCalls++;
     await super.delete(key);
+  }
+}
+
+/// 요청을 받은 순서대로 스냅샷을 만들고 응답만 늦추는 저장소(reload 경합 재현용).
+class _OrderedDelayedStore extends SharedPreferencesStorePlatform {
+  _OrderedDelayedStore(Map<String, Object> data) : data = Map.of(data);
+  final Map<String, Object> data;
+  int getAllCalls = 0;
+
+  @override
+  Future<bool> clear() async {
+    data.clear();
+    return true;
+  }
+
+  @override
+  Future<Map<String, Object>> getAll() =>
+      getAllWithParameters(GetAllParameters(filter: PreferencesFilter(prefix: 'flutter.')));
+
+  @override
+  Future<Map<String, Object>> getAllWithParameters(GetAllParameters parameters) async {
+    getAllCalls++;
+    final snapshot = Map<String, Object>.of(data);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    return snapshot;
+  }
+
+  @override
+  Future<bool> clearWithParameters(ClearParameters parameters) async {
+    data.clear();
+    return true;
+  }
+
+  @override
+  Future<bool> remove(String key) async {
+    data.remove(key);
+    return true;
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    data[key] = value;
+    return true;
   }
 }
 
@@ -263,6 +308,23 @@ void main() {
     locked.locked = false;
     expect(await TokenStore.getAccessToken(), 'old');
     expect(locked.deleteCalls, 0);
+  });
+
+  test('설치 표시가 캐시에 있으면 다시 읽지 않아, 같은 시점의 다른 쓰기가 캐시에서 사라지지 않는다', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    SharedPreferences.setMockInitialValues({}); // 캐시된 인스턴스를 비운다
+    final store = _OrderedDelayedStore({'flutter.token_store_installed_marker': true});
+    SharedPreferencesStorePlatform.instance = store;
+    TokenStore.debugOverrideSecureStorage(FakeSecureStorage()..store['access_token'] = 'a');
+    await SharedPreferences.getInstance(); // main()에서 이미 캐시가 만들어진 상태
+
+    final token = TokenStore.getAccessToken();
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    await UserStore.setCurrentUserId('42');
+    expect(await token, 'a');
+
+    expect(await UserStore.getCurrentUserId(), '42');
+    expect(store.getAllCalls, 1, reason: 'getInstance 1회 외에 reload가 없어야 한다');
   });
 
   test('iOS 잠금 해제 후 재시도에서도 실제로 설치 표시가 없으면(재설치) 기존처럼 정리한다', () async {

@@ -101,8 +101,13 @@ class TokenStore {
     // getInstance()는 프로세스가 처음 읽은 값을 계속 캐시한다. 첫 잠금 해제
     // 전에 백그라운드로 깨어난 프로세스는 빈 캐시를 들고 있으므로, 잠금
     // 해제 후 재시도할 때 실제 저장소를 다시 읽지 않으면 기존 설치를
-    // 재설치로 오판해 유효한 토큰을 지운다(PR #39 M1).
-    await prefs.reload();
+    // 재설치로 오판해 유효한 토큰을 지운다(PR #39 M1). 캐시에 설치 표시가
+    // 이미 있으면 다시 읽지 않는다. reload()는 캐시 전체를 교체하므로 그
+    // 왕복 중에 일어난 다른 쓰기(예: UserStore)가 캐시에서 옛 값으로
+    // 되돌아갈 수 있기 때문이다(리뷰 m4).
+    if (!(prefs.getBool(_kInstalledMarkerKey) ?? false)) {
+      await prefs.reload();
+    }
     final alreadyInstalled = prefs.getBool(_kInstalledMarkerKey) ?? false;
     final legacyAccess = prefs.getString(_kAccessTokenKey);
 

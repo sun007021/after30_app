@@ -20,9 +20,6 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  /// 카카오 로그인 진행 중 여부. 시트가 닫히는 동안 연속 탭이 들어와도 로그인과
-  /// 시트 pop이 두 번 일어나지 않게 한다(실패/취소 후에는 다시 시도할 수 있다).
-
   Future<void> _handleKakaoLogin() async {
     try {
       await SessionBootstrapper.completeLogin(
