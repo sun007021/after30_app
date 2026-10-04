@@ -199,8 +199,11 @@ class AlarmContentState extends State<AlarmContent> {
         try {
           final stored = await _alarmService.getAlarms();
           final server = {for (final a in alarms) a.id: a.isActive};
+          // 저장소와 서버의 활성 여부가 어긋나면(양방향) 맞춘다. 이 기기에서
+          // 끈 알람을 다른 기기에서 다시 켜도 알림 id 키가 남아 있어
+          // missing이 비므로 여기서 잡아야 한다(PR #36 최종 리뷰 Minor).
           stale =
-              stored.any((s) => s.isActive && server[s.id] != true) ||
+              stored.any((s) => server.containsKey(s.id) ? server[s.id] != s.isActive : s.isActive) ||
               active.any((a) => !stored.any((s) => s.id == a.id));
         } catch (_) {}
       }

@@ -141,74 +141,81 @@ class _AlarmCardState extends State<AlarmCard> {
   }
 
   Widget _buildCupertino(BuildContext context) {
-    final content = Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: _onPointerDown,
-      onPointerUp: _onPointerUp,
-      child: Container(
-        key: _contentKey,
-        color: alarm.isActive ? AppColors.primaryTint : AppColors.surface,
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                SvgPicture.asset(
-                  alarm.isActive
-                      ? 'assets/images/alarmList_active.svg'
-                      : 'assets/images/alarmList_deactive.svg',
-                  width: 44,
-                  height: 44,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    alarm.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.title.copyWith(
-                      color: alarm.isActive
-                          ? AppColors.label
-                          : AppColors.secondaryLabel,
+    // 탭 판정을 Listener로 직접 하므로(열린 행 탭은 닫기만, m-3) 시맨틱 탭
+    // 액션이 따로 없다. VoiceOver 사용자도 수정 화면에 들어갈 수 있게
+    // 시맨틱 탭을 onEdit에 연결한다(PR #36 최종 리뷰 Major).
+    final content = Semantics(
+      button: true,
+      onTap: onEdit,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: _onPointerDown,
+        onPointerUp: _onPointerUp,
+        child: Container(
+          key: _contentKey,
+          color: alarm.isActive ? AppColors.primaryTint : AppColors.surface,
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SvgPicture.asset(
+                    alarm.isActive
+                        ? 'assets/images/alarmList_active.svg'
+                        : 'assets/images/alarmList_deactive.svg',
+                    width: 44,
+                    height: 44,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      alarm.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.title.copyWith(
+                        color: alarm.isActive
+                            ? AppColors.label
+                            : AppColors.secondaryLabel,
+                      ),
                     ),
                   ),
-                ),
-                // 스위치를 누른 포인터는 카드 탭(수정)으로 처리하지 않는다.
-                Listener(
-                  onPointerDown: (_) => _downOnSwitch = true,
-                  child: AppSwitch(
-                    value: alarm.isActive,
-                    onChanged: (_) => onToggle(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // 가로 스크롤 대신 줄바꿈 칩으로 둬서 좌우 스와이프 삭제와
-            // 제스처가 겹치지 않게 한다.
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _cupertinoChip(alarm.everyDay ? '매일' : _formatDays(alarm.days)),
-                ...alarm.times.map((t) => _cupertinoChip(_formatTimeHHmm(t))),
-              ],
-            ),
-            if (alarm.nfcEnabled) ...[
-              const SizedBox(height: 8),
-              const Row(
-                children: [
-                  Icon(Icons.nfc, size: 16, color: AppColors.primary),
-                  SizedBox(width: 4),
-                  Text(
-                    'NFC 연동됨',
-                    style: TextStyle(fontSize: 12, color: AppColors.primary),
+                  // 스위치를 누른 포인터는 카드 탭(수정)으로 처리하지 않는다.
+                  Listener(
+                    onPointerDown: (_) => _downOnSwitch = true,
+                    child: AppSwitch(
+                      value: alarm.isActive,
+                      onChanged: (_) => onToggle(),
+                    ),
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              // 가로 스크롤 대신 줄바꿈 칩으로 둬서 좌우 스와이프 삭제와
+              // 제스처가 겹치지 않게 한다.
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _cupertinoChip(alarm.everyDay ? '매일' : _formatDays(alarm.days)),
+                  ...alarm.times.map((t) => _cupertinoChip(_formatTimeHHmm(t))),
+                ],
+              ),
+              if (alarm.nfcEnabled) ...[
+                const SizedBox(height: 8),
+                const Row(
+                  children: [
+                    Icon(Icons.nfc, size: 16, color: AppColors.primary),
+                    SizedBox(width: 4),
+                    Text(
+                      'NFC 연동됨',
+                      style: TextStyle(fontSize: 12, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

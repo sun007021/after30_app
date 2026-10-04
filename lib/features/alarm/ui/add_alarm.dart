@@ -458,7 +458,10 @@ class _MedicineRegisterPageState extends State<MedicineRegisterPage> {
     final nameLength = _medicineController.text.length;
     return Scaffold(
       backgroundColor: AppColors.groupedBackground,
-      appBar: AppNavBar(title: isEdit ? '약 수정' : '약 등록'),
+      appBar: AppNavBar(
+        title: isEdit ? '약 수정' : '약 등록',
+        backgroundColor: AppColors.groupedBackground,
+      ),
       body: Column(
         children: [
           Expanded(

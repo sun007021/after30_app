@@ -573,6 +573,12 @@ class AlarmService {
       for (final id in toCancel) {
         await _scheduler.cancel(id);
       }
+      // 서버에서 삭제된 알람은 deleteAlarm처럼 알림 id 키도 지운다.
+      for (final old in stored) {
+        if (!serverIds.contains(old.id)) {
+          await prefs.remove(_notificationIdsKeyForStatic(old.id));
+        }
+      }
       await _scheduler.rescheduleAll(await _activeAlarmsFromStorage());
     } catch (e) {
       debugPrint('알람 일괄 동기화 실패: $e');
