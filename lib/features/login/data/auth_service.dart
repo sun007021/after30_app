@@ -7,7 +7,7 @@ import 'package:after30/core/storage/user_store.dart';
 class AuthService {
   /// 로그아웃 + 앱 세션 정리.
   ///
-  /// [provider]는 `/users/me.provider` 값('kakao', 'email', 'apple')이다.
+  /// [provider]는 `/users/me.provider` 값('kakao', 'email', 'apple', 'local')이다.
   /// 카카오 세션 정리는 카카오 사용자에게만 의미가 있으므로, 호출부가
   /// provider를 알고 있으면(예: [DeleteAccountDialog]) 넘겨서 불필요한
   /// 카카오 SDK 호출을 건너뛴다. provider를 모르는 기존 호출부(마이페이지
