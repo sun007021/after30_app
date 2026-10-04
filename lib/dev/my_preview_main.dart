@@ -68,6 +68,14 @@ class _PreviewDeviceAlarm extends MyDeviceAlarmGateway {
         alarmKit: AlarmKitAuthorizationStatus.denied,
       );
     }
+    if (_scene == 'alarmkit-only') {
+      // AlarmKit 허용 + 알림 거부: 푸시/가족 알림용 설정 버튼이 보인다.
+      return const MyDeviceAlarmStatus(
+        notification: NotificationAuthorizationStatus.denied,
+        timeSensitiveAllowed: false,
+        alarmKit: AlarmKitAuthorizationStatus.authorized,
+      );
+    }
     return const MyDeviceAlarmStatus(
       notification: NotificationAuthorizationStatus.authorized,
       timeSensitiveAllowed: true,

@@ -19,6 +19,59 @@ void main() {
   }
 
   group('iOS', () {
+    testWidgets('루트에 이 화면만 남은 경우(가입 직후)에는 눌러도 동작 없는 뒤로 버튼을 숨긴다', (tester) async {
+      useIphoneViewport(tester);
+      await tester.pumpWidget(buildAuthApp(const EmailLoginPage(), TargetPlatform.iOS));
+      await tester.pump();
+
+      expect(find.byIcon(CupertinoIcons.back), findsNothing);
+      expect(find.text('로그인'), findsWidgets);
+    });
+
+    testWidgets('가입 완료 이동(pushNamedAndRemoveUntil) 뒤에도 뒤로 버튼이 없다', (tester) async {
+      useIphoneViewport(tester);
+      await tester.pumpWidget(
+        buildAuthApp(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/email-login', (_) => false),
+              child: const Text('가입 완료'),
+            ),
+          ),
+          TargetPlatform.iOS,
+          routes: {'/email-login': (_) => const EmailLoginPage()},
+        ),
+      );
+      await tester.tap(find.text('가입 완료'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EmailLoginPage), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.back), findsNothing);
+    });
+
+    testWidgets('다른 화면 위에 쌓인 경우에는 뒤로 버튼이 있고 눌러서 돌아간다', (tester) async {
+      useIphoneViewport(tester);
+      await tester.pumpWidget(
+        buildAuthApp(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).pushNamed('/email-login'),
+              child: const Text('이메일 로그인'),
+            ),
+          ),
+          TargetPlatform.iOS,
+          routes: {'/email-login': (_) => const EmailLoginPage()},
+        ),
+      );
+      await tester.tap(find.text('이메일 로그인'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(CupertinoIcons.back), findsOneWidget);
+      await tester.tap(find.byIcon(CupertinoIcons.back));
+      await tester.pumpAndSettle();
+      expect(find.byType(EmailLoginPage), findsNothing);
+    });
+
     testWidgets('이메일/비밀번호 자동완성 힌트와 AutofillGroup이 설정된다', (tester) async {
       useIphoneViewport(tester);
       await tester.pumpWidget(buildAuthApp(const EmailLoginPage(), TargetPlatform.iOS));

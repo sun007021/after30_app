@@ -33,15 +33,20 @@ class AuthFormScaffold extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(52, 44),
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Icon(CupertinoIcons.back, color: AppColors.label, size: 26),
-              ),
-            ),
+            // 가입 직후처럼 루트에 이 화면만 남은 경우(pop 불가)에는 눌러도 아무 일도
+            // 없는 뒤로 버튼을 숨기고, 같은 높이의 빈 자리를 둬 배치를 유지한다.
+            if (ModalRoute.of(context)?.canPop ?? false)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(52, 44),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Icon(CupertinoIcons.back, color: AppColors.label, size: 26),
+                ),
+              )
+            else
+              const SizedBox(height: 44),
             Expanded(
               child: SingleChildScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,

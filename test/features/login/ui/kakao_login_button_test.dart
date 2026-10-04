@@ -194,6 +194,7 @@ void main() {
         buildAuthApp(
           LoginPage(kakaoClientFactory: () => client),
           TargetPlatform.iOS,
+          routes: {'/signup-intro': (_) => const Scaffold(body: Text('가입 안내 화면'))},
         ),
       );
       await tester.tap(find.text('로그인'));
@@ -218,9 +219,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(client.calls, 1);
-      // 재시도는 아래 두 테스트(끝나지 않는 signIn, 예외)에서 확인한다. 여기서
-      // 두 번째 탭은 닫히는 시트의 배리어를 통과해 뒤 화면에 닿을 수 있다
-      // (W2 showAppSheet 후속 과제).
+    });
+
+    testWidgets('시트가 닫히는 동안 같은 자리를 다시 탭해도 뒤 화면의 회원가입이 눌리지 않는다', (tester) async {
+      final client = _SlowCancelClient(const Duration(milliseconds: 500));
+      await openSheet(tester, client);
+
+      final center = tester.getCenter(find.text('카카오로 시작하기'));
+      await tester.tapAt(center);
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.tapAt(center);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(find.text('가입 안내 화면'), findsNothing);
+      expect(client.calls, 1);
     });
 
     testWidgets('signIn이 끝나지 않아도(카카오톡에서 그냥 돌아옴) 다시 탭하면 새 로그인을 시작한다', (tester) async {

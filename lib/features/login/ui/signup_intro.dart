@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
@@ -7,7 +8,13 @@ import 'package:after30/features/login/ui/auth_form_scaffold.dart';
 import 'package:after30/utils/responsive.dart';
 
 class SignupIntroPage extends StatefulWidget {
-  const SignupIntroPage({super.key});
+  const SignupIntroPage({
+    super.key,
+    this.kakaoClientFactory = KakaoAuthProviderClient.new,
+  });
+
+  /// 테스트에서 카카오 SDK 대신 가짜 클라이언트를 주입하기 위한 팩토리.
+  final AuthProviderClient Function() kakaoClientFactory;
 
   @override
   State<SignupIntroPage> createState() => _SignupIntroPageState();
@@ -22,6 +29,8 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
     // 더블탭 중복 로그인 방지: await 이전에 동기적으로 막는다.
     if (_busy) return;
     _busy = true;
+    // iOS 카카오 버튼이 진행 중 표시를 그리도록 다시 그린다(Android 외형은 동일).
+    setState(() {});
     try {
       // 토큰 저장 → 사용자 ID 통합(백엔드 ID 기준) → 알람 네임스페이스
       // 마이그레이션 → 재스케줄 → FCM 동기화 → 셸 진입까지는
@@ -31,7 +40,7 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
       // 있었다.
       await SessionBootstrapper.completeLogin(
         context,
-        KakaoAuthProviderClient(),
+        widget.kakaoClientFactory(),
       );
     } catch (e) {
       if (!mounted) return;
@@ -60,6 +69,7 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
       );
     } finally {
       _busy = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -83,24 +93,26 @@ class _SignupIntroPageState extends State<SignupIntroPage> {
                 shape: StadiumBorder(),
               ),
               alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SvgPicture.asset('assets/images/kakao_chat.svg', width: 18, height: 18),
-                  const SizedBox(width: 8),
-                  const Flexible(
-                    child: Text(
-                      '카카오로 시작하기',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Color(0xFF191919),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 17,
-                      ),
+              child: _busy
+                  ? const CupertinoActivityIndicator(color: Color(0xFF191919))
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SvgPicture.asset('assets/images/kakao_chat.svg', width: 18, height: 18),
+                        const SizedBox(width: 8),
+                        const Flexible(
+                          child: Text(
+                            '카카오로 시작하기',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color(0xFF191919),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 17,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
         ),

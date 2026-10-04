@@ -377,6 +377,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
           title: '마이페이지',
           showBackButton: false,
           backgroundColor: AppColors.groupedBackground,
+          showBorder: false,
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -393,6 +394,8 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
               const SizedBox(height: 24),
               AppGroupedSection(
                 header: '알람 설정',
+                // 위 두 스위치는 앱 설정이고, 아래 행들은 OS 권한 상태라는 점을 알린다.
+                footer: status != null ? '아래 항목은 기기 설정의 권한 상태예요.' : null,
                 children: [
                   SwitchRow(
                     title: '푸시 알림 허용',
@@ -404,9 +407,12 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
                     value: _allowDevice,
                     onChanged: _onDeviceAlarmChanged,
                   ),
-                  if (status != null) ..._deviceStatusRows(status),
                 ],
               ),
+              if (status != null) ...[
+                const SizedBox(height: 16),
+                AppGroupedSection(children: _deviceStatusRows(status)),
+              ],
               const SizedBox(height: 24),
               LinkList(
                 header: '정보',
@@ -450,7 +456,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
             style: TextStyle(fontSize: 13, color: AppColors.secondaryLabel),
           ),
         ),
-      if (status.needsSettings)
+      if (_shouldOfferSettings(status))
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
           child: AppButton(
@@ -461,6 +467,16 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
           ),
         ),
     ];
+  }
+
+  /// 설정 앱으로 가는 버튼을 보여줄지. AlarmKit이 허용이면 알람 자체는 울리지만,
+  /// 푸시(FCM)와 가족 알림은 알림 권한이 필요하므로 "푸시 알림 허용"이 켜져 있고
+  /// 알림이 거부된 경우에도 보여준다(미결정은 첫 약 등록 때 요청하므로 제외).
+  bool _shouldOfferSettings(MyDeviceAlarmStatus status) {
+    if (status.needsSettings) return true;
+    return _allowPush &&
+        status.alarmKitAuthorized &&
+        status.notification == NotificationAuthorizationStatus.denied;
   }
 
   Widget _statusRow(String title, String value) {
@@ -479,9 +495,11 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
   String _notificationLabel(NotificationAuthorizationStatus s) {
     switch (s) {
       case NotificationAuthorizationStatus.authorized:
-      case NotificationAuthorizationStatus.provisional:
       case NotificationAuthorizationStatus.ephemeral:
         return '허용됨';
+      case NotificationAuthorizationStatus.provisional:
+        // 알림 센터에만 조용히 쌓이고 소리/배너는 나오지 않는다.
+        return '조용히 전달';
       case NotificationAuthorizationStatus.denied:
         return '꺼짐';
       case NotificationAuthorizationStatus.notDetermined:

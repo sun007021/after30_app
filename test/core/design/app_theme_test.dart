@@ -42,9 +42,32 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byType(CupertinoPageTransition), findsNothing);
+    // 슬라이드가 없으므로 전환 중에도 화면이 최종 위치(x=0)에 있다.
+    expect(tester.getTopLeft(find.text('다음 화면')).dx, 0);
     expect(find.byType(FadeTransition), findsWidgets);
     await tester.pumpAndSettle();
     expect(find.text('다음 화면'), findsOneWidget);
+  });
+
+  testWidgets('동작 줄이기가 켜져 있어도 엣지 스와이프로 뒤로 간다', (tester) async {
+    await tester.pumpWidget(buildApp(disableAnimations: true));
+    await tester.tap(find.text('이동'));
+    await tester.pumpAndSettle();
+    expect(find.text('다음 화면'), findsOneWidget);
+
+    await tester.dragFrom(const Offset(3, 300), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('다음 화면'), findsNothing);
+    expect(find.text('이동'), findsOneWidget);
+  });
+
+  testWidgets('동작 줄이기가 꺼져 있어도 엣지 스와이프로 뒤로 간다', (tester) async {
+    await tester.pumpWidget(buildApp(disableAnimations: false));
+    await tester.tap(find.text('이동'));
+    await tester.pumpAndSettle();
+
+    await tester.dragFrom(const Offset(3, 300), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('다음 화면'), findsNothing);
   });
 }

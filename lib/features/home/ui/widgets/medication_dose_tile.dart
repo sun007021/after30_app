@@ -340,7 +340,17 @@ class MedicationDoseTile extends StatelessWidget {
                         ),
                       ),
                       child: isProcessing
-                          ? const AppActivityIndicator(color: Colors.white, radius: 8)
+                          ? (cupertino
+                                ? const AppActivityIndicator(color: Colors.white, radius: 8)
+                                // Android는 기존 크기/두께 그대로(반응형 16 박스, 두께 2).
+                                : SizedBox(
+                                    width: Responsive.responsiveIconSize(context, 16),
+                                    height: Responsive.responsiveIconSize(context, 16),
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  ))
                           : Text(
                               '복용 완료',
                               style: TextStyle(
