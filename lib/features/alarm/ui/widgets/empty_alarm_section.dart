@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/utils/responsive.dart';
 
 /// 알람이 없을 때 표시되는 빈 상태 섹션
@@ -10,6 +11,46 @@ class EmptyAlarmSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
+    return _buildMaterial(context);
+  }
+
+  Widget _buildCupertino(BuildContext context) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          children: [
+            const Spacer(flex: 2),
+            SvgPicture.asset(
+              'assets/images/medimain.svg',
+              width: 100,
+              height: 100,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              '등록된 약이 없어요!',
+              style: AppTypography.title.copyWith(fontSize: 20),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '약을 등록하면 시간에 맞춰 알려드려요.',
+              style: AppTypography.footnote,
+              textAlign: TextAlign.center,
+            ),
+            const Spacer(flex: 3),
+            AppButton(
+              label: '약 등록하기',
+              icon: const Icon(Icons.add, size: 20),
+              onPressed: onAdd,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMaterial(BuildContext context) {
     return Expanded(
       child: Align(
         alignment: Alignment.topCenter,

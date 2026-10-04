@@ -534,6 +534,57 @@ class AlarmService {
     return false;
   }
 
+  /// 서버에서 내려받은 알람 **전체 목록**(비활성 포함)으로 로컬 저장소를
+  /// 맞추고 기기 예약을 **한 번만** 전체 재예약한다(W5).
+  ///
+  /// 알람마다 [scheduleAlarm]을 부르면 iOS에서는 매번 64개 예산 전체를
+  /// 다시 계산하므로, 새 기기/재설치 후 동기화처럼 여러 알람이 한꺼번에
+  /// 필요할 때 쓴다. 다른 기기에서 삭제된 알람(서버 목록에 없는 id)은
+  /// 저장소에서 제거하고 예약을 취소하며, 비활성화된 알람은 서버의
+  /// `isActive`를 따라 저장한 뒤 예약을 취소한다. 서버에 없는 로컬 전용
+  /// 값(NFC 등)과 알림 id/사용자 네임스페이스는 그대로 보존한다.
+  Future<void> syncFromServer(List<MedicineAlarm> serverAlarms) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = await getAlarms();
+      final byId = {for (final a in stored) a.id: a};
+      final serverIds = serverAlarms.map((a) => a.id).toSet();
+
+      final merged = serverAlarms
+          .map((a) => a.copyWith(
+            nfcEnabled: byId[a.id]?.nfcEnabled ?? a.nfcEnabled,
+            familyNotify: byId[a.id]?.familyNotify ?? a.familyNotify,
+          ))
+          .toList();
+
+      // 사라졌거나 비활성이 된 알람의 기기 예약을 정리한다.
+      final toCancel = <String>[
+        for (final old in stored)
+          if (old.isActive &&
+              (!serverIds.contains(old.id) ||
+                  !serverAlarms.firstWhere((s) => s.id == old.id).isActive))
+            old.id,
+      ];
+
+      await prefs.setString(
+        _alarmsKeyForUserStatic(),
+        json.encode(merged.map((a) => a.toJson()).toList()),
+      );
+      for (final id in toCancel) {
+        await _scheduler.cancel(id);
+      }
+      // 서버에서 삭제된 알람은 deleteAlarm처럼 알림 id 키도 지운다.
+      for (final old in stored) {
+        if (!serverIds.contains(old.id)) {
+          await prefs.remove(_notificationIdsKeyForStatic(old.id));
+        }
+      }
+      await _scheduler.rescheduleAll(await _activeAlarmsFromStorage());
+    } catch (e) {
+      debugPrint('알람 일괄 동기화 실패: $e');
+    }
+  }
+
   // 알람 메타데이터만 저장(알림 ID는 각 스케줄러가 자체적으로 관리)
   Future<void> _upsertAlarmMetadata(MedicineAlarm alarm) async {
     final prefs = await SharedPreferences.getInstance();
@@ -687,18 +738,28 @@ class AlarmService {
     String day, {
     int notificationId = 0,
   }) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FullscreenAlarmPage(
-          alarm: alarm,
-          time: time,
-          day: day,
-          notificationId: notificationId,
-        ),
-        fullscreenDialog: true,
+    // AlarmKit 복귀(resume) 경로와 알림 탭 경로가 같은 알람으로 겹쳐 호출돼도
+    // 풀스크린이 중복으로 쌓이지 않도록, 이미 떠 있는 같은 알람이면 무시한다.
+    final key = '${alarm.id}|${time.hour}:${time.minute}|$day';
+    if (_shownFullscreenKey == key && _shownFullscreenRoute?.isActive == true) {
+      return;
+    }
+    final route = MaterialPageRoute<void>(
+      builder: (context) => FullscreenAlarmPage(
+        alarm: alarm,
+        time: time,
+        day: day,
+        notificationId: notificationId,
       ),
+      fullscreenDialog: true,
     );
+    _shownFullscreenKey = key;
+    _shownFullscreenRoute = route;
+    Navigator.of(context).push(route);
   }
+
+  static String? _shownFullscreenKey;
+  static Route<void>? _shownFullscreenRoute;
 }
 
 /// iOS 로컬 알림 64개 예산 롤링 재예약(plan §7)과 AlarmKit 완료 기록 반영을
