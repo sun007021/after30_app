@@ -138,4 +138,96 @@ void main() {
       expect(calls, isEmpty);
     });
   }
+
+  // base(origin/feature/28/ios-release)에서 측정한 Android 1.0배 첫 슬라이드 배치.
+  // 스크롤 래퍼를 추가해도 같은 위치여야 한다(base 구현과 4슬라이드 전체를 비교해 확인).
+  final baseRects = {
+    Size(420, 900): [
+      Rect.fromLTRB(134.0, 256.1, 286.0, 455.1),
+      Rect.fromLTRB(52.4, 487.1, 367.6, 551.1),
+      Rect.fromLTRB(97.4, 560.1, 322.6, 596.1),
+    ],
+    Size(375, 667): [
+      Rect.fromLTRB(115.3, 121.1, 259.7, 310.1),
+      Rect.fromLTRB(38.0, 340.5, 337.0, 433.5),
+      Rect.fromLTRB(80.4, 442.1, 294.6, 476.1),
+    ],
+  };
+  for (final entry in baseRects.entries) {
+    testWidgets('Android 1.0배 ${entry.key}: 첫 슬라이드 이미지/제목/설명 위치가 base와 같다', (tester) async {
+      tester.view.physicalSize = entry.key * 2;
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(themedApp(TargetPlatform.android));
+      await tester.pumpAndSettle();
+
+      final elements = [
+        find.byType(Image).evaluate().first,
+        ...find.textContaining('\n').evaluate().take(2),
+      ];
+      final actual = [
+        for (final e in elements)
+          (e.renderObject! as RenderBox).localToGlobal(Offset.zero) & (e.renderObject! as RenderBox).size,
+      ];
+      expect(actual, hasLength(3));
+      for (var i = 0; i < 3; i++) {
+        final r = entry.value[i];
+        expect(actual[i].left, closeTo(r.left, 0.05));
+        expect(actual[i].top, closeTo(r.top, 0.05));
+        expect(actual[i].right, closeTo(r.right, 0.05));
+        expect(actual[i].bottom, closeTo(r.bottom, 0.05));
+      }
+    });
+  }
+
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    testWidgets('$platform: SE 폭(750x1334 dpr2) 글자 2.0배에서도 모든 슬라이드가 넘치지 않고 스크롤된다', (tester) async {
+      tester.view.physicalSize = const Size(750, 1334);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build().copyWith(platform: platform),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2.0)),
+            child: child!,
+          ),
+          routes: {
+            '/': (_) => const OnboardingPage(),
+            '/login': (_) => const Scaffold(body: Text('로그인 화면')),
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 4; i++) {
+        expect(tester.takeException(), isNull, reason: '슬라이드 ${i + 1}');
+        // 내용이 화면보다 크면 세로로 스크롤되어 맨 아래(설명 문구)까지 닿는다.
+        final scrollable = find.descendant(of: find.byType(PageView), matching: find.byType(Scrollable));
+        final vertical = tester.widgetList<Scrollable>(scrollable).where((s) => s.axisDirection == AxisDirection.down);
+        expect(vertical, isNotEmpty);
+        if (i < 3) {
+          await tester.tap(find.byType(platform == TargetPlatform.iOS ? AppButton : ElevatedButton));
+          await tester.pumpAndSettle();
+        }
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('iOS: 점 인디케이터는 "N페이지 중 M페이지" 시맨틱을 읽는다', (tester) async {
+    final handle = tester.ensureSemantics();
+    tester.view.physicalSize = const Size(1206, 2622);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(themedApp(TargetPlatform.iOS));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('4페이지 중 1페이지'), findsOneWidget);
+    await tester.tap(find.text('다음'));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('4페이지 중 2페이지'), findsOneWidget);
+    expect(find.bySemanticsLabel('4페이지 중 1페이지'), findsNothing);
+    handle.dispose();
+  });
 }

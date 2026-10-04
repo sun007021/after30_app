@@ -161,44 +161,58 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Widget _buildSlide(BuildContext context, _OnboardingSlide slide) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: Responsive.responsiveValue(context, 40),
-      ),
-      child: Column(
-        children: [
-          const Spacer(flex: 5),
-          Image.asset(
-            slide.asset,
-            width: Responsive.responsiveValue(context, slide.imageWidth),
-            height: Responsive.responsiveValue(context, slide.imageHeight),
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-          ),
-          SizedBox(height: Responsive.responsiveHeight(context, 32)),
-          Text(
-            slide.title,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: Responsive.responsiveFontSize(context, 24),
-              fontWeight: FontWeight.w500,
-              height: 1.35,
+    // 큰 글자(접근성)나 작은 화면에서 내용이 넘치면 스크롤된다. 내용이
+    // 들어갈 때는 minHeight + IntrinsicHeight 덕분에 기존과 같은 Spacer 배치다.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: IntrinsicHeight(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: Responsive.responsiveValue(context, 40),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: Column(
+                  children: [
+                    const Spacer(flex: 5),
+                    Image.asset(
+                      slide.asset,
+                      width: Responsive.responsiveValue(context, slide.imageWidth),
+                      height: Responsive.responsiveValue(context, slide.imageHeight),
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
+                    SizedBox(height: Responsive.responsiveHeight(context, 32)),
+                    Text(
+                      slide.title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: Responsive.responsiveFontSize(context, 24),
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
+                      ),
+                    ),
+                    SizedBox(height: Responsive.responsiveHeight(context, 9)),
+                    Text(
+                      slide.subtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _subtitleGray,
+                        fontSize: Responsive.responsiveFontSize(context, 13),
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
+                      ),
+                    ),
+                    const Spacer(flex: 4),
+                  ],
+                ),
+              ),
             ),
           ),
-          SizedBox(height: Responsive.responsiveHeight(context, 9)),
-          Text(
-            slide.subtitle,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _subtitleGray,
-              fontSize: Responsive.responsiveFontSize(context, 13),
-              fontWeight: FontWeight.w500,
-              height: 1.4,
-            ),
-          ),
-          const Spacer(flex: 4),
-        ],
+        ),
       ),
     );
   }
@@ -207,24 +221,30 @@ class _OnboardingPageState extends State<OnboardingPage> {
     // iOS 페이지 컨트롤: 7pt 점, 현재 페이지는 라벨 색, 나머지는 옅은 회색
     // (현재 페이지 크기 변화 없이 색만 부드럽게 바뀐다).
     if (isCupertino(context)) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(_slides.length, (i) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: i == _index
-                    ? AppColors.primary
-                    : AppColors.secondaryLabel.withValues(alpha: 0.4),
+      // VoiceOver가 점 4개 대신 현재 위치를 한 번에 읽게 한다.
+      return Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: '${_slides.length}페이지 중 ${_index + 1}페이지',
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_slides.length, (i) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: i == _index
+                      ? AppColors.primary
+                      : AppColors.secondaryLabel.withValues(alpha: 0.4),
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       );
     }
     final size = Responsive.responsiveValue(context, 8);
