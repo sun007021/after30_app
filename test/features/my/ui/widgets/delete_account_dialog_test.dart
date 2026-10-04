@@ -337,4 +337,148 @@ void main() {
 
     expect(find.textContaining('비밀번호가 올바르지 않습니다'), findsOneWidget);
   });
+
+  void mockEmailDelete({required int? deleteStatus}) {
+    mockInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path == '/users/me') {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {'provider': 'local'},
+            ),
+          );
+          return;
+        }
+        if (options.path == '/users/account' && options.method == 'DELETE') {
+          if (deleteStatus == null) {
+            handler.resolve(
+              Response(requestOptions: options, statusCode: 200, data: null),
+            );
+          } else {
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                response: Response(
+                  requestOptions: options,
+                  statusCode: deleteStatus,
+                ),
+                type: DioExceptionType.badResponse,
+              ),
+            );
+          }
+          return;
+        }
+        handler.reject(
+          DioException(requestOptions: options, message: '예상하지 못한 경로: ${options.path}'),
+        );
+      },
+    );
+    ApiClient().dio.interceptors.add(mockInterceptor!);
+  }
+
+  Future<void> submitPassword(WidgetTester tester, Finder field) async {
+    await tester.tap(find.text('탈퇴하기'));
+    await tester.pumpAndSettle();
+    await tester.enterText(field, 'pw');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('탈퇴하기'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('iOS: 탈퇴 실패 문구는 CupertinoAlertDialog(제목 탈퇴 실패, 확인 버튼 하나)로 보여준다', (tester) async {
+    mockEmailDelete(deleteStatus: 401);
+    final context = await pumpHost(tester, TargetPlatform.iOS);
+
+    unawaited(DeleteAccountDialog.show(context));
+    await tester.pumpAndSettle();
+    await submitPassword(tester, find.byType(CupertinoTextField));
+
+    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('탈퇴 실패'), findsOneWidget);
+    expect(find.text('비밀번호가 올바르지 않습니다.'), findsOneWidget);
+    expect(find.byType(CupertinoDialogAction), findsOneWidget);
+    expect(find.text('확인'), findsOneWidget);
+
+    await tester.tap(find.text('확인'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CupertinoAlertDialog), findsNothing);
+  });
+
+  testWidgets('iOS: provider 조회 실패 안내도 CupertinoAlertDialog로 보여준다', (tester) async {
+    mockInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) => handler.reject(
+        DioException(requestOptions: options, message: '네트워크 오류'),
+      ),
+    );
+    ApiClient().dio.interceptors.add(mockInterceptor!);
+    final context = await pumpHost(tester, TargetPlatform.iOS);
+
+    unawaited(DeleteAccountDialog.show(context));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+    expect(find.textContaining('계정 정보를 불러오지 못했습니다'), findsOneWidget);
+  });
+
+  testWidgets('Android: 탈퇴 실패 다이얼로그는 base와 같은 값(AlertDialog, 흰 배경, 반경 16, 취소/확인 버튼)을 유지한다', (
+    tester,
+  ) async {
+    mockEmailDelete(deleteStatus: 401);
+    final context = await pumpHost(tester, TargetPlatform.android);
+
+    unawaited(DeleteAccountDialog.show(context));
+    await tester.pumpAndSettle();
+    await submitPassword(tester, find.byType(TextField));
+
+    expect(find.byType(CupertinoAlertDialog), findsNothing);
+    final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
+    expect(dialog.backgroundColor, Colors.white);
+    expect(
+      dialog.shape,
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    );
+    expect((dialog.title as Text).data, '탈퇴 실패');
+    expect((dialog.content as Text).data, '비밀번호가 올바르지 않습니다.');
+    expect(dialog.actionsPadding, const EdgeInsets.fromLTRB(16, 0, 16, 16));
+
+    final cancel = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '취소'),
+    );
+    expect(
+      cancel.style!.backgroundColor!.resolve({}),
+      const Color(0xFFF1F5F9),
+    );
+    expect(
+      cancel.style!.foregroundColor!.resolve({}),
+      const Color(0xFF111111),
+    );
+    expect(cancel.style!.minimumSize!.resolve({}), const Size.fromHeight(44));
+    final confirm = tester.widget<ElevatedButton>(
+      find.widgetWithText(ElevatedButton, '확인'),
+    );
+    expect(
+      confirm.style!.backgroundColor!.resolve({}),
+      const Color(0xFF1963FF),
+    );
+    expect(confirm.style!.minimumSize!.resolve({}), const Size.fromHeight(44));
+  });
+
+  testWidgets('iOS: 비밀번호 제출 → 탈퇴 API → logout(email) → 로그인 화면(순서와 이동 경로는 Android와 동일)', (
+    tester,
+  ) async {
+    mockEmailDelete(deleteStatus: null);
+    final context = await pumpHostWithLoginRoute(tester, TargetPlatform.iOS);
+
+    unawaited(DeleteAccountDialog.show(context));
+    await tester.pumpAndSettle();
+    await submitPassword(tester, find.byType(CupertinoTextField));
+
+    expect(find.byType(CupertinoAlertDialog), findsNothing);
+    expect(find.text('로그인 화면'), findsOneWidget);
+  });
 }

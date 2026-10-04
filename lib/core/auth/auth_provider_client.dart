@@ -12,8 +12,10 @@ import 'package:after30/features/login/models/auth_models.dart';
 /// `SessionBootstrapper`가 도맡는다 — Apple 로그인(W3b)을 추가할 때도 이
 /// 인터페이스를 구현하는 클라이언트 하나만 더하면 된다.
 abstract class AuthProviderClient {
-  /// 제공자 식별자('kakao', 'email'). 백엔드 `/users/me`의 `provider`와
-  /// 값이 같다.
+  /// 제공자 식별자('kakao', 'email'). 클라이언트 쪽 식별자이며, 백엔드
+  /// `/users/me`의 `provider`는 이메일 계정을 'local'로 내려 준다(따라서 이 값을
+  /// 백엔드 값과 직접 비교하지 말고, 비교가 필요하면 'local'도 이메일로
+  /// 취급한다).
   String get providerId;
 
   /// 로그인을 수행한다. 사용자가 취소한 경우(예: 카카오 로그인 팝업을

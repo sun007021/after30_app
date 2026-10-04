@@ -7,7 +7,13 @@ import 'package:after30/features/login/ui/kakao_login_button.dart';
 import 'package:after30/utils/responsive.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({
+    super.key,
+    this.kakaoClientFactory = KakaoAuthProviderClient.new,
+  });
+
+  /// 테스트에서 카카오 SDK 대신 가짜 클라이언트를 주입하기 위한 팩토리.
+  final AuthProviderClient Function() kakaoClientFactory;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -18,7 +24,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await SessionBootstrapper.completeLogin(
         context,
-        KakaoAuthProviderClient(),
+        widget.kakaoClientFactory(),
       );
     } catch (e) {
       if (!mounted) return;
@@ -58,6 +64,10 @@ class _LoginPageState extends State<LoginPage> {
     return [
       KakaoLoginButton(
         isLoading: false,
+        // 진행 중 플래그로 막지 않는다. 카카오 SDK는 사용자가 카카오톡에서
+        // 승인/취소 없이 돌아오면 signIn이 끝나지 않을 수 있어(PR #39 M2),
+        // 플래그가 영원히 풀리지 않으면 재시도가 불가능해진다. 시트가 닫히는
+        // 동안의 연타는 닫히는 라우트가 포인터를 막으므로 두 번 전달되지 않는다.
         onPressed: () {
           Navigator.of(sheetContext).pop();
           _handleKakaoLogin();

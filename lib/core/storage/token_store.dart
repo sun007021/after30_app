@@ -90,14 +90,24 @@ class TokenStore {
   static Future<void>? _migration;
 
   static Future<void> _ensureMigrated() {
-    return _migration ??= _runMigration().catchError((Object e) {
+    return _migration ??= _runMigration().catchError((Object e, StackTrace st) {
       _migration = null; // 실패하면 다음 호출에서 재시도할 수 있게 한다.
-      throw e;
+      Error.throwWithStackTrace(e, st);
     });
   }
 
   static Future<void> _runMigration() async {
     final prefs = await SharedPreferences.getInstance();
+    // getInstance()는 프로세스가 처음 읽은 값을 계속 캐시한다. 첫 잠금 해제
+    // 전에 백그라운드로 깨어난 프로세스는 빈 캐시를 들고 있으므로, 잠금
+    // 해제 후 재시도할 때 실제 저장소를 다시 읽지 않으면 기존 설치를
+    // 재설치로 오판해 유효한 토큰을 지운다(PR #39 M1). 캐시에 설치 표시가
+    // 이미 있으면 다시 읽지 않는다. reload()는 캐시 전체를 교체하므로 그
+    // 왕복 중에 일어난 다른 쓰기(예: UserStore)가 캐시에서 옛 값으로
+    // 되돌아갈 수 있기 때문이다(리뷰 m4).
+    if (!(prefs.getBool(_kInstalledMarkerKey) ?? false)) {
+      await prefs.reload();
+    }
     final alreadyInstalled = prefs.getBool(_kInstalledMarkerKey) ?? false;
     final legacyAccess = prefs.getString(_kAccessTokenKey);
 
@@ -128,6 +138,13 @@ class TokenStore {
       // 레거시 토큰도 없고 마커도 없다 = 업그레이드가 아니라 진짜 재설치/
       // 최초 설치다. iOS는 앱 삭제 후에도 Keychain이 남으므로 잔존 값을
       // 지운다.
+      //
+      // 단, 재부팅 후 첫 잠금 해제 전에 푸시 등으로 앱이 백그라운드 실행되면
+      // SharedPreferences(UserDefaults)를 읽지 못해 "마커 없음"으로 잘못
+      // 보일 수 있다. 지우기 전에 보호 데이터에 접근할 수 있는지 읽기로
+      // 확인하고, 예외가 나면 삭제와 마커 쓰기를 모두 건너뛴 채 예외를 그대로
+      // 던진다(`_migration`은 비워져 다음 호출/실행에서 재시도된다).
+      await _secure.read(_kAccessTokenKey);
       await _secure.delete(_kAccessTokenKey);
       await _secure.delete(_kRefreshTokenKey);
       await _secure.delete(_kAccessExpiresInKey);
@@ -172,12 +189,18 @@ class TokenStore {
 
   static Future<String?> getRefreshToken() async {
     try {
-      await _ensureMigrated();
-      return await _secure.read(_kRefreshTokenKey);
+      return await getRefreshTokenOrThrow();
     } catch (e) {
       debugPrint('TokenStore: 리프레시 토큰 읽기 실패: $e');
       return null;
     }
+  }
+
+  /// [getRefreshToken]과 같지만 저장소 읽기 오류를 삼키지 않는다. "토큰
+  /// 없음"(null)과 "일시적 읽기 오류"(예외)를 구분해야 하는 세션 복원용이다.
+  static Future<String?> getRefreshTokenOrThrow() async {
+    await _ensureMigrated();
+    return _secure.read(_kRefreshTokenKey);
   }
 
   /// 로그아웃/탈퇴 시 호출된다. 최선을 다해 지우되(best-effort), 저장소
