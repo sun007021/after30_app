@@ -63,7 +63,19 @@ class _ReducedMotionCupertinoPageTransitionsBuilder extends PageTransitionsBuild
     Widget child,
   ) {
     if (MediaQuery.disableAnimationsOf(context)) {
-      return FadeTransition(opacity: animation, child: child);
+      // 슬라이드/시차는 멈춘 애니메이션으로 없애되, Cupertino 빌더가 붙이는
+      // 엣지 스와이프 백 제스처는 그대로 둔다(제스처는 route의 실제
+      // 컨트롤러를 쓰므로 뒤로 가기는 계속 동작한다). 대신 페이드만 입힌다.
+      return FadeTransition(
+        opacity: animation,
+        child: _cupertino.buildTransitions(
+          route,
+          context,
+          kAlwaysCompleteAnimation,
+          kAlwaysDismissedAnimation,
+          child,
+        ),
+      );
     }
     return _cupertino.buildTransitions(route, context, animation, secondaryAnimation, child);
   }
