@@ -108,10 +108,13 @@ class AppListTile extends StatelessWidget {
 /// Android: 기존 `card_container.dart`가 쓰던 값(반응형 반지름 5)을 그대로
 /// 맞추고 구분선은 넣지 않는다(`link_list.dart`와 동일).
 class AppGroupedSection extends StatelessWidget {
-  const AppGroupedSection({super.key, this.header, required this.children});
+  const AppGroupedSection({super.key, this.header, this.footer, required this.children});
 
   /// 그룹 상단에 표시할 소제목(선택).
   final String? header;
+
+  /// 그룹 아래에 표시할 설명 문구(선택, 13pt 보조 색).
+  final String? footer;
   final List<Widget> children;
 
   double _dividerInsetFor(Widget tile) {
@@ -156,6 +159,11 @@ class AppGroupedSection extends StatelessWidget {
         cupertino
             ? ClipRSuperellipse(borderRadius: borderRadius, child: body)
             : ClipRRect(borderRadius: borderRadius, child: body),
+        if (footer != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(footer!, style: const TextStyle(fontSize: 13, color: AppColors.secondaryLabel)),
+          ),
       ],
     );
   }

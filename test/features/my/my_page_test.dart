@@ -367,20 +367,122 @@ void main() {
       expect(bar.backgroundColor, AppColors.groupedBackground);
     });
 
-    testWidgets('AlarmKit이 허용이면 알림 권한이 꺼져 있어도 설정 안내를 띄우지 않는다', (tester) async {
+    testWidgets('큰 제목 바는 하단 경계선이 없다(grouped 배경과 이어짐)', (tester) async {
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService()), platform: TargetPlatform.iOS);
+      final bar = tester.widget<CupertinoSliverNavigationBar>(find.byType(CupertinoSliverNavigationBar));
+      expect(bar.border, isNull);
+    });
+
+    const alarmKitOnNotificationDenied = MyDeviceAlarmStatus(
+      notification: NotificationAuthorizationStatus.denied,
+      timeSensitiveAllowed: false,
+      alarmKit: AlarmKitAuthorizationStatus.authorized,
+    );
+
+    Finder switchOf(String title) =>
+        find.descendant(of: find.widgetWithText(SwitchRow, title), matching: find.byType(CupertinoSwitch));
+
+    testWidgets('AlarmKit이 허용이면 알람은 준비 완료이고 설정 필수 상태는 아니다(모델)', (tester) async {
+      expect(alarmKitOnNotificationDenied.alarmsReady, isTrue);
+      expect(alarmKitOnNotificationDenied.needsSettings, isFalse);
+      expect(FakeDeviceAlarmGateway.deniedStatus.alarmsReady, isFalse);
+      expect(FakeDeviceAlarmGateway.deniedStatus.needsSettings, isTrue);
+    });
+
+    testWidgets('AlarmKit 허용 + 알림 거부 + 푸시 알림 켜짐이면 설정 버튼을 보여주고, 푸시를 끄면 숨긴다', (tester) async {
+      final device = FakeDeviceAlarmGateway(status: alarmKitOnNotificationDenied);
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService(), device: device), platform: TargetPlatform.iOS);
+      expect(tester.widget<SwitchRow>(find.widgetWithText(SwitchRow, '푸시 알림 허용')).value, isTrue);
+      expect(find.text('설정에서 허용하기'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('설정에서 허용하기'));
+      await tester.tap(find.text('설정에서 허용하기'));
+      await tester.pump();
+      expect(device.openSettingsCalls, 1);
+
+      await tester.tap(switchOf('푸시 알림 허용'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('설정에서 허용하기'), findsNothing);
+    });
+
+    testWidgets('AlarmKit 허용 + 알림 미결정이면 푸시가 켜져 있어도 설정 버튼 대신 안내만 있다', (tester) async {
       const status = MyDeviceAlarmStatus(
-        notification: NotificationAuthorizationStatus.denied,
+        notification: NotificationAuthorizationStatus.notDetermined,
         timeSensitiveAllowed: false,
         alarmKit: AlarmKitAuthorizationStatus.authorized,
       );
-      expect(status.alarmsReady, isTrue);
-      expect(status.needsSettings, isFalse);
-      expect(FakeDeviceAlarmGateway.deniedStatus.alarmsReady, isFalse);
-      expect(FakeDeviceAlarmGateway.deniedStatus.needsSettings, isTrue);
-
-      final device = FakeDeviceAlarmGateway(status: status);
-      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService(), device: device), platform: TargetPlatform.iOS);
+      await pumpScreen(
+        tester,
+        buildMyPage(profile: FakeMyProfileService(), device: FakeDeviceAlarmGateway(status: status)),
+        platform: TargetPlatform.iOS,
+      );
       expect(find.text('설정에서 허용하기'), findsNothing);
+      expect(find.text('처음 약을 등록할 때 알림 권한을 요청해요.'), findsOneWidget);
+    });
+
+    testWidgets('디바이스 알람을 켜면 AlarmKit 허용 + 알림 거부여도 "준비 완료" 토스트가 나온다(alarmsReady)', (tester) async {
+      final device = FakeDeviceAlarmGateway(status: alarmKitOnNotificationDenied);
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService(), device: device), platform: TargetPlatform.iOS);
+      expect(tester.widget<SwitchRow>(find.widgetWithText(SwitchRow, '디바이스 알람 허용')).value, isTrue);
+
+      await tester.ensureVisible(switchOf('디바이스 알람 허용'));
+      await tester.tap(switchOf('디바이스 알람 허용')); // 끄기
+      await tester.pump();
+      await tester.pump();
+      expect(tester.widget<SwitchRow>(find.widgetWithText(SwitchRow, '디바이스 알람 허용')).value, isFalse);
+      expect(find.text('디바이스 알람 준비가 완료되었습니다.'), findsNothing);
+
+      final loadsBefore = device.loadCalls;
+      await tester.tap(switchOf('디바이스 알람 허용')); // 켜기
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(device.loadCalls, greaterThan(loadsBefore), reason: '켠 뒤 권한 상태를 다시 읽는다');
+      expect(find.text('디바이스 알람 준비가 완료되었습니다.'), findsOneWidget);
+      expect(find.textContaining('알림 권한이 꺼져 있어요'), findsNothing);
+      await tester.pumpAndSettle(const Duration(seconds: 4));
+    });
+
+    testWidgets('알람도 알림도 거부면 켜도 "알림 권한이 꺼져 있어요" 안내를 보여준다', (tester) async {
+      final device = FakeDeviceAlarmGateway(status: FakeDeviceAlarmGateway.deniedStatus);
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService(), device: device), platform: TargetPlatform.iOS);
+
+      await tester.ensureVisible(switchOf('디바이스 알람 허용'));
+      await tester.tap(switchOf('디바이스 알람 허용'));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(switchOf('디바이스 알람 허용'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining('알림 권한이 꺼져 있어요'), findsOneWidget);
+      expect(find.text('디바이스 알람 준비가 완료되었습니다.'), findsNothing);
+      await tester.pumpAndSettle(const Duration(seconds: 4));
+    });
+
+    testWidgets('provisional 알림은 "허용됨"이 아니라 "조용히 전달"로 표시한다', (tester) async {
+      const status = MyDeviceAlarmStatus(
+        notification: NotificationAuthorizationStatus.provisional,
+        timeSensitiveAllowed: false,
+        alarmKit: AlarmKitAuthorizationStatus.notSupported,
+      );
+      await pumpScreen(
+        tester,
+        buildMyPage(profile: FakeMyProfileService(), device: FakeDeviceAlarmGateway(status: status)),
+        platform: TargetPlatform.iOS,
+      );
+      expect(find.text('조용히 전달'), findsOneWidget);
+      expect(find.text('허용됨'), findsNothing);
+    });
+
+    testWidgets('스위치(앱 설정)와 권한 행(OS 상태) 사이에 설명 footer가 있다', (tester) async {
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService()), platform: TargetPlatform.iOS);
+      const footer = '아래 항목은 기기 설정의 권한 상태예요.';
+      expect(find.text(footer), findsOneWidget);
+      final footerY = tester.getTopLeft(find.text(footer)).dy;
+      expect(footerY, greaterThan(tester.getBottomLeft(find.text('디바이스 알람 허용')).dy));
+      expect(footerY, lessThan(tester.getTopLeft(find.text('알림 권한')).dy));
     });
 
     testWidgets('앱 셸 안에서는 foreground 복귀 때 마이 탭에서만 한 번 다시 읽는다', (tester) async {
@@ -617,6 +719,13 @@ void main() {
           tallView: false,
         );
         await tester.pump(const Duration(milliseconds: 200));
+        expect(tester.takeException(), isNull);
+
+        // 맨 아래 행까지 스크롤하며 오버플로를 검사한다(위쪽만 보면 아래 행의 넘침을 놓친다).
+        final last = platform == TargetPlatform.iOS ? find.text('계정탈퇴') : find.text('사용자 의견 보내기');
+        await tester.scrollUntilVisible(last, 200, scrollable: find.byType(Scrollable).first);
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(last, findsOneWidget);
         expect(tester.takeException(), isNull);
       });
     }

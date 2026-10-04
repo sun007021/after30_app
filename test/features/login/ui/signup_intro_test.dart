@@ -1,5 +1,10 @@
+import 'dart:async';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:after30/core/auth/auth_provider_client.dart';
 import 'package:after30/core/design/design.dart';
 import 'package:after30/features/login/ui/login_footer.dart';
 import 'package:after30/features/login/ui/login_header.dart';
@@ -7,8 +12,32 @@ import 'package:after30/features/login/ui/signup_intro.dart';
 
 import 'auth_test_support.dart';
 
+class _NeverCompletingClient implements AuthProviderClient {
+  int calls = 0;
+  @override
+  String get providerId => 'fake';
+  @override
+  Future<AuthSignInResult?> signIn() {
+    calls++;
+    return Completer<AuthSignInResult?>().future;
+  }
+}
+
+class _ThrowingClient implements AuthProviderClient {
+  int calls = 0;
+  @override
+  String get providerId => 'fake';
+  @override
+  Future<AuthSignInResult?> signIn() async {
+    calls++;
+    throw StateError('boom');
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('SignupIntroPage', () {
     testWidgets('iOS: 캡슐 이메일 버튼이 약관 화면으로 이동한다', (tester) async {
@@ -27,6 +56,58 @@ void main() {
       await tester.tap(find.widgetWithText(AppButton, '이메일로 가입하기'));
       await tester.pumpAndSettle();
       expect(find.text('약관 화면'), findsOneWidget);
+    });
+
+    testWidgets('iOS: 카카오 로그인 진행 중에는 버튼이 CupertinoActivityIndicator를 보이고 중복 탭을 막는다', (tester) async {
+      useIphoneViewport(tester);
+      final client = _NeverCompletingClient();
+      await tester.pumpWidget(
+        buildAuthApp(SignupIntroPage(kakaoClientFactory: () => client), TargetPlatform.iOS),
+      );
+      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+      expect(find.text('카카오로 시작하기'), findsNothing);
+
+      await tester.tap(find.byType(CupertinoActivityIndicator));
+      await tester.pump();
+      expect(client.calls, 1);
+    });
+
+    testWidgets('iOS: 로그인이 실패하면 인디케이터가 사라지고 다시 시도할 수 있다', (tester) async {
+      useIphoneViewport(tester);
+      final client = _ThrowingClient();
+      await tester.pumpWidget(
+        buildAuthApp(SignupIntroPage(kakaoClientFactory: () => client), TargetPlatform.iOS),
+      );
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+      expect(find.text('로그인 실패'), findsOneWidget);
+      await tester.tap(find.text('확인'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+      expect(client.calls, 2);
+    });
+
+    testWidgets('Android: 카카오 버튼은 인디케이터 없이 기존 모양을 유지한다', (tester) async {
+      useAndroidViewport(tester);
+      final client = _NeverCompletingClient();
+      await tester.pumpWidget(
+        buildAuthApp(SignupIntroPage(kakaoClientFactory: () => client), TargetPlatform.android),
+      );
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(client.calls, 1);
+      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+      expect(find.text('카카오로 시작하기'), findsOneWidget);
     });
 
     testWidgets('Android: 기존 파란 헤더와 사각 테두리 버튼 값 유지', (tester) async {

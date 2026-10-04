@@ -79,6 +79,29 @@ void main() {
       expect(find.text('홈'), findsOneWidget);
     });
 
+    testWidgets('iOS 경계선은 기본으로 기존 값이고, showBorder: false면 없다', (tester) async {
+      Future<CupertinoSliverNavigationBar> pumpBar({required bool showBorder}) async {
+        await pumpWithPlatform(
+          tester,
+          TargetPlatform.iOS,
+          CustomScrollView(
+            slivers: [
+              AppSliverNavBar(title: '홈', showBackButton: false, showBorder: showBorder),
+              SliverToBoxAdapter(child: Container(height: 2000)),
+            ],
+          ),
+        );
+        return tester.widget<CupertinoSliverNavigationBar>(find.byType(CupertinoSliverNavigationBar));
+      }
+
+      final defaultBar = await pumpBar(showBorder: true);
+      expect(defaultBar.border?.bottom.color, const Color(0x4D000000));
+      expect(defaultBar.border?.bottom.width, 0.0);
+
+      final noBorderBar = await pumpBar(showBorder: false);
+      expect(noBorderBar.border, isNull);
+    });
+
     testWidgets('Android에서는 SliverAppBar를 사용한다', (tester) async {
       await pumpWithPlatform(
         tester,

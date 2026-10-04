@@ -155,6 +155,7 @@ class AppSliverNavBar extends StatelessWidget {
     this.showBackButton = true,
     this.onBack,
     this.backgroundColor,
+    this.showBorder = true,
   });
 
   final String? title;
@@ -166,10 +167,20 @@ class AppSliverNavBar extends StatelessWidget {
   /// 본문과 끊기지 않도록 `AppColors.groupedBackground`를 넘긴다.
   final Color? backgroundColor;
 
+  /// iOS 하단 경계선 표시 여부. grouped 화면은 배경과 같은 색이라 스크롤 맨
+  /// 위에서도 선이 보이므로 `false`로 끈다. Android 분기에는 영향이 없다.
+  final bool showBorder;
+
+  // CupertinoSliverNavigationBar의 기본 경계선(머리카락 두께 하단선)과 같은 값.
+  static const Border _defaultBorder = Border(
+    bottom: BorderSide(color: Color(0x4D000000), width: 0.0),
+  );
+
   @override
   Widget build(BuildContext context) {
     if (isCupertino(context)) {
       return CupertinoSliverNavigationBar(
+        border: showBorder ? _defaultBorder : null,
         largeTitle: title != null ? Text(title!) : null,
         backgroundColor: backgroundColor ?? AppColors.surface,
         leading: showBackButton

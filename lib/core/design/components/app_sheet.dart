@@ -24,11 +24,16 @@ Future<T?> showAppSheet<T>({
   bool enableDrag = true,
 }) {
   final cupertino = isCupertino(context);
-  return showModalBottomSheet<T>(
-    context: context,
-    // W10에서 탭별 Navigator + 플로팅 탭바를 도입할 예정이므로, 시트가
-    // 항상 루트 Navigator 위(탭 셸보다 위)에 표시되도록 고정한다.
-    useRootNavigator: true,
+  // W10에서 탭별 Navigator + 플로팅 탭바를 도입할 예정이므로, 시트가
+  // 항상 루트 Navigator 위(탭 셸보다 위)에 표시되도록 고정한다.
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final localizations = MaterialLocalizations.of(context);
+  // [showModalBottomSheet]와 같은 값으로 라우트를 만든다(닫힘 중 탭 차단만 추가).
+  return navigator.push(_AppSheetRoute<T>(
+    capturedThemes: InheritedTheme.capture(from: context, to: navigator.context),
+    barrierLabel: localizations.scrimLabel,
+    barrierOnTapHint: localizations.scrimOnTapHint(localizations.bottomSheetLabel),
+    modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
     isScrollControlled: true,
     isDismissible: isDismissible,
     enableDrag: enableDrag,
@@ -70,5 +75,67 @@ Future<T?> showAppSheet<T>({
         ),
       );
     },
-  );
+  ));
+}
+
+/// 닫히는 동안 뒤 화면으로 탭이 새지 않게 하는 시트 라우트.
+///
+/// Flutter는 라우트가 reverse 중이면 배리어와 내용에 `IgnorePointer`를
+/// 씌워서, 닫히는 애니메이션 동안 시트 바깥 탭이 뒤 화면 버튼에 닿는다.
+/// 라우트 바깥(Overlay 맨 위)에 전체를 덮는 [AbsorbPointer] 항목을 닫히는
+/// 동안만 두어 이를 막는다.
+class _AppSheetRoute<T> extends ModalBottomSheetRoute<T> {
+  _AppSheetRoute({
+    required super.builder,
+    super.capturedThemes,
+    super.barrierLabel,
+    super.barrierOnTapHint,
+    super.modalBarrierColor,
+    super.isScrollControlled = true,
+    super.isDismissible,
+    super.enableDrag,
+    super.backgroundColor,
+  });
+
+  OverlayEntry? _blocker;
+
+  @override
+  bool didPop(T? result) {
+    final handled = super.didPop(result);
+    final overlay = navigator?.overlay;
+    final anim = animation;
+    // handled가 false면(시트 안 LocalHistoryEntry가 pop을 소비함) 라우트는
+    // 열린 채 남는다. 이때 레이어를 넣으면 dismissed가 오지 않아 영구히
+    // 남으므로 실제로 닫힐 때만 넣는다(PR #40 리뷰 m1).
+    if (handled && _blocker == null && overlay != null && anim != null && !anim.isDismissed) {
+      final entry = OverlayEntry(
+        builder: (_) => const Positioned.fill(child: AbsorbPointer()),
+      );
+      _blocker = entry;
+      overlay.insert(entry);
+      void onStatus(AnimationStatus status) {
+        if (status == AnimationStatus.dismissed) {
+          anim.removeStatusListener(onStatus);
+          _removeBlocker();
+        }
+      }
+
+      anim.addStatusListener(onStatus);
+    }
+    return handled;
+  }
+
+  void _removeBlocker() {
+    final entry = _blocker;
+    if (entry == null) return;
+    _blocker = null;
+    entry.remove();
+    entry.dispose();
+  }
+
+  @override
+  void dispose() {
+    _removeBlocker();
+    super.dispose();
+  }
 }

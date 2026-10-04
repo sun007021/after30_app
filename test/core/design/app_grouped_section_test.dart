@@ -36,6 +36,30 @@ void main() {
     expect(find.byIcon(CupertinoIcons.chevron_forward), findsOneWidget);
   });
 
+  testWidgets('footer는 그룹 아래에 보조 색 13pt로 표시되고, 없으면 그리지 않는다', (tester) async {
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.iOS,
+      const Material(
+        child: AppGroupedSection(
+          footer: '설명 문구',
+          children: [AppListTile(title: '행')],
+        ),
+      ),
+    );
+    final footer = tester.widget<Text>(find.text('설명 문구'));
+    expect(footer.style?.fontSize, 13);
+    expect(footer.style?.color, AppColors.secondaryLabel);
+    expect(tester.getTopLeft(find.text('설명 문구')).dy, greaterThan(tester.getBottomLeft(find.text('행')).dy));
+
+    await pumpWithPlatform(
+      tester,
+      TargetPlatform.android,
+      const Material(child: AppGroupedSection(children: [AppListTile(title: '행')])),
+    );
+    expect(find.text('설명 문구'), findsNothing);
+  });
+
   testWidgets('탭하면 onTap 콜백이 호출된다', (tester) async {
     var tapped = false;
     await pumpWithPlatform(
