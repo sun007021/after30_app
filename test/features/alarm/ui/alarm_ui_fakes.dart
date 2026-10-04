@@ -1,0 +1,213 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:after30/core/design/design.dart';
+import 'package:after30/features/alarm/data/alarm_service.dart';
+import 'package:after30/features/alarm/data/schedule_service.dart';
+import 'package:after30/core/platform/device_alarm_settings.dart';
+import 'package:after30/features/alarm/models/medicine_alarm.dart';
+import 'package:after30/features/alarm/ui/alarm_permission_gate.dart';
+
+/// 알람 UI 테스트 공용 가짜 서비스/헬퍼. 네트워크/채널을 쓰지 않는다.
+class FakeScheduleService implements ScheduleService {
+  final List<Map<String, dynamic>> created = [];
+  final List<int> deleted = [];
+  final List<int> deactivated = [];
+  final List<int> activated = [];
+  Map<String, dynamic>? updatedBody;
+  int nextId = 7;
+
+  /// 호출마다 소비되는 `getSchedules` 응답. 비면 [schedules]를 돌려준다.
+  List<dynamic> schedules = [];
+  int getSchedulesCalls = 0;
+  Future<List<dynamic>> Function()? onGetSchedules;
+
+  @override
+  Future<dynamic> createSchedule(Map<String, dynamic> body) async {
+    created.add(body);
+    return {'id': nextId};
+  }
+
+  @override
+  Future<dynamic> updateSchedule(int scheduleId, Map<String, dynamic> body) async {
+    updatedBody = body;
+    return {'id': scheduleId};
+  }
+
+  @override
+  Future<List<dynamic>> getSchedules({bool includeInactive = false, int? userId}) async {
+    getSchedulesCalls++;
+    if (onGetSchedules != null) return onGetSchedules!();
+    return schedules;
+  }
+
+  @override
+  Future<void> deleteSchedule(int scheduleId) async {
+    deleted.add(scheduleId);
+    schedules = schedules.where((s) => (s as Map)['id'] != scheduleId).toList();
+  }
+
+  @override
+  Future<dynamic> deactivateSchedule(int scheduleId) async {
+    deactivated.add(scheduleId);
+    return {};
+  }
+
+  @override
+  Future<dynamic> activateSchedule(int scheduleId) async {
+    activated.add(scheduleId);
+    return {};
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class FakeAlarmService implements AlarmService {
+  final List<MedicineAlarm> scheduled = [];
+  final List<String> cancelled = [];
+  final List<List<MedicineAlarm>> synced = [];
+  bool scheduleResult = true;
+
+  /// 기기에 이미 예약돼 있다고 답할 알람 id들.
+  Set<String> hasSchedule = {};
+
+  @override
+  Future<bool> scheduleAlarm(MedicineAlarm alarm) async {
+    scheduled.add(alarm);
+    return scheduleResult;
+  }
+
+  @override
+  Future<bool> hasScheduledNotifications(String alarmId) async => hasSchedule.contains(alarmId);
+
+  @override
+  Future<void> cancelAlarm(String alarmId) async => cancelled.add(alarmId);
+
+  /// 로컬 저장소에 들어 있다고 답할 알람.
+  List<MedicineAlarm> stored = [];
+  final List<String> deletedLocal = [];
+  final List<String> toggledOff = [];
+
+  @override
+  Future<List<MedicineAlarm>> getAlarms() async => stored;
+
+  @override
+  Future<void> deleteAlarm(String alarmId) async => deletedLocal.add(alarmId);
+
+  @override
+  Future<void> toggleAlarm(String alarmId, bool isActive) async {
+    if (!isActive) toggledOff.add(alarmId);
+  }
+
+  @override
+  Future<void> syncFromServer(List<MedicineAlarm> serverAlarms) async {
+    synced.add(List.of(serverAlarms));
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// 지정 플랫폼 테마로 [child]를 감싼 앱을 띄운다. 큰 화면 크기를 쓴다.
+Future<void> pumpAlarmUi(
+  WidgetTester tester,
+  TargetPlatform platform,
+  Widget child, {
+  Size size = const Size(600, 1000),
+}) async {
+  tester.view.physicalSize = size * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.build().copyWith(platform: platform),
+      home: child,
+    ),
+  );
+}
+
+/// 홈 위에 [page]를 push하는 앱. `Navigator.pop(result)`를 검증할 수 있다.
+Future<void> pumpPushedPage(
+  WidgetTester tester,
+  TargetPlatform platform,
+  Widget page, {
+  void Function(Object? result)? onResult,
+}) async {
+  await pumpAlarmUi(
+    tester,
+    platform,
+    Builder(
+      builder: (context) => Scaffold(
+        body: Center(
+          child: TextButton(
+            onPressed: () async {
+              final r = await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+              onResult?.call(r);
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+}
+
+/// 서버 응답 형태의 스케줄 JSON.
+Map<String, dynamic> scheduleJson(
+  int id,
+  String name, {
+  List<String> times = const ['08:00'],
+  List<String> days = const ['MON', 'TUE'],
+  bool active = true,
+}) =>
+    {
+      'id': id,
+      'medication_name': name,
+      'times': times,
+      'repeat_days': days,
+      'is_active': active,
+    };
+
+/// 권한 창구 가짜. 시스템 상태([current])를 직접 제어한다. 사전 설명에서
+/// 허용하면 상태가 authorized로 바뀐다.
+class FakeGate extends AlarmPermissionGate {
+  FakeGate({
+    this.current = NotificationAuthorizationStatus.notDetermined,
+    this.onRequest,
+  });
+
+  NotificationAuthorizationStatus current;
+  bool Function()? onRequest;
+  bool grantOnRequest = true;
+  int requestCalls = 0;
+  int alarmKitCalls = 0;
+  int settingsCalls = 0;
+  final List<String> events = [];
+
+  @override
+  Future<NotificationAuthorizationStatus> status() async => current;
+
+  @override
+  Future<bool> requestWithRationale(BuildContext context) async {
+    requestCalls++;
+    events.add('request');
+    final granted = onRequest?.call() ?? grantOnRequest;
+    if (granted) current = NotificationAuthorizationStatus.authorized;
+    return granted;
+  }
+
+  @override
+  Future<void> ensureAlarmKit() async {
+    alarmKitCalls++;
+    events.add('alarmKit');
+  }
+
+  @override
+  Future<bool> openSettings() async {
+    settingsCalls++;
+    return true;
+  }
+}

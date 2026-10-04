@@ -1,14 +1,21 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:after30/core/design/design.dart';
 import 'package:after30/features/alarm/models/medicine_alarm.dart';
 import 'package:after30/utils/responsive.dart';
 
 /// 알람 카드 위젯
-class AlarmCard extends StatelessWidget {
+class AlarmCard extends StatefulWidget {
   final MedicineAlarm alarm;
   final void Function() onToggle;
   final void Function() onEdit;
   final void Function() onDelete;
+
+  /// iOS 전용: 스와이프로 삭제할 때 호출(확인은 [confirmSwipeDelete]에서 받은
+  /// 뒤). Android는 팝업 메뉴의 [onDelete]를 그대로 쓴다.
+  final void Function()? onSwipeDelete;
+  final Future<bool> Function()? confirmSwipeDelete;
 
   const AlarmCard({
     super.key,
@@ -16,7 +23,56 @@ class AlarmCard extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
+    this.onSwipeDelete,
+    this.confirmSwipeDelete,
   });
+
+  @override
+  State<AlarmCard> createState() => _AlarmCardState();
+}
+
+class _AlarmCardState extends State<AlarmCard> {
+  MedicineAlarm get alarm => widget.alarm;
+  void Function() get onToggle => widget.onToggle;
+  void Function() get onEdit => widget.onEdit;
+  void Function() get onDelete => widget.onDelete;
+  void Function()? get onSwipeDelete => widget.onSwipeDelete;
+  Future<bool> Function()? get confirmSwipeDelete => widget.confirmSwipeDelete;
+
+  // iOS 카드 탭(수정) 감지용. GestureDetector 대신 Listener를 쓰는 이유:
+  // 스와이프로 열린 행의 본문을 탭하면 AppSwipeActions가 행을 닫아야 하는데,
+  // 안쪽 GestureDetector(onTap)가 제스처 경쟁에서 이겨 버리면 닫히지 않고
+  // 수정 화면이 열린다. Listener는 경쟁에 참여하지 않는다.
+  final GlobalKey _clipKey = GlobalKey();
+  final GlobalKey _contentKey = GlobalKey();
+  Offset? _downPosition;
+  bool _downOnSwitch = false;
+  bool _startedOnSwitch = false;
+
+  /// 행이 스와이프로 (일부라도) 열려 있는지: 본문이 클립 영역보다 왼쪽으로
+  /// 밀려 있으면 열린 상태다.
+  bool get _isOpen {
+    final clip = _clipKey.currentContext?.findRenderObject() as RenderBox?;
+    final content = _contentKey.currentContext?.findRenderObject() as RenderBox?;
+    if (clip == null || content == null) return false;
+    return content.localToGlobal(Offset.zero).dx <
+        clip.localToGlobal(Offset.zero).dx - 2;
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    _downPosition = e.position;
+    _startedOnSwitch = _downOnSwitch;
+    _downOnSwitch = false;
+  }
+
+  void _onPointerUp(PointerUpEvent e) {
+    final down = _downPosition;
+    _downPosition = null;
+    if (down == null || _startedOnSwitch) return;
+    if ((e.position - down).distance > kTouchSlop) return;
+    if (_isOpen) return; // 열린 행은 AppSwipeActions가 닫는다.
+    onEdit();
+  }
 
   String _formatTimeHHmm(TimeOfDay t) {
     final h = t.hour.toString().padLeft(2, '0');
@@ -58,6 +114,134 @@ class AlarmCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isCupertino(context)) return _buildCupertino(context);
+    return _buildMaterial(context);
+  }
+
+  // ---------------------------------------------------------------------
+  // iOS
+  // ---------------------------------------------------------------------
+
+  Widget _cupertinoChip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: alarm.isActive ? Colors.white : AppColors.groupedBackground,
+        borderRadius: BorderRadius.circular(AppRadius.capsule),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: alarm.isActive ? AppColors.label : AppColors.secondaryLabel,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCupertino(BuildContext context) {
+    // 탭 판정을 Listener로 직접 하므로(열린 행 탭은 닫기만, m-3) 시맨틱 탭
+    // 액션이 따로 없다. VoiceOver 사용자도 수정 화면에 들어갈 수 있게
+    // 시맨틱 탭을 onEdit에 연결한다(PR #36 최종 리뷰 Major).
+    final content = Semantics(
+      button: true,
+      onTap: onEdit,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: _onPointerDown,
+        onPointerUp: _onPointerUp,
+        child: Container(
+          key: _contentKey,
+          color: alarm.isActive ? AppColors.primaryTint : AppColors.surface,
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SvgPicture.asset(
+                    alarm.isActive
+                        ? 'assets/images/alarmList_active.svg'
+                        : 'assets/images/alarmList_deactive.svg',
+                    width: 44,
+                    height: 44,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      alarm.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.title.copyWith(
+                        color: alarm.isActive
+                            ? AppColors.label
+                            : AppColors.secondaryLabel,
+                      ),
+                    ),
+                  ),
+                  // 스위치를 누른 포인터는 카드 탭(수정)으로 처리하지 않는다.
+                  Listener(
+                    onPointerDown: (_) => _downOnSwitch = true,
+                    child: AppSwitch(
+                      value: alarm.isActive,
+                      onChanged: (_) => onToggle(),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // 가로 스크롤 대신 줄바꿈 칩으로 둬서 좌우 스와이프 삭제와
+              // 제스처가 겹치지 않게 한다.
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _cupertinoChip(alarm.everyDay ? '매일' : _formatDays(alarm.days)),
+                  ...alarm.times.map((t) => _cupertinoChip(_formatTimeHHmm(t))),
+                ],
+              ),
+              if (alarm.nfcEnabled) ...[
+                const SizedBox(height: 8),
+                const Row(
+                  children: [
+                    Icon(Icons.nfc, size: 16, color: AppColors.primary),
+                    SizedBox(width: 4),
+                    Text(
+                      'NFC 연동됨',
+                      style: TextStyle(fontSize: 12, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: ClipRSuperellipse(
+        key: _clipKey,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: onSwipeDelete == null
+            ? content
+            : AppSwipeActions(
+                itemKey: ValueKey('alarmSwipe_${alarm.id}'),
+                confirmDismiss: confirmSwipeDelete,
+                onDelete: onSwipeDelete!,
+                child: content,
+              ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Android(기존 외형 그대로)
+  // ---------------------------------------------------------------------
+
+  Widget _buildMaterial(BuildContext context) {
     return Card(
       margin: EdgeInsets.symmetric(
         vertical: Responsive.responsiveValue(context, 8),
