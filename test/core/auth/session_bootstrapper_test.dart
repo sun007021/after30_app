@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
@@ -57,6 +58,55 @@ class _FakeAuthProviderClient implements AuthProviderClient {
     );
     return result;
   }
+}
+
+/// 처음 [failReads]번의 read만 PlatformException을 던지는 가짜 저장소.
+class _FlakySecureStorage extends FakeSecureStorage {
+  _FlakySecureStorage(this.failReads);
+
+  int failReads;
+  int readCalls = 0;
+
+  @override
+  Future<String?> read(String key) async {
+    readCalls++;
+    if (failReads > 0) {
+      failReads--;
+      throw PlatformException(code: 'keychain');
+    }
+    return super.read(key);
+  }
+}
+
+/// signIn 시점의 UserStore 값을 기록하고, 필요하면 예외를 던지는 가짜 클라이언트.
+class _ObservingAuthProviderClient extends _FakeAuthProviderClient {
+  _ObservingAuthProviderClient(super.result, {this.throwOnSignIn = false});
+
+  final bool throwOnSignIn;
+  String? userIdDuringSignIn = 'unset';
+
+  @override
+  Future<AuthSignInResult?> signIn() async {
+    userIdDuringSignIn = await UserStore.getCurrentUserId();
+    if (throwOnSignIn) throw StateError('sign-in failed');
+    return super.signIn();
+  }
+}
+
+Future<BuildContext> _pumpHost(WidgetTester tester) async {
+  late BuildContext captured;
+  await tester.pumpWidget(
+    MaterialApp(
+      routes: {'/home': (_) => const Scaffold(body: Text('홈'))},
+      home: Builder(
+        builder: (context) {
+          captured = context;
+          return const Scaffold(body: SizedBox());
+        },
+      ),
+    ),
+  );
+  return captured;
 }
 
 void main() {
@@ -266,4 +316,227 @@ void main() {
       expect(prefs.getString('medicine_alarms_77'), '[]');
     },
   );
+
+  group('restore(): Keychain 읽기 오류 처리', () {
+    void stubRefreshOk() {
+      ApiClient().dio.interceptors.remove(blockNetworkInterceptor);
+      final fakeRefresh = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.path == '/auth/token/refresh') {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'access_token': _fakeJwt({'sub': 5}),
+                  'access_expires_in': 3600,
+                },
+              ),
+            );
+            return;
+          }
+          handler.reject(
+            DioException(requestOptions: options, message: '테스트 환경 네트워크 차단'),
+          );
+        },
+      );
+      ApiClient().dio.interceptors.add(fakeRefresh);
+      addTearDown(() => ApiClient().dio.interceptors.remove(fakeRefresh));
+    }
+
+    test('일시적 읽기 오류 1회는 재시도해서 세션을 복원한다', () async {
+      final flaky = _FlakySecureStorage(0);
+      TokenStore.debugOverrideSecureStorage(flaky);
+      await TokenStore.saveTokens(
+        accessToken: 'a',
+        refreshToken: 'valid-refresh',
+        accessExpiresIn: 0,
+        refreshExpiresIn: 86400,
+      );
+      flaky.failReads = 1;
+      stubRefreshOk();
+
+      final restored = await SessionBootstrapper.restore(
+        retryDelay: Duration.zero,
+      );
+
+      expect(restored, isTrue);
+      expect(await UserStore.getCurrentUserId(), '5');
+    });
+
+    test('재시도도 실패하면 false를 반환하되 토큰은 지우지 않는다', () async {
+      final flaky = _FlakySecureStorage(0);
+      TokenStore.debugOverrideSecureStorage(flaky);
+      await TokenStore.saveTokens(
+        accessToken: 'a',
+        refreshToken: 'valid-refresh',
+        accessExpiresIn: 0,
+        refreshExpiresIn: 86400,
+      );
+      flaky.failReads = 2;
+      flaky.readCalls = 0;
+
+      final restored = await SessionBootstrapper.restore(
+        retryDelay: Duration.zero,
+      );
+
+      expect(restored, isFalse);
+      expect(flaky.readCalls, 2);
+      expect(flaky.store['refresh_token'], 'valid-refresh');
+      expect(flaky.store['access_token'], 'a');
+    });
+  });
+
+  group('completeLogin(): 이전 UserStore 처리', () {
+    AuthSignInResult result(List<String> legacy) => AuthSignInResult(
+      tokens: _fakeTokens(accessToken: _fakeJwt({'sub': 42})),
+      legacyUserIds: legacy,
+    );
+
+    testWidgets('signIn 전에 UserStore를 비운다(강제 종료 시 restore가 다른 계정 알람을 옮기지 않게)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'token_store_installed_marker': true,
+        'current_user_id': '111',
+        'medicine_alarms_111': '[{"id":"a"}]',
+      });
+      final client = _ObservingAuthProviderClient(result(const []));
+      final context = await _pumpHost(tester);
+
+      await SessionBootstrapper.completeLogin(context, client);
+      await tester.pumpAndSettle();
+
+      expect(client.userIdDuringSignIn, isNull);
+      expect(await UserStore.getCurrentUserId(), '42');
+      final prefs = await SharedPreferences.getInstance();
+      // 다른 계정(111)의 알람은 새 계정으로 옮겨지지 않는다.
+      expect(prefs.getString('medicine_alarms_111'), '[{"id":"a"}]');
+      expect(prefs.getString('medicine_alarms_42'), isNull);
+    });
+
+    testWidgets('로그인을 취소하면 이전 UserStore 값을 되돌린다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'token_store_installed_marker': true,
+        'current_user_id': '111',
+      });
+      final context = await _pumpHost(tester);
+
+      await SessionBootstrapper.completeLogin(
+        context,
+        _ObservingAuthProviderClient(null),
+      );
+
+      expect(await UserStore.getCurrentUserId(), '111');
+    });
+
+    testWidgets('signIn이 실패해도 이전 UserStore 값을 되돌리고 예외를 다시 던진다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'token_store_installed_marker': true,
+        'current_user_id': '111',
+      });
+      final context = await _pumpHost(tester);
+
+      await expectLater(
+        SessionBootstrapper.completeLogin(
+          context,
+          _ObservingAuthProviderClient(
+            result(const []),
+            throwOnSignIn: true,
+          ),
+        ),
+        throwsStateError,
+      );
+      expect(await UserStore.getCurrentUserId(), '111');
+    });
+
+    testWidgets('로그아웃 상태(UserStore 없음)에서도 legacyUserIds로 알람을 복구한다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'token_store_installed_marker': true,
+        'medicine_alarms_1234567': '[{"id":"k"}]',
+        'notification_ids_1234567_k': ['1', '2'],
+        'inactive_since_1234567_k': '2026-01-01',
+      });
+      final context = await _pumpHost(tester);
+
+      await SessionBootstrapper.completeLogin(
+        context,
+        _ObservingAuthProviderClient(result(const ['1234567'])),
+      );
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('medicine_alarms_42'), '[{"id":"k"}]');
+      expect(prefs.getStringList('notification_ids_42_k'), ['1', '2']);
+      expect(prefs.getString('inactive_since_42_k'), '2026-01-01');
+      expect(prefs.getString('medicine_alarms_1234567'), isNull);
+    });
+
+    testWidgets('UserStore가 A이고 legacy가 B면 B만 옮기고 A 데이터는 보존한다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'token_store_installed_marker': true,
+        'current_user_id': '111',
+        'medicine_alarms_111': '[{"id":"a"}]',
+        'medicine_alarms_222': '[{"id":"b"}]',
+      });
+      final context = await _pumpHost(tester);
+
+      await SessionBootstrapper.completeLogin(
+        context,
+        _ObservingAuthProviderClient(result(const ['222'])),
+      );
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('medicine_alarms_42'), '[{"id":"b"}]');
+      expect(prefs.getString('medicine_alarms_222'), isNull);
+      expect(prefs.getString('medicine_alarms_111'), '[{"id":"a"}]');
+    });
+  });
+
+  test('restore(): 저장된 ID(카카오 회원 ID)와 JWT ID가 다르면 알람 데이터를 JWT ID로 옮긴다', () async {
+    SharedPreferences.setMockInitialValues({
+      'token_store_installed_marker': true,
+      'current_user_id': '1234567',
+      'medicine_alarms_1234567': '[{"id":"k"}]',
+      'notification_ids_1234567_k': ['7'],
+    });
+    await TokenStore.saveTokens(
+      accessToken: 'expired',
+      refreshToken: 'valid-refresh',
+      accessExpiresIn: 0,
+      refreshExpiresIn: 86400,
+    );
+    ApiClient().dio.interceptors.remove(blockNetworkInterceptor);
+    final fakeRefresh = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path == '/auth/token/refresh') {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'access_token': _fakeJwt({'sub': 99}),
+                'access_expires_in': 3600,
+              },
+            ),
+          );
+          return;
+        }
+        handler.reject(
+          DioException(requestOptions: options, message: '테스트 환경 네트워크 차단'),
+        );
+      },
+    );
+    ApiClient().dio.interceptors.add(fakeRefresh);
+    addTearDown(() => ApiClient().dio.interceptors.remove(fakeRefresh));
+
+    expect(await SessionBootstrapper.restore(), isTrue);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(await UserStore.getCurrentUserId(), '99');
+    expect(prefs.getString('medicine_alarms_99'), '[{"id":"k"}]');
+    expect(prefs.getStringList('notification_ids_99_k'), ['7']);
+    expect(prefs.getString('medicine_alarms_1234567'), isNull);
+  });
 }

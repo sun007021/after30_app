@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:after30/core/auth/alarm_namespace_migrator.dart';
 import 'package:after30/core/auth/auth_provider_client.dart';
 import 'package:after30/core/auth/current_user_resolver.dart';
+import 'package:after30/core/storage/token_store.dart';
 import 'package:after30/core/storage/user_store.dart';
 import 'package:after30/features/alarm/data/alarm_service.dart';
 import 'package:after30/features/login/data/backend_auth_service.dart';
@@ -24,8 +25,31 @@ class SessionBootstrapper {
     BuildContext context,
     AuthProviderClient providerClient,
   ) async {
-    final result = await providerClient.signIn();
-    if (result == null) return; // 사용자가 로그인을 취소함
+    // signIn()은 토큰을 저장한 뒤 반환한다. 그 직후 강제 종료되면 다음 실행의
+    // restore()가 "이전 UserStore(다른 계정일 수 있음) → 새 백엔드 ID"로 알람을
+    // 옮길 수 있다. 이를 막으려고 signIn 전에 UserStore를 비운다(로그인 화면에
+    // 있다는 것은 유효한 세션이 없다는 뜻이고, 레거시 ID 이전은 아래에서
+    // legacyUserIds로 따로 처리한다). 취소/실패하면 원래 값을 되돌린다.
+    // 트레이드오프: signIn 직후 강제 종료되면 같은 사람의 레거시 ID 이전도
+    // 이번 restore()에서는 건너뛴다. 이전 완료 표시가 남지 않으므로 다음
+    // 로그인 때 legacyUserIds로 복구된다(PR #39 리뷰 m2).
+    final previousUserId = await UserStore.getCurrentUserId();
+    await UserStore.clear();
+    final AuthSignInResult? result;
+    try {
+      result = await providerClient.signIn();
+    } catch (_) {
+      if (previousUserId != null) {
+        await UserStore.setCurrentUserId(previousUserId);
+      }
+      rethrow;
+    }
+    if (result == null) {
+      if (previousUserId != null) {
+        await UserStore.setCurrentUserId(previousUserId);
+      }
+      return; // 사용자가 로그인을 취소함
+    }
 
     final resolved = await CurrentUserResolver.resolveUserId();
     final newUserId = resolved?.toString() ?? result.fallbackUserId;
@@ -62,7 +86,25 @@ class SessionBootstrapper {
   /// 앱 시작 시 세션 복원(`StartupPage`)에서 호출한다. 리프레시 성공
   /// 여부를 반환하며, 실패하면 후처리를 수행하지 않는다(호출부가 온보딩/
   /// 로그인 화면으로 보낸다).
-  static Future<bool> restore() async {
+  /// 앱 시작 시 저장된 세션을 복원한다.
+  ///
+  /// Keychain 읽기 오류(예: 일시적 접근 불가)와 "토큰 없음"을 구분한다.
+  /// 읽기 오류면 [retryDelay] 뒤 1회 재시도하고, 그래도 실패하면 토큰을 지우지
+  /// 않은 채 false를 반환한다(로그인 화면으로 가더라도 다음 실행에서 복원 가능).
+  static Future<bool> restore({
+    Duration retryDelay = const Duration(milliseconds: 300),
+  }) async {
+    try {
+      await TokenStore.getRefreshTokenOrThrow();
+    } catch (_) {
+      await Future<void>.delayed(retryDelay);
+      try {
+        await TokenStore.getRefreshTokenOrThrow();
+      } catch (_) {
+        return false;
+      }
+    }
+
     final refreshed = await BackendAuthService().refreshSession();
     if (!refreshed) return false;
 

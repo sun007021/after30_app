@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:after30/core/design/app_platform.dart';
+import 'package:after30/core/design/components/app_dialogs.dart';
 import 'package:after30/features/my/data/my_profile_service.dart';
 import 'package:after30/features/login/data/auth_service.dart';
 import 'package:after30/features/common/widgets/double_check_dialog.dart';
@@ -60,14 +61,14 @@ class DeleteAccountDialog {
         await _showUnsupportedProviderDialog(context, 'Apple');
         break;
       default:
-        // provider를 못 받았거나(네트워크 실패 등) 인식할 수 없는 값이면
-        // 예전 방식대로 판단한다: 카카오 세션이 있으면 카카오 흐름, 없으면
+        // 조회는 성공했지만 provider 필드가 비었거나 인식할 수 없는 값이면
+        // (조회 실패는 위에서 이미 중단했다) 예전 방식대로 판단한다: 카카오 세션이 있으면 카카오 흐름, 없으면
         // 이메일 흐름. 탈퇴를 막는 것보다 안전하다(App Store 5.1.1(v)).
         await _showLegacyDetectedDeleteDialog(context);
     }
   }
 
-  /// provider를 알 수 없을 때(네트워크 실패, 알 수 없는 값)의 폴백. W3a
+  /// provider를 알 수 없을 때(필드가 비었거나 인식할 수 없는 값)의 폴백. W3a
   /// 이전 방식 그대로 카카오 세션 존재 여부로 판단한다.
   static Future<void> _showLegacyDetectedDeleteDialog(
     BuildContext context,
@@ -154,6 +155,11 @@ class DeleteAccountDialog {
   }
 
   static void _showErrorDialog(BuildContext context, String message) {
+    if (isCupertino(context)) {
+      showAppAlert(context: context, title: '탈퇴 실패', message: message);
+      return;
+    }
+    // Android는 기존 AlertDialog 외형을 그대로 유지한다.
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
