@@ -367,6 +367,12 @@ void main() {
       expect(bar.backgroundColor, AppColors.groupedBackground);
     });
 
+    testWidgets('큰 제목 바는 하단 경계선이 없다(grouped 배경과 이어짐)', (tester) async {
+      await pumpScreen(tester, buildMyPage(profile: FakeMyProfileService()), platform: TargetPlatform.iOS);
+      final bar = tester.widget<CupertinoSliverNavigationBar>(find.byType(CupertinoSliverNavigationBar));
+      expect(bar.border, isNull);
+    });
+
     testWidgets('AlarmKit이 허용이면 알림 권한이 꺼져 있어도 설정 안내를 띄우지 않는다', (tester) async {
       const status = MyDeviceAlarmStatus(
         notification: NotificationAuthorizationStatus.denied,

@@ -377,6 +377,7 @@ class _MyPageState extends State<MyPage> with WidgetsBindingObserver {
           title: '마이페이지',
           showBackButton: false,
           backgroundColor: AppColors.groupedBackground,
+          showBorder: false,
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
