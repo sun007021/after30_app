@@ -104,7 +104,10 @@ class _AppSheetRoute<T> extends ModalBottomSheetRoute<T> {
     final handled = super.didPop(result);
     final overlay = navigator?.overlay;
     final anim = animation;
-    if (_blocker == null && overlay != null && anim != null && !anim.isDismissed) {
+    // handled가 false면(시트 안 LocalHistoryEntry가 pop을 소비함) 라우트는
+    // 열린 채 남는다. 이때 레이어를 넣으면 dismissed가 오지 않아 영구히
+    // 남으므로 실제로 닫힐 때만 넣는다(PR #40 리뷰 m1).
+    if (handled && _blocker == null && overlay != null && anim != null && !anim.isDismissed) {
       final entry = OverlayEntry(
         builder: (_) => const Positioned.fill(child: AbsorbPointer()),
       );

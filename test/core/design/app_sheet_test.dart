@@ -85,6 +85,27 @@ void main() {
         expect(behindTaps, 1);
       });
 
+      testWidgets('시트 안 LocalHistoryEntry가 pop을 소비하면 차단 레이어를 넣지 않는다', (tester) async {
+        await openSheet(tester);
+        final sheetContext = tester.element(find.text('닫기'));
+        var removed = false;
+        ModalRoute.of(sheetContext)!.addLocalHistoryEntry(LocalHistoryEntry(onRemove: () => removed = true));
+        Navigator.of(sheetContext).pop(); // 로컬 히스토리만 빠지고 시트는 열린 채
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(removed, isTrue);
+        expect(find.text('닫기'), findsOneWidget);
+
+        // 레이어가 남았다면 시트 버튼이 눌리지 않아 닫히지 않는다.
+        // (레이어가 남으면 settle되지 않으므로 고정 시간만 진행한다.)
+        await tester.tap(find.text('닫기'), warnIfMissed: false);
+        for (var i = 0; i < 20; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        expect(find.text('닫기'), findsNothing);
+        await tester.tap(find.text('뒤 버튼'));
+        expect(behindTaps, 1);
+      }, timeout: const Timeout(Duration(seconds: 30)));
+
       testWidgets('배리어 탭으로 닫히고, 닫히는 중 탭은 차단된다', (tester) async {
         await openSheet(tester);
 
